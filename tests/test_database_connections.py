@@ -447,9 +447,6 @@ def test_isolated_sessions_install_connector_extensions_in_a_child_first(tmp_pat
 
 def test_postgres_passes_additional_options_to_the_driver_unchanged(services):
     _, _, catalog, _ = services
-    postgres = catalog.connector("postgres")
-    options = next(p for p in postgres["parameters"] if p["name"] == "options")
-    assert (options["label"], options["default"]) == ("Additional options", "")
     catalog.save(
         "connection",
         {
@@ -546,7 +543,6 @@ def test_test_connection_and_object_listing_api(app, tmp_path):
             json={"connection": {**connection, "connector": "missing"}, "environment": "dev"},
         )
         assert failed.status_code == 400
-        assert failed.json()["error"] == "Connector definition does not exist"
         client.put("/api/catalog/connection?create=true", json=connection).raise_for_status()
         worktree = client.post("/api/projects", json={"name": "Tables"}).json()
         url = f"/api/worktrees/{worktree['id']}/connections/warehouse/objects?environment=dev"

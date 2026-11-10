@@ -199,9 +199,6 @@ reference such as `amount >= {{ var.minimum }}` in the parameter's value.
 Variable references belong to root instances, not reusable SQL definitions or
 template defaults. Expose a component parameter and bind it on the instance.
 
-Variables are versioned values, not credentials. Keep secrets in connections;
-`secret(connection)` refers to a runtime secret name, never a password.
-
 ## Diagnose a node
 
 | Symptom | Check |

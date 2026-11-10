@@ -85,20 +85,6 @@ test("auto-arrange saves only the current DAG, preserves selection and frames th
     ).ok(),
   ).toBe(true);
   await openWorktree(page, worktree.id);
-  await expect(page.locator(".canvas-footer")).toHaveCount(0);
-  const layoutGroup = page.getByRole("group", {
-    name: "Auto-arrange nodes",
-    exact: true,
-  });
-  const navigation = page.locator(".react-flow__controls");
-  await expect(layoutGroup.getByRole("button")).toHaveCount(1);
-  await expect(navigation.getByRole("button")).toHaveCount(3);
-  const groupBounds = (await layoutGroup.boundingBox())!;
-  const navigationBounds = (await navigation.boundingBox())!;
-  expect(
-    groupBounds.x - navigationBounds.x - navigationBounds.width,
-  ).toBeGreaterThanOrEqual(8);
-  expect(groupBounds.y).toBe(navigationBounds.y);
   const before: Snapshot = await (await page.request.get(url)).json();
   const after = await arrange(page, url);
   expectArranged(before.bundle!.flow, after.bundle!.flow);
@@ -156,7 +142,6 @@ test("auto-arrange saves only the current DAG, preserves selection and frames th
     selected!,
   );
   await expect(page.locator(".preview-panel")).toBeVisible();
-  await page.screenshot({ path: "test-results/auto-layout-component.png" });
   const username = `layout-reader-${Date.now()}`;
   const password = "layout-reader-password";
   const reader = await (

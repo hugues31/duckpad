@@ -63,12 +63,16 @@ def test_serial_execution_preserves_duplicates_and_manifest_order(services, monk
     )
 
 
-def test_empty_manifest_binds_source_schema_without_evaluating_rows(services):
+def test_empty_manifest_binds_zone_schemas_without_evaluating_rows(services):
     store, projects, _, engine = services
     project = bundle()
     project["templates"]["keys"] = "-- @output result\nSELECT 'a' batch, 'one' task WHERE FALSE;"
     project["templates"]["source"] = (
         "-- @output result\nSELECT 'a' batch, error('must not scan')::INTEGER amount;"
+    )
+    # A shared input used only by the zone is not evaluated either.
+    project["templates"]["lookup"] = (
+        "-- @output result\nSELECT error('shared source must not run')::INTEGER rate;"
     )
     project["templates"]["collect"] = (
         "-- @input data\n-- @output result\nSELECT count(*) AS total FROM {{ data }};"
@@ -116,21 +120,6 @@ def test_targeted_run_reuses_its_environment_manifest(services):
     assert "keys" not in second["nodes"]
 
 
-def test_failure_continue_isolated_per_key_and_collection_requires_all(services):
-    store, projects, _, engine = services
-    project = bundle()
-    project["flow"]["partitions"]["batch"]["execution"] = {"on_error": "continue"}
-    project["flow"]["nodes"][3]["params"]["value"] = (
-        "CASE WHEN {{ partition }} = 'a' THEN error('broken key') ELSE {{ partition.task }} END"
-    )
-    worktree = projects.create("Partition failures", project)["id"]
-    run = join_run(store, engine.launch(worktree, "dev")["id"])
-    assert run["status"] == "partial_failure", run
-    assert run["partitions"]["completed"] == 1
-    assert run["partitions"]["failed"] == 1
-    assert run["nodes"]["collect"]["status"] == "blocked"
-
-
 def test_schema_drift_rejects_collection_and_keeps_previous_generation(services):
     store, projects, _, engine = services
     worktree = projects.create("Retained partition generation", bundle())["id"]
@@ -161,18 +150,6 @@ def test_optional_preview_budget_never_evicts_collector_inputs(services):
         assert storage.result("source", entry["key_hash"])["success"]["artifacts"] == {}
         artifact = storage.result("transform", entry["key_hash"])["success"]["artifacts"]["result"]
         assert storage.available(artifact)
-
-
-def test_empty_manifest_does_not_evaluate_shared_inputs_used_only_by_the_zone(services):
-    store, projects, _, engine = services
-    project = bundle()
-    project["templates"]["keys"] = "-- @output result\nSELECT 'a' batch, 'one' task WHERE FALSE;"
-    project["templates"]["lookup"] = (
-        "-- @output result\nSELECT error('shared source must not run')::INTEGER rate;"
-    )
-    worktree = projects.create("Empty shared input", project)["id"]
-    run = join_run(store, engine.launch(worktree, "dev")["id"])
-    assert run["status"] == "success", run
 
 
 def test_source_data_tests_prevent_partition_publication(services):

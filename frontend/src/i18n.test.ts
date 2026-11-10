@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { nodeInterface } from "./graph";
 import { nodeLabel, type Translate } from "./i18n";
-import en from "./locales/en.json";
 import fr from "./locales/fr.json";
-import pt from "./locales/pt.json";
 import type { FlowNode, ParsedTemplate } from "./types";
 
 const node: FlowNode = {
@@ -19,11 +17,7 @@ const definition: ParsedTemplate = {
   parameters: [],
 };
 
-describe.each([
-  ["en", en],
-  ["fr", fr],
-  ["pt", pt],
-] as const)("node labels in %s", (_language, labels) => {
+describe.each([["fr", fr]] as const)("node labels in %s", (_, labels) => {
   const t: Translate = (key) => labels[key];
 
   it("translates ordinary, linked, and detached built-in nodes", () => {

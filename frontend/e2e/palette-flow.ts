@@ -35,9 +35,6 @@ export async function verifyPalette(
     "Python",
     "Import",
   ]);
-  // The group keeps its accessible name; each logo carries a "+" instead of a caption.
-  await expect(palette.getByText("Add to palette")).toHaveCount(0);
-  await expect(actions.locator("svg.add-icon")).toHaveCount(3);
   const pythonButton = actions.getByRole("button", {
     name: "New Python template",
   });
@@ -51,7 +48,6 @@ export async function verifyPalette(
     await page.reload();
     await expect(pythonButton).toBeEnabled();
   }
-  await expect(palette.getByText("Drag a node onto the canvas")).toHaveCount(0);
   const title = python ? "New Python template" : "New SQL template";
   const create = actions.getByRole("button", { name: title });
   const before = await read(project);

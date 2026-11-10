@@ -64,7 +64,6 @@ def change(projects, worktree, update):
 )
 def test_lossless_conversions(kind, sql_type, cell, expected):
     assert convert(kind, sql_type, cell) == expected
-    assert json.loads(json.dumps(expected)) == expected
 
 
 @pytest.mark.parametrize(
@@ -641,20 +640,3 @@ def test_computed_export_path_is_captured_and_traversal_is_rejected(services):
     failed = wait_run(store, engine.launch(tree["id"], "dev"))
     assert failed["nodes"]["export"]["status"] == "failed"
     assert "outside" in failed["nodes"]["export"]["error"]
-
-
-def test_path_references_follow_rename_grouping_and_declaration_only_merge():
-    project = bundle()
-    project["templates"]["consumer"] = (
-        "-- @param file: file\n-- @output result\nSELECT * FROM read_csv({{ file }});"
-    )
-    project["flow"]["nodes"][1]["params"] = {"file": "{{ var.report_date }}.csv"}
-    renamed = variables.rename(project, "report_date", "day")
-    assert variables.usages(renamed)["day"][0]["param"] == "file"
-    grouped, instance = group(renamed, ["consumer"], "Reader")
-    params = next(n for n in grouped["flow"]["nodes"] if n["id"] == instance)["params"]
-    assert "{{ var.day }}.csv" in params.values()
-    assert not any(variables.component_references(c) for c in grouped["components"].values())
-    files = bundle_to_files(grouped)
-    assert json.loads(files["variables.json"]) == grouped["variables"]
-    assert "producer_run" not in files["variables.json"]

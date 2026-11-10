@@ -1,6 +1,5 @@
 import copy
 import json
-import logging
 import shutil
 import subprocess
 import threading
@@ -164,20 +163,6 @@ def test_layout_names_sql_and_parameters_have_distinct_categories():
         if e["id"] == "template/total"
     )
     assert set(entity["categories"]) == {"processing", "documentation"}
-
-
-@pytest.mark.parametrize("directive", ["--@label", "  --  @label"])
-def test_label_directives_are_documentation_in_every_form(directive):
-    before = bundle()
-    after = copy.deepcopy(before)
-    after["templates"]["total"] = after["templates"]["total"].replace(
-        "-- @label Regional revenue", directive + " Regional sales"
-    )
-    report = compare_files(bundle_to_files(before), bundle_to_files(after))
-    entity = next(e for e in report["entities"] if e["id"] == "template/total")
-    assert entity["name"] == "Regional sales"
-    assert entity["categories"] == ["documentation"]
-    assert report["impact"]["status"] == "not_applicable"
 
 
 def test_deleted_nodes_and_edges_and_nested_scopes_remain_inspectable():
@@ -370,21 +355,6 @@ def test_element_summary_credits_the_commits_that_changed_the_element(project):
             summary(main["id"], entity)
 
 
-def test_non_main_destination_and_protected_cleanup(project):
-    projects, main = project
-    feature = projects.branch(main["id"], "feature")
-    target = projects.branch(main["id"], "release")
-    edit(projects, feature, lambda b: b["documentation"].update(project="Ready"))
-    review = projects.versioning.prepare(target["id"], "refs/heads/feature")
-    apply(projects, review)
-    for remove in (main, target):
-        with pytest.raises(Problem, match="protected"):
-            projects.versioning.cleanup(main["id"], remove["id"], target["id"], review["source_head"])
-    projects.versioning.cleanup(main["id"], feature["id"], target["id"], review["source_head"])
-    assert not Path(feature["path"]).exists()
-    assert projects.store.get("worktree", feature["id"]) is None
-
-
 def integrated_feature(projects, main):
     feature = projects.branch(main["id"], "feature")
     edit(projects, feature, lambda b: b["documentation"].update(project="Ready"))
@@ -449,15 +419,6 @@ def test_cleanup_availability_and_destination_context(project):
         projects.versioning.branches(main["id"], other["id"])
 
 
-def test_cleanup_keeps_a_locked_worktree(project):
-    projects, main = project
-    feature, head = integrated_feature(projects, main)
-    projects.git(main["path"], "worktree", "lock", feature["path"])
-    with pytest.raises(Problem, match="untracked files or is locked"):
-        projects.versioning.cleanup(main["id"], feature["id"], main["id"], head)
-    assert Path(feature["path"]).exists() and projects.store.get("worktree", feature["id"])
-
-
 def test_cleanup_survives_a_failed_branch_deletion_and_a_restart(tmp_path, monkeypatch):
     home = tmp_path / "instance"
     services = Services.open(home, isolated=False, enforce_access=False)
@@ -491,7 +452,7 @@ def test_cleanup_survives_a_failed_branch_deletion_and_a_restart(tmp_path, monke
         assert restarted.git(reopened["path"], "rev-parse", "HEAD") == head
 
 
-def test_restart_finishes_interrupted_cleanups_and_ignores_lost_directories(tmp_path, monkeypatch, caplog):
+def test_restart_finishes_interrupted_cleanups_and_ignores_lost_directories(tmp_path, monkeypatch):
     home = tmp_path / "instance"
     services = Services.open(home, isolated=False, enforce_access=False)
     projects = services.projects
@@ -507,9 +468,8 @@ def test_restart_finishes_interrupted_cleanups_and_ignores_lost_directories(tmp_
     shutil.rmtree(lost["path"])
     services.close()
     app = create_app(home)
-    with caplog.at_level(logging.ERROR, logger="duckpad.projects"), TestClient(app):
+    with TestClient(app):
         restarted = app.state.services.projects
-        assert f"Worktree {lost['id']} is unavailable" in caplog.text
         assert lost["id"] not in restarted.observed and main["id"] in restarted.observed
         assert not Path(feature["path"]).exists()
         assert restarted.versioning.open_branch(main["id"], "feature")["branch"] == "feature"

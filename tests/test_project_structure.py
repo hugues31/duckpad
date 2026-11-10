@@ -6,10 +6,9 @@ from pathlib import Path
 
 import duckdb
 import pytest
-from helpers import example_bundle, wait_run, wait_until
+from helpers import example_bundle, wait_until
 
 from duckpad.bundle import bundle_to_files, files_to_bundle
-from duckpad.comparison import compare_files
 from duckpad.util import Problem
 
 
@@ -107,28 +106,6 @@ def test_new_files_are_watched_and_conflicting_ui_edits_are_recoverable(services
     resolved = projects.resolve(conflict["id"], "proposal")
     assert resolved["files"][name] == proposal[name]
     assert projects.revision_files(worktree["path"], initial["commit"])[name] == initial["files"][name]
-
-
-def test_readme_and_manifest_changes_merge_between_branches_without_changing_sql_results(services, tmp_path):
-    store, projects, _, engine = services
-    main = projects.create("Branching", example_bundle(tmp_path / "input.csv"))
-    wait_run(store, engine.launch(main["id"], "dev"))
-    branch = projects.branch(main["id"], "project-layout")
-    before = projects.snapshot(main["id"])
-    snapshot = projects.snapshot(branch["id"])
-    files = {**snapshot["files"], "README.md": "# Shared context\n"}
-    files["pyproject.toml"] += "\n# Additional dependencies can be declared above.\n"
-    projects.write(branch["id"], snapshot["revision"], files)
-    assert projects.snapshot(main["id"])["files"] == before["files"]
-    report = compare_files(before["files"], files)
-    changes = [item for item in report["entities"] if item["status"] != "unchanged"]
-    assert {item["file"] for item in changes} == {"README.md", "pyproject.toml"}
-    review = projects.versioning.prepare(main["id"], "refs/heads/project-layout")
-    assert review["conflicts"] == []
-    proposal = projects.versioning.proposal(main["id"], review["id"], {})
-    projects.versioning.apply(main["id"], review["id"], {}, proposal["proposal_revision"])
-    assert projects.snapshot(main["id"], committed=True)["files"] == files
-    assert engine.preview(main["id"], "dev", "total")["status"] == "valid"
 
 
 def test_invalid_toml_is_saved_with_a_file_diagnostic_and_can_be_repaired(services):

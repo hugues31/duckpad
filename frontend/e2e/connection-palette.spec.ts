@@ -182,7 +182,6 @@ test("search and keyboard selection create and persist a node and the exact conn
   await expect(
     palette(page).getByRole("option", { selected: true }),
   ).toContainText("right");
-  await page.screenshot({ path: "test-results/connection-palette.png" });
   expect(
     (await new AxeBuilder({ page }).include(".connection-palette").analyze())
       .violations,
@@ -342,7 +341,6 @@ test("touch dragging opens a localized palette that fits a small dark viewport",
   expect(bounds.y).toBeGreaterThanOrEqual(0);
   expect(bounds.x + bounds.width).toBeLessThanOrEqual(800);
   expect(bounds.y + bounds.height).toBeLessThanOrEqual(650);
-  await page.screenshot({ path: "test-results/connection-palette-dark.png" });
   expect(
     (await new AxeBuilder({ page }).include(".connection-palette").analyze())
       .violations,

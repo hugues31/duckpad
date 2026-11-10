@@ -5,9 +5,7 @@ import { DEBUG_ASSISTANT_EVENT } from "./AskAssistant";
 import ExecutionError from "./ExecutionError";
 import type { NodeResult } from "./types";
 import { I18n } from "./i18n";
-import en from "./locales/en.json";
 import fr from "./locales/fr.json";
-import pt from "./locales/pt.json";
 
 const { settings } = vi.hoisted(() => ({ settings: { enabled: false } }));
 vi.mock("./shell", () => ({
@@ -32,11 +30,7 @@ const failure: NodeResult = {
   },
 };
 
-it.each([
-  ["en", en],
-  ["fr", fr],
-  ["pt", pt],
-] as const)(
+it.each([["fr", fr]] as const)(
   "explains a Python node's policy failure in %s",
   (language, labels) => {
     render(

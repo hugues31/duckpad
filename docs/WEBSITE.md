@@ -75,8 +75,7 @@ never include credentials or private infrastructure in media.
 
 The recorder writes `website/public/demos/northstar.webm` and its captions.
 Screenshots belong in `docs/images/`; do not edit generated copies under
-`website/public/demos/`. Commit updated source media when changing a demonstrated
-workflow so GitHub and container previews show the same instructions.
+`website/public/demos/`.
 
 Set `DUCKPAD_E2E_PORT` for the capture backend and `DUCKPAD_SITE_PORT` for website
 tests. Test subpath hosting with matching `WEBSITE_BASE_PATH` values at build and

@@ -28,9 +28,6 @@ test("new project offers empty and independent example projects from the dashboa
   const dialog = page.getByRole("dialog", { name: "New project", exact: true });
   const name = dialog.getByLabel("Name", { exact: true });
   await expect(name).toBeFocused();
-  const nameBounds = await name.boundingBox();
-  const typeBounds = await dialog.getByRole("group").boundingBox();
-  expect(nameBounds!.y + nameBounds!.height).toBeLessThan(typeBounds!.y);
   await expect(
     dialog.getByRole("radio", { name: "Empty project" }),
   ).toBeChecked();

@@ -2,13 +2,13 @@
 
 Lineage explains the materialized execution, not today's external resource. A result identifies its execution, dataset generation, column and stable storage row. Sorting, filtering or sampling the displayed rows does not change those identities or restrict the provenance search.
 
-Clicking a cell opens a large modal with a dependency graph: source cells on the left, calculations on the right. The selected value appears compactly in the header. All inputs on the current page are traced automatically; shared source cells appear once, connected to each calculation that uses them.
+Clicking a cell opens a dependency graph: source cells on the left, calculations on the right. All inputs on the current page are traced automatically; shared source cells appear once, connected to each calculation that uses them.
 
 Calculation cards show the expression, its captured operand values when they can be bound unambiguously, and the result. For example, `amount * 2` becomes `10 * 2 = 20`. Small sums and averages show their complete numeric equation. Larger aggregates show their formula, the full contribution count and an explicit range for the five displayed inputs; a page is never presented as the entire calculation. Distinct value groups open their original rows while preserving the selected count.
 
 An unchanged column passed through a projection, filter or join does not add a calculation node. This is determined from the parsed expression, not from equal values: `amount * 1` remains a calculation. Row-selection context from the collapsed steps stays available in source and calculation details. Coverage limits are explicit; source values, constants and unsupported steps terminate traversal.
 
-Pan and zoom to explore the graph. Automatic tracing has a request budget; an unexplored value offers **Trace earlier inputs** to continue. Escape closes the dialog and restores keyboard focus to the selected cell. Recalculation interrupts all graph requests and navigation.
+Automatic tracing has a request budget; an unexplored value offers **Trace earlier inputs** to continue. Recalculation interrupts all graph requests and navigation.
 
 ![Five source amounts and the sum they contribute to, with pagination for all 27 values](images/lineage.png)
 
@@ -58,4 +58,4 @@ The response sets `complete: false` and identifies the unsupported step. The UI 
 
 A configuration edit or a manual recomputation invalidates the affected old generation. Pending lineage is interrupted, late responses are discarded, and further navigation is disabled. Recalculation does not automatically replay an explanation on the same row number. Select a cell explicitly after a valid replacement appears.
 
-Failed recomputation retains the previous preview as stale, with its original SQL and execution metadata. It has no lineage. External source-file changes alone leave an existing valid result and its explanation unchanged until the next manual run reloads that resource.
+Failed recomputation retains the previous preview as stale, with its original SQL and execution metadata. It has no lineage.

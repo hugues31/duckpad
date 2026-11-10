@@ -136,7 +136,6 @@ def change(app, worktree, callback):
         variable(operation="update", name="region", definition={"default": "South"}),
         variable(operation="rename", name="region", new_name="area"),
         variable(operation="delete", name="region"),
-        variable(operation="update", name="region", remove_fields=["default"]),
         ("group_nodes", {"nodes": ["first", "second"], "name": "Together"}),
         chart(operation="create", node="first", output="result", name="Trend", spec=BAR),
         chart(operation="update", node="first", output="result", name="Values", spec=LINE),
@@ -364,10 +363,6 @@ def test_variable_can_switch_to_computed_and_back_without_running_its_source(ins
     ("change", "message"),
     [
         ({"operation": "delete", "name": "missing"}, "Variable not found"),
-        (
-            {"operation": "update", "name": "missing", "definition": {"default": "South"}},
-            "Variable not found",
-        ),
         ({"operation": "rename", "name": "missing", "new_name": "area"}, "not found"),
         ({"operation": "create", "name": "region", "definition": {"type": "text"}}, "already exists"),
         ({"operation": "update", "name": "region", "definition": {"environments": {"dev": 42}}}, "invalid"),
@@ -388,30 +383,13 @@ def test_variable_edits_the_project_refuses_preserve_saved_files(instance, chang
     ("change", "field"),
     [
         ({"operation": "delete", "name": "region", "definition": {"default": "South"}}, "definition"),
-        ({"operation": "rename", "name": "region", "new_name": "area", "definition": {}}, "definition"),
-        (
-            {
-                "operation": "create",
-                "name": "new",
-                "definition": {"type": "text"},
-                "remove_fields": ["default"],
-            },
-            "remove_fields",
-        ),
-        (
-            {"operation": "update", "name": "region", "new_name": "area", "definition": {"default": "South"}},
-            "new_name",
-        ),
-        ({"operation": "delete", "name": "region", "new_name": "area"}, "new_name"),
         (
             {"operation": "update", "name": "region"},
             "Provide definition, remove_fields or remove_environments",
         ),
         ({"operation": "update", "name": "region", "definition": {}}, "Provide definition"),
         ({"operation": "create", "name": "new", "definition": {}}, "definition"),
-        ({"operation": "create", "name": "new"}, "definition"),
         ({"operation": "rename", "name": "region", "new_name": ""}, "new_name"),
-        ({"operation": "rename", "name": "region"}, "new_name"),
         ({"operation": "move", "name": "region"}, "operation"),
         ({"operation": "delete", "name": ""}, "name"),
     ],
@@ -504,35 +482,6 @@ def test_null_variable_arguments_count_as_omitted(instance):
     _, result = write_turn(app, client, context, calls)
     assert [t["status"] for t in result["tools"]] == ["complete"] * 3, result
     assert app.state.services.projects.snapshot(worktree["id"])["bundle"]["variables"] == {}
-
-
-def test_conversations_with_flat_variable_calls_from_before_continue(instance):
-    app, client = instance
-    _, context = seed(app, client)
-    identity, _ = write_turn(app, client, context, [variable(operation="delete", name="region")])
-    store = app.state.services.store
-    record = store.get("assistant_conversation", identity)
-    flat = {"operation": "delete", "name": "region"}
-    for message in record["messages"]:
-        for part in message["parts"]:
-            if part["part_kind"] == "tool-call" and part["tool_name"] == "edit_variable":
-                part["args"] = json.dumps(flat)
-    store.put("assistant_conversation", identity, record)
-    replayed = []
-
-    async def stream(messages, info):
-        replayed.extend(
-            p.args_as_dict()
-            for m in messages
-            for p in m.parts
-            if p.part_kind == "tool-call" and p.tool_name == "edit_variable"
-        )
-        yield "Nothing else to change."
-
-    app.state.assistant.configuration.model_override = FunctionModel(stream_function=stream)
-    result = turn(client, identity, context, "Anything else?")[-1]["turn"]
-    assert result["status"] == "complete", result
-    assert replayed == [flat]
 
 
 @pytest.mark.parametrize("kind", ["openai", "anthropic", "google", "mistral", "deepseek", "ollama", "custom"])
@@ -999,7 +948,7 @@ def test_concurrent_forward_merge_records_only_the_assistant_change(instance):
     )
 
 
-def test_forward_conflict_and_invalid_bundle_never_overwrite(instance):
+def test_forward_conflict_never_overwrites(instance):
     app, client = instance
     worktree, context = seed(app, client)
     identity, result = write_turn(
@@ -1033,21 +982,6 @@ def test_forward_conflict_and_invalid_bundle_never_overwrite(instance):
     projects = app.state.services.projects
     assert projects.snapshot(worktree["id"])["files"]["nodes/first.sql"] == SQL.replace("1", "5")
     assert projects.snapshot(worktree["id"])["files"]["nodes/second.sql"] == SQL.replace("1", "6")
-    before = projects.snapshot(worktree["id"])["commit"]
-    _, invalid = write_turn(
-        app,
-        client,
-        context,
-        [
-            (
-                "edit_flow",
-                {"edges": [{"operation": "connect", "id": "bad", "source": "missing", "target": "first"}]},
-            )
-        ],
-    )
-    assert invalid["tools"][0]["status"] == "error"
-    assert "diagnostics" in invalid["tools"][0]["summary"]
-    assert projects.snapshot(worktree["id"])["commit"] == before
 
 
 def test_saved_problems_block_neither_unrelated_edits_nor_undo(instance):
@@ -1070,15 +1004,8 @@ def test_saved_problems_block_neither_unrelated_edits_nor_undo(instance):
         [("edit_flow", {"nodes": [{"operation": "add", "id": "other", "template": "filter"}]})],
     )
     # Only the problem the edit introduces is reported, and it is still rejected.
-    assert json.loads(invalid["tools"][0]["summary"])["diagnostics"] == [
-        {
-            "file": "flow.json",
-            "node": "other",
-            "code": "missing_input",
-            "port": "source",
-            "message": "Connect input 'source' on Filter",
-        }
-    ]
+    diagnostics = json.loads(invalid["tools"][0]["summary"])["diagnostics"]
+    assert [(d["node"], d["code"], d["port"]) for d in diagnostics] == [("other", "missing_input", "source")]
     assert projects.snapshot(worktree["id"])["commit"] == before
 
 

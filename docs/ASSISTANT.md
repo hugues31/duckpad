@@ -30,14 +30,14 @@ assistant starts disabled; the badge next to the title shows the saved state.
 2. Under **Allowed models**, **Load available models** lists the provider's chat
    models without saving anything first; check those people can use and filter
    long lists. Add identifiers the provider does not list by typing them in
-   **Model identifier**. Remove an allowed model with its × button.
+   **Model identifier**.
 3. **Choose the default model**: the first allowed model is preselected.
    **Test connection** sends a short connection-check prompt with the settings
    on screen, saved or not. It does not read any project content.
 4. **Set data access** and, optionally, adjust the **Quick prompts**.
 5. **Make it available**: check **Enable the assistant**, which requires a
-   default model, then choose **Save changes** in the bar that stays at the
-   bottom of the page. **Discard changes** restores the saved settings.
+   default model, then choose **Save changes** in the bar at the bottom of the
+   page.
 
 All users share the instance's configured providers; they choose an allowed model
 and never enter personal keys.
@@ -232,9 +232,7 @@ run** and **Explain a value**. Clicking one sends its full prompt. The default
 buttons and prompts follow the interface language.
 
 Instance administrators manage **Quick prompts** in **Instance settings → AI
-assistant**. Each prompt takes one line; **Edit** opens its button label and full
-prompt. Add or delete entries, and use **Move up** or **Move down** to reorder
-them. **Save changes** applies the list to everyone on the instance. A customized list keeps its authored language;
+assistant**; the list applies to everyone on the instance. A customized list keeps its authored language;
 **Restore translated defaults** restores language-aware defaults. Saving an empty
 list hides the buttons. These settings are not stored in project Git files.
 
@@ -242,10 +240,7 @@ list hides the buttons. These settings are not stored in project Git files.
 
 **Maximize assistant** opens a larger view with your conversations on the left,
 ordered by recent activity. Select one to reopen its original branch and resume.
-Use the title
-field to rename it, **Delete conversation** to remove it, or **New conversation**
-to begin another. The first message names a conversation unless you renamed it
-first. Escape closes the panel and returns focus to its launcher.
+The first message names a conversation unless you renamed it first.
 
 Conversations are private to their author, including against other instance
 administrators. Sending

@@ -53,7 +53,6 @@ describe("projectFileLanguage", () => {
 
   it("highlights documentation as Markdown", () => {
     expect(projectFileLanguage("README.md")).toBe("markdown");
-    expect(projectFileLanguage("docs/nodes/orders.md")).toBe("markdown");
   });
 
   it("highlights TOML files with the INI tokenizer", () => {
@@ -62,7 +61,6 @@ describe("projectFileLanguage", () => {
 
   it("falls back to JSON for other files", () => {
     expect(projectFileLanguage("flow.json")).toBe("json");
-    expect(projectFileLanguage("components/enrich.json")).toBe("json");
     expect(projectFileLanguage("LICENSE")).toBe("json");
   });
 

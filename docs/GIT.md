@@ -38,36 +38,28 @@ existing tag name returns a conflict (409), as does a name nested with an
 existing tag: Git cannot store both `v1` and `v1/rc`. Tags cannot be moved or
 deleted in Duckpad; create a new tag to correct a version.
 
-History displays tags beside their commits. Readers can inspect them too. The
-internal `GET /api/worktrees/{worktree}/git/tags` route lists all tags in the
-worktree's project, across branches, with `name`, `ref`, `commit`, `message`,
-`tagger` (name and email) and `date`. Editors create an annotated tag through
-`POST` to the same route with `name`, the full `commit` ID and `message`.
-
-**Compare versions** suggests tags for either side, using their explicit
+History displays tags beside their commits, for readers too. **Compare
+versions** suggests tags for either side, using their explicit
 `refs/tags/<name>` references to avoid ambiguity with branch names. The advanced
 starting revision in **New working branch** also accepts tags. Tags stay local:
-fetch still retrieves only origin branches, and publication still pushes only
-the reviewed branch commit.
+fetch retrieves only origin branches, and publication pushes only the reviewed
+branch commit.
 
 ## Compare versions
 
 Open **Compare versions** in History, or the synchronization status beside the
 branch selector when a remote is connected. Choose **A: reference** and
 **B: target** from local branches, fetched remote branches, tags, commit IDs or
-**Working files**. The resolved commits, author and date appear below each
-selection. **Swap A/B** reverses the comparison.
+**Working files**.
 
 Working files are captured once. **Capture working files** takes a new snapshot;
 retrying the same comparison retains the existing capture and resolved commits.
 Captures are bounded in memory and expire on server restart. Select Working files
-again if an old capture has expired. Selections and filters are remembered per
-worktree for the browser session.
+again if an old capture has expired.
 
-The comparison workspace includes a resizable element list, read-only graph and
+The comparison workspace includes an element list, read-only graph and
 before/after inspector. Added (`+`), removed (`−`), modified (`~`) and unchanged
-(`=`) elements remain distinguishable without color. Deleted nodes and connections
-are inspectable. Modified elements show only changed fields, including individual
+(`=`) elements remain distinguishable without color. Modified elements show only changed fields, including individual
 parameters. Unchanged fields and code remain under **Full definition**; changed
 SQL uses Monaco's read-only diff editor. Component definitions, boundary ports,
 exposed parameters, node parameters, project variables and documentation have
@@ -86,7 +78,7 @@ it does not resolve runtime schemas or prove that result values changed. Invalid
 or unsupported definitions are reported as partial. Comparing never runs SQL,
 reads source data, publishes outputs, switches branches or flushes external edits.
 
-Expand Git history to load older pages. **Element history**, also opened by
+**Element history**, also opened by
 **View change history** in the node inspector's **Info** tab, filters by a node,
 template or component ID. **Compare with
 parent** uses the actual first Git parent; merge commits also offer their other
@@ -102,7 +94,6 @@ in its isolated worktree. Opening it preserves the other worktrees.
 
 In **New working branch**, enter a complete name such as `experiment/my-change`.
 Git does not allow names ending in `/`, so `experiment/` alone is incomplete.
-An invalid name leaves the form open with an explanation so you can correct it.
 
 ![Create an experimental branch from the current saved version](images/new-branch.png)
 
@@ -114,9 +105,8 @@ the new branch starts at that exact commit. Opening a revision from the History
 page preselects it. **Enter a Git reference (advanced)** also accepts an existing
 branch name, tag, or commit.
 
-Results belong to each worktree. A new working branch shows **No results on this
-branch**, its node count, and **Run all** until execution starts. Results from the
-source branch are not copied.
+Results belong to each worktree: a new working branch starts without results, and
+those of the source branch are not copied.
 
 **Compare & merge** opens a review directly into the branch from which the working
 branch was created. That origin is recorded locally when creating a branch;
@@ -144,16 +134,14 @@ manual action; applying never pushes.
 
 After integrating a branch other than main, **Delete branch <name>** opens the merge
 destination and removes the integrated local source branch, its worktree and retained
-results. A notification confirms deletion. If cleanup is refused, the branch is kept
-and the reason appears on the destination.
+results. If cleanup is refused, the branch is kept and the reason appears on the
+destination.
 
 To remove a branch later, open **Branches**, choose the destination containing its
 commits, and click **Delete** beside the local branch. Confirm the branch name and
 removal of its worktree and results. Disabled actions explain why main, the open
 branch, the selected destination, unsaved changes, untracked files, locked worktrees,
-active executions or unmerged commits prevent deletion. The server rechecks these
-protections when deleting, including the exact branch head shown in the list. If
-another session deletes the branch you have open, a notification says so and you
+active executions or unmerged commits prevent deletion. If another session deletes the branch you have open, a notification says so and you
 return to the project's main branch. Cleanup is always explicit; no branch is deleted
 automatically and branches on origin are never deleted.
 
@@ -238,9 +226,9 @@ repository. These checks do not inspect data sources or run project SQL.
 
 Readers can inspect authorized comparisons, history and synchronization state.
 Project editors can create/open branches, fetch, review/apply integration, publish
-and clean up integrated work; they fetch and publish with their own SSH key. Configuring/disconnecting origin or changing its
-mapping requires project administrator access. Instance administrators retain their
-existing access to projects. All permissions are checked by the server.
+and clean up integrated work; they fetch and publish with their own SSH key.
+Configuring/disconnecting origin or changing its mapping requires project
+administrator access.
 
 ## Network credentials
 
@@ -288,22 +276,20 @@ the origin forgets every consent of the project, even when an earlier URL comes
 back. A project administrator therefore cannot point origin to an editor's private
 repository and read it through the editor's key without the editor seeing the URL.
 
-Roles are unchanged: project administrators configure origin; editors fetch,
-review and publish. Keys, trusted hosts and consents are instance metadata,
-outside project files. Per-project read-only deploy keys for automation and
-per-user HTTPS tokens are not supported yet. On Bitbucket Cloud, repository access
+Keys, trusted hosts and consents are instance metadata, outside project files.
+Per-project read-only deploy keys for automation and per-user HTTPS tokens are
+not supported. On Bitbucket Cloud, repository access
 keys are read-only, so publishing requires the user's key on their own account.
 
 ## Automatic commit subjects
 
 Subjects are derived from the actual saved semantic changes. They use English
 Conventional Commits: `feat` for processing changes, `docs` for descriptions/names,
-`style(canvas)` for movement, and `chore(merge)` for integration. A parameter edit
-does not claim to fix a bug. Imports and conflict resolution retain their context;
+`style(canvas)` for movement, and `chore(merge)` for integration. Imports and
+conflict resolution retain their context;
 external batches are marked `[external]`.
 
 Single-element subjects identify the action and readable name. Multi-element
 saves report accurate counts and include a bounded body of affected elements,
-fields and categories. Parameter values and SQL statements are omitted. Existing
-history is not rewritten, no-op saves add no commit, and ordinary edits still
-require no commit dialog.
+fields and categories. Parameter values and SQL statements are omitted. No-op
+saves add no commit, and ordinary edits require no commit dialog.

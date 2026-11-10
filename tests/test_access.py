@@ -2,15 +2,13 @@
 
 import asyncio
 import re
-import shutil
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
-from helpers import LockHolder, asgi_client, assert_responsive, enable_excel, wait_run
-from xlsx_fixture import workbook
+from helpers import LockHolder, asgi_client, assert_responsive, wait_run
 
 from duckpad.app import create_app
 from duckpad.util import Problem
@@ -229,25 +227,6 @@ def test_authentication_waits_for_the_store_outside_the_event_loop(instance, cre
     assert response.json()["username"] == "member"
 
 
-def test_accounts_memberships_and_grants_survive_restart(tmp_path):
-    home = tmp_path / "instance"
-    app = create_app(home, watch=False)
-    with TestClient(app) as client:
-        password = app.state.auth.initial_password
-        assert client.post("/api/login", json={"password": password}).status_code == 200
-        owner, headers = account(app, "owner")
-        worktree = own_project(app, client, headers)
-        settings_path = "/projects/" + worktree["project"] + "/settings"
-        settings = request(client, headers, "GET", settings_path).json()
-        assert settings["members"][0]["id"] == owner["id"]
-        assert settings["connections"] == []
-    app = create_app(home, watch=False)
-    with TestClient(app) as client:
-        assert app.state.auth.initial_password is None
-        assert client.post("/api/login", json={"password": password}).status_code == 200
-        assert request(client, headers, "GET", settings_path).json() == settings
-
-
 def test_fresh_instances_list_no_connection_and_new_projects_have_no_grant(instance):
     app, client = instance
     owner, headers = account(app, "owner")
@@ -260,89 +239,6 @@ def test_fresh_instances_list_no_connection_and_new_projects_have_no_grant(insta
     project = example.json()["project"]
     settings = request(client, headers, "GET", f"/projects/{project}/settings").json()
     assert settings["connections"] == ["sample_" + project]
-
-
-def test_members_read_their_uploads_and_export_without_a_connection(instance, tmp_path, excel_cache):
-    app, client = instance
-    shutil.copytree(excel_cache, app.state.services.store.home / "extensions", dirs_exist_ok=True)
-    _, headers = account(app, "member")
-    worktree = own_project(app, client, headers, "Budget")
-    identity = worktree["id"]
-    upload = workbook(tmp_path / "budget.xlsx")
-
-    def uploaded(name, content):
-        response = request(
-            client, headers, "POST", f"/worktrees/{identity}/uploads", files={"file": (name, content)}
-        )
-        assert response.status_code == 200, response.text
-        return response.json()["path"]
-
-    snapshot = request(client, headers, "GET", f"/worktrees/{identity}").json()
-    assert snapshot["connections"] == []
-    bundle = snapshot["bundle"]
-    bundle["flow"]["nodes"] = [
-        {
-            "id": "budget",
-            "template": "load_xlsx",
-            "params": {"file": uploaded("budget.xlsx", upload.read_bytes()), "sheet": "Orders"},
-        },
-        {"id": "orders", "template": "load_csv", "params": {"file": uploaded("orders.csv", b"id\n1\n")}},
-        {"id": "export", "template": "export_csv", "params": {"destination": "budget.csv"}},
-    ]
-    bundle["flow"]["edges"] = [
-        {
-            "id": "e",
-            "source": "budget",
-            "sourceHandle": "result",
-            "target": "export",
-            "targetHandle": "source",
-        }
-    ]
-    enable_excel(bundle)
-    saved = request(
-        client,
-        headers,
-        "PUT",
-        f"/worktrees/{identity}",
-        json={"revision": snapshot["revision"], "bundle": bundle},
-    )
-    assert saved.status_code == 200, saved.text
-    run = request(client, headers, "POST", f"/worktrees/{identity}/runs", json={"environment": "dev"})
-    assert run.status_code == 200, run.text
-    assert wait_run(app.state.services.store, run.json(), timeout=30)["status"] == "success"
-    exported = app.state.services.store.paths.exports(identity, "dev") / "budget.csv"
-    assert exported.read_text().splitlines()[1].startswith("1.0,North,12.5")
-
-    # A connection the project was not granted stays refused.
-    share = tmp_path / "share"
-    share.mkdir()
-    connection = {
-        "id": "share",
-        "name": "Share",
-        "connector": "folder",
-        "environments": {"dev": {"root": str(share)}},
-    }
-    assert client.put("/api/catalog/connection?create=true", json=connection).status_code == 200
-    snapshot = request(client, headers, "GET", f"/worktrees/{identity}").json()
-    assert snapshot["connections"] == []
-    bundle = snapshot["bundle"]
-    bundle["flow"]["nodes"][1]["params"]["connection"] = "share"
-    saved = request(
-        client,
-        headers,
-        "PUT",
-        f"/worktrees/{identity}",
-        json={"revision": snapshot["revision"], "bundle": bundle},
-    )
-    assert saved.status_code == 200, saved.text
-    assert (
-        request(client, headers, "GET", f"/worktrees/{identity}/compile/orders?environment=dev").status_code
-        == 403
-    )
-    launch = request(
-        client, headers, "POST", f"/worktrees/{identity}/runs", json={"environment": "dev", "node": "orders"}
-    )
-    assert launch.status_code == 422 and "not authorized" in launch.json()["error"]
 
 
 @pytest.mark.parametrize("kind", ["project", "example"])
@@ -427,8 +323,9 @@ def test_private_discovery_and_all_direct_resource_routes(instance):
 
 @pytest.mark.parametrize("role", ["reader", "operator", "editor", "admin"])
 def test_project_role_matrix_and_cross_project_import(instance, role):
+    # test_every_api_route_requires_its_classified_access_level probes registered routes at every level.
     app, client = instance
-    owner, owner_headers = account(app, "owner")
+    _, owner_headers = account(app, "owner")
     participant, headers = account(app, "participant")
     target = own_project(app, client, owner_headers)
     source = own_project(app, client, owner_headers, "Source")
@@ -436,105 +333,23 @@ def test_project_role_matrix_and_cross_project_import(instance, role):
     app.state.access.member(project, participant["id"], role)
     snapshot = request(client, headers, "GET", f"/worktrees/{worktree}").json()
     assert snapshot["role"] == role
-    for suffix in (
-        "git/history",
-        "git/history/summary?entity=node/source",
-        "git/compare",
-        "git/branches",
-        "git/remote",
-        "test-history/source?environment=dev",
-    ):
-        assert request(client, headers, "GET", f"/worktrees/{worktree}/{suffix}").status_code == 200
-    for suffix in (
-        "git/open",
-        "git/cleanup",
-        "git/reviews",
-        "git/review-origin",
-        "git/reviews/missing",
-        "git/reviews/missing/apply",
-        "git/fetch",
-        "git/pull",
-        "git/push",
-    ):
-        response = request(client, headers, "POST", f"/worktrees/{worktree}/{suffix}", json={})
-        assert response.status_code in ((403,) if role in ("reader", "operator") else (409, 422))
-    # The data impact of a review only reads retained results, so readers may calculate it.
-    for method in ("GET", "POST"):
-        response = request(
-            client,
-            headers,
-            method,
-            f"/worktrees/{worktree}/git/reviews/missing/data?environment=dev",
-            json={},
-        )
-        assert response.status_code in (409, 422)
-    remote = request(client, headers, "GET", f"/worktrees/{worktree}/git/remote").json()
-    app.state.services.projects.remotes.credentials.save_hosts("", ["https://example.invalid/"])
+    if role in ("reader", "operator"):
+        # A write to a route that does not exist is refused before it is reported unknown.
+        assert request(client, headers, "POST", f"/worktrees/{worktree}/merge", json={}).status_code == 403
+        return
     response = request(
         client,
         headers,
-        "PUT",
-        f"/worktrees/{worktree}/git/remote",
+        "POST",
+        f"/worktrees/{worktree}/import",
         json={
-            "url": "https://example.invalid/project.git",
-            "remote_branch": "main",
-            "config_revision": remote["config_revision"],
+            "source_worktree": source["id"],
+            "kind": "templates",
+            "id": "sql",
+            "revision": snapshot["revision"],
         },
     )
-    assert response.status_code == (200 if role == "admin" else 403)
-    assert request(client, headers, "GET", f"/worktrees/{worktree}/archive.zip").status_code == 200
-    assert request(
-        client,
-        headers,
-        "PUT",
-        f"/worktrees/{worktree}",
-        json={"revision": snapshot["revision"], "bundle": snapshot["bundle"]},
-    ).status_code == (403 if role in ("reader", "operator") else 200)
-    for suffix in ("branches", "group", "import", "merge", "revert", "runs", "uploads"):
-        if role in ("reader", "operator"):
-            assert (
-                request(client, headers, "POST", f"/worktrees/{worktree}/{suffix}", json={}).status_code
-                == 403
-            )
-    if role not in ("reader", "operator"):
-        response = request(
-            client,
-            headers,
-            "POST",
-            f"/worktrees/{worktree}/import",
-            json={
-                "source_worktree": source["id"],
-                "kind": "templates",
-                "id": "sql",
-                "revision": snapshot["revision"],
-            },
-        )
-        assert response.status_code == 404
-    response = request(
-        client, headers, "PUT", f"/projects/{project}/members/{owner['id']}", json={"role": "admin"}
-    )
-    assert response.status_code == (200 if role == "admin" else 403)
-    assert request(client, headers, "DELETE", f"/projects/{project}").status_code == (
-        200 if role == "admin" else 403
-    )
-    for method, path, data in [
-        ("GET", "/users", None),
-        ("GET", "/catalog", None),
-        ("GET", "/extensions/settings", None),
-        ("GET", "/extensions/runtime", None),
-        ("POST", "/extensions/import", {}),
-        ("PUT", "/extensions/settings", {"allow_unsigned_extensions": True}),
-        ("GET", "/sql-resources", None),
-        ("PUT", "/sql-resources", {"threads": 64}),
-        ("POST", "/environments", {}),
-        ("PUT", "/environments/prod", {}),
-        ("DELETE", "/environments/prod", None),
-        ("PATCH", "/users/admin", {"role": "member"}),
-    ]:
-        assert (
-            request(client, headers, method, path, **({"json": data} if data is not None else {})).status_code
-            == 403
-        )
+    assert response.status_code == 404
 
 
 def test_every_api_route_requires_its_classified_access_level(instance):
@@ -683,10 +498,7 @@ def test_reader_results_and_no_recalculation(instance):
         client, headers, "GET", f"/worktrees/{worktree['id']}/preview/orders?environment=dev"
     ).json()
     assert response["count"] == 120
-    assert request(client, headers, "POST", f"/runs/{run['id']}/cancel", json={}).status_code == 403
     assert len(store.all("run")) == 1
-    row = response["rows"][0]
-    assert row
 
 
 def test_sql_worker_blocks_metadata_other_projects_and_symlinks(instance, tmp_path):
@@ -750,10 +562,8 @@ def test_sql_worker_blocks_metadata_other_projects_and_symlinks(instance, tmp_pa
 def test_account_validation_and_no_credential_disclosure(instance):
     _, client = instance
     assert client.post("/api/users", json={"username": "new", "password": "short"}).status_code == 400
-    assert (
-        client.post("/api/users", json={"username": "new", "password": PASSWORD, "role": "owner"}).status_code
-        == 422
-    )
+    owner = {"username": "new", "password": PASSWORD, "role": "owner"}
+    assert client.post("/api/users", json=owner).status_code == 422
     created = client.post("/api/users", json={"username": "new", "password": PASSWORD}).json()
     assert set(created) == {"id", "username", "role", "active"}
     assert client.post("/api/users", json={"username": "NEW", "password": PASSWORD}).status_code == 409

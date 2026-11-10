@@ -5,15 +5,6 @@ any connection. For a guided first import, follow [Use your own data](YOUR_DATA.
 A connection is needed when the data lives in a server folder, object storage or
 a database. Instance administrators configure it and grant it to your project.
 
-| Task | Read next |
-| --- | --- |
-| Upload a file or choose a storage location | [Project files and storage locations](#project-files-and-storage-locations) |
-| Choose a format or read a workbook | [File formats](#file-formats-and-extensions) and [XLSX workbooks](#xlsx-workbooks) |
-| Read or append rows in a database | [Database tables](#database-tables) |
-| Configure access for a team | [Configure and grant a connection](#configure-and-grant-a-connection) |
-| Check supported combinations | [Validated scope](#validated-scope) |
-| Define a new database or storage type | [Custom connector types](#built-in-and-custom-connector-types) |
-
 ## Project files and storage locations
 
 Every file node (Load CSV, Load Parquet, Load XLSX, Load JSON, Export CSV and Export XLSX) has a **Location** field. It defaults to **Project files**: the project's uploads and its exports, available in every environment without a connection or a grant. Drop one or more CSV, Parquet, XLSX or JSON files onto the canvas to upload them: each becomes a configured reader node, named after its file, at the drop position. Other dropped files are skipped and named in a notice. XLSX drops enable the project's `excel` extension; an instance administrator must have installed it first if it is not built in.
@@ -38,7 +29,7 @@ To read a shared folder, an instance admin creates a **Server folder** connectio
 
 With project files, the inspector previews a reader's first 20 rows before any run; a preview neither runs the flow nor publishes results. Choosing or dropping a CSV fills its delimiter and header from DuckDB's `sniff_csv`. The preview's column table overrides CSV types, and **Auto** keeps the detected type; an invalid conversion shows an error and leaves every column editable. Changing the delimiter or header clears the overrides, since the columns change. Without overrides, CSV keeps DuckDB's native inference. Parquet uses native types.
 
-Single-file CSV `COPY` follows DuckDB's native replacement behavior on a second run. Duckpad does not add an overwrite option, rename files, or ask for an existence-based confirmation.
+A CSV export replaces its destination file on each run, following DuckDB's native `COPY` behavior.
 
 ## File formats and extensions
 
@@ -49,13 +40,6 @@ and JSON are built into every DuckDB build Duckpad supports. XLSX needs DuckDB's
 installed by `pip install duckpad` does not. Formats whose extension the runtime
 does not link, such as XLSX on a `pip` installation, Avro or spatial files, need
 their extension enabled in the **Project settings → Extensions** section.
-
-The **Project settings → Extensions** section is the only way a project loads a format's extension.
-Built-in templates do not declare the extensions they need, and execution never
-downloads or loads an extension on demand, in embedded or isolated mode. The
-project's `extensions.json` therefore lists every extension it needs beyond the
-runtime's built-in ones, and a project behaves the same on every instance and in
-every execution mode.
 
 A node that uses a format, function or type of an extension that is neither built
 into the runtime nor enabled in the project fails with an error naming the
@@ -89,9 +73,8 @@ default: no connection or administrator is needed.
 To read or write workbooks in a server folder, select a granted Server folder
 connection as the Location, as for CSV and Parquet.
 
-New projects include both templates. For other projects, copy them from a new
-project or write equivalent SQL. See [File formats and extensions](#file-formats-and-extensions)
-for enabling `excel` when it is not linked into the runtime.
+See [File formats and extensions](#file-formats-and-extensions) for enabling
+`excel` when it is not linked into the runtime.
 
 Imports use native DuckDB inference: numbers generally become `DOUBLE`, while
 formatted dates, times and booleans retain their inferred types. Inconsistent cells
@@ -111,8 +94,7 @@ and isolated execution: project files and server folders, uploads, types, lineag
 repeated export and environment separation. Legacy `.xls`, encrypted workbooks,
 formula recalculation and remote XLSX storage are outside the validated scope.
 
-Uploads, local roots, environment-specific destinations and project permissions
-follow the same rules as CSV and Parquet project files. Source lineage identifies the imported
+Source lineage identifies the imported
 dataset row and column, not an Excel cell address. Missing files, missing sheets
 and malformed workbooks report execution errors and retain the last result as
 stale. See the [DuckDB Excel extension documentation](https://duckdb.org/docs/stable/core_extensions/excel.html)
@@ -148,12 +130,10 @@ project Git; projects store references to their connections.
 4. Open **Project settings** and authorize it for the project. For a database,
    the [Load table shortcut](#database-tables) combines these steps.
 5. In the node, select the connection and resource, then run. Configure and test
-   each additional environment before using it.
+   each additional [environment](ENVIRONMENTS.md) before using it.
 
 **Databases and warehouses** provide tables to Load table and Export table.
-**File storage** provides locations to file nodes. The sections below describe
-S3, PostgreSQL and Oracle settings; a Server folder needs a root directory on
-the server, as shown above.
+**File storage** provides locations to file nodes.
 
 ![Connections and connector definitions grouped by family, with a customized built-in](images/connections.png)
 
@@ -182,13 +162,7 @@ A database connection then lists the schemas and tables it attached; a storage c
 
 ![Test a PostgreSQL connection in production before saving it](images/connection-test.png)
 
-Runs get the same protection. Duckpad loads each connector extension once in a separate process before relying on it: in embedded execution before loading it in the server, in isolated execution before starting the worker. An extension that crashes then fails the node, or the start of the isolated session, instead of stopping Duckpad.
-
-## Environments
-
-Configure labels, colors, connection values and run confirmation in the
-[environments guide](ENVIRONMENTS.md). Each branch and environment has its own
-results; switching environment never starts a run.
+Runs get the same protection: a connector extension that crashes fails the node, or the start of the isolated session, instead of stopping Duckpad.
 
 ## S3
 
@@ -225,7 +199,7 @@ uv run python scripts/integration.py postgres --output docs/validation/postgres.
 
 ## Oracle / OraDuck
 
-Install Oracle Instant Client 19 or newer, Basic or Basic Light, compatible with the extension and platform. On Linux, make its shared libraries discoverable and install the platform's `libaio`/`libnsl` prerequisites. The extension build must match the exact DuckDB ABI. The application uses a private extension directory, so an unrelated unsigned developer extension in the user's global DuckDB cache cannot be loaded accidentally.
+Install Oracle Instant Client 19 or newer, Basic or Basic Light, compatible with the extension and platform. On Linux, make its shared libraries discoverable and install the platform's `libaio`/`libnsl` prerequisites. The extension build must match the exact DuckDB ABI.
 
 OraDuck is available signed from the community repository. Leave **Allow unsigned
 extensions** disabled for its signed binary. On an offline server, use the
@@ -233,7 +207,7 @@ extensions** disabled for its signed binary. On an offline server, use the
 
 The preset creates a temporary secret with `TYPE oraduck`, `USER`, `PASSWORD` and `DSN`, then uses `ATTACH` for read-only access. Load table selects a connection, schema and table. Export Oracle nodes emit `COPY (SELECT ...) TO ... (FORMAT oraduck, CONNECTION ...)` targeting an existing Oracle table; the columns expression supports explicit mapping. The destination table must already exist and be compatible with the selected columns.
 
-Before each manual run, relevant attachments are recreated to refresh schema metadata. Materialized Duckpad results remain independent of those attachments. Export behavior is native OraDuck behavior: there is no hidden truncate, table recreation or extra write. The integration test compares native and generated exports, checks repeated appends, adds a source column and row between launches, then verifies refresh and cell lineage through the same logical connection.
+Before each manual run, relevant attachments are recreated to refresh schema metadata. Materialized Duckpad results remain independent of those attachments. Export behavior is native OraDuck behavior: there is no hidden truncate, table recreation or extra write.
 
 ```sh
 # Supply credentials through the environment; do not put them in project files.
@@ -312,10 +286,6 @@ Server folder, Amazon S3, PostgreSQL and Oracle · OraDuck are built in: their d
 New definitions and duplicates use `PUT /api/catalog/connector?create=true`, which refuses an existing identifier with 409. Without `create`, the same endpoint creates or replaces a definition. `POST /api/catalog/connector/<id>/reset` resets a built-in, and `DELETE /api/catalog/connector/<id>` deletes a custom type once no connection uses it; built-ins cannot be deleted.
 
 ## Add another connector
-
-For air-gapped instances, [download and import extensions](OFFLINE_EXTENSIONS.md)
-before using connectors that need extensions. This applies to core and community
-extensions; the cache belongs to the backend instance, outside project Git.
 
 Every definition declares its `family`, `database` or `storage`; definitions without one are rejected. A database connector attaches its system as `{{ alias }}`:
 
@@ -400,7 +370,7 @@ A community contribution follows the same shape: a definition plus a validation 
 }
 ```
 
-A MySQL schema is a database: Load table's schema is the database name. Keep the same database name in every environment, on a dev and a prod server, so that the project's schema does not change between environments. Validated in CI with two MySQL 8.4 servers, in embedded and isolated execution (`docs/validation/mysql.json`).
+A MySQL schema is a database: Load table's schema is the database name. Keep the same database name in every environment, on a dev and a prod server, so that the project's schema does not change between environments.
 
 ### SQLite
 
@@ -419,9 +389,7 @@ A MySQL schema is a database: Load table's schema is the database name. Keep the
 ```
 
 Set `path` to a SQLite file per environment, in a dedicated directory as described
-above, and use the schema `main`. CI runs `scripts/integration.py sqlite` in embedded
-and isolated execution, checking Load table, Export table and different dev/prod
-values (`docs/validation/sqlite.json`).
+above, and use the schema `main`.
 
 On x86-64 processors without AVX2, the `mysql` and `sqlite` binaries published for DuckDB 2.0.0 stop their process when they load. Test connection reports it; such a server needs a compatible build of the extension, as Duckpad's container image provides for `postgres`.
 

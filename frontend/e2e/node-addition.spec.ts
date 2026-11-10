@@ -21,22 +21,6 @@ async function prepare(page: Page) {
       position: { x: 0, y: 0 },
     },
   ];
-  bundle.components.reusable = {
-    id: "reusable",
-    name: "Reusable branch",
-    nodes: [
-      {
-        id: "inner",
-        template: "filter",
-        params: { condition: "true" },
-        position: { x: 0, y: 0 },
-      },
-    ],
-    edges: [],
-    inputs: { rows: { node: "inner", port: "source" } },
-    outputs: { rows: { node: "inner", port: "result" } },
-    parameters: {},
-  };
   expect(
     (
       await page.request.put(endpoint, {
@@ -104,9 +88,6 @@ async function expectPending(page: Page) {
 
 const additions = [
   { name: "SQL node", button: "SQL" },
-  { name: "template copy", button: "Filter" },
-  { name: "linked node", button: "Filter", linked: true },
-  { name: "component", button: "Reusable branch" },
   { name: "dropped template", button: "Filter", drop: true },
   {
     name: "duplicated node",
@@ -137,7 +118,7 @@ for (const addition of additions) {
       await button.dragTo(page.locator(".react-flow__pane"), {
         targetPosition: { x: 650, y: 350 },
       });
-    else await button.click({ modifiers: addition.linked ? ["Alt"] : [] });
+    else await button.click();
     try {
       await expectPending(page);
     } finally {

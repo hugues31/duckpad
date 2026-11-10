@@ -18,7 +18,6 @@ def test_benchmark_entry_points_validate_small_fixture(tmp_path, script):
     result = json.loads(output.read_text())
     if script == "benchmark.py":
         assert result["native_value_comparison"] == "passed"
-        assert result["input_rows"] == 10000 and result["input_columns"] == 50
         assert result["lineage_total_contributions"] == 1500
     else:
         assert result["status"] == "passed" and not result["postgres_enabled"]

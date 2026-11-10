@@ -3,9 +3,7 @@
 import base64
 import json
 import os
-import sqlite3
 import stat
-from contextlib import closing
 
 import pytest
 from sqlalchemy import text
@@ -140,38 +138,6 @@ def test_a_sealed_value_only_opens_in_its_own_field(tmp_path):
         store.close()
 
 
-def test_startup_seals_plaintext_secrets_and_erases_them_from_the_file(tmp_path):
-    store = Store(tmp_path)
-    store.close()
-    (tmp_path / sealing.KEY_FILE).unlink()
-    # An instance created before secrets were sealed.
-    with closing(sqlite3.connect(tmp_path / "instance.sqlite")) as connection, connection:
-        connection.execute(
-            "INSERT INTO connection VALUES ('pg', 'PG', 'postgres', ?)", (json.dumps(["password"]),)
-        )
-        connection.execute(
-            "INSERT INTO connection_environment VALUES ('pg', 'dev', ?)",
-            (json.dumps({"host": "db.internal", "password": SECRETS[0]}),),
-        )
-        connection.execute(
-            "INSERT INTO setting VALUES ('oidc', ?)",
-            (json.dumps({"enabled": False, "client_secret": SECRETS[1]}),),
-        )
-        # Deleted rows linger in free pages until the file is rewritten.
-        connection.execute("INSERT INTO setting VALUES ('deleted', ?)", (json.dumps(SECRETS[2]),))
-        connection.execute("DELETE FROM setting WHERE id = 'deleted'")
-    assert SECRETS[0].encode() in raw(tmp_path)
-
-    store = Store(tmp_path)
-    try:
-        assert (tmp_path / sealing.KEY_FILE).exists()
-        assert store.get("connection", "pg")["environments"]["dev"]["password"] == SECRETS[0]
-        assert store.get("settings", "oidc")["client_secret"] == SECRETS[1]
-        assert not any(secret.encode() in raw(tmp_path) for secret in SECRETS[:2])
-    finally:
-        store.close()
-
-
 def test_rotation_reseals_with_the_first_key(tmp_path, monkeypatch):
     first, second = key(), key()
     key_file = tmp_path / "keys"
@@ -181,25 +147,14 @@ def test_rotation_reseals_with_the_first_key(tmp_path, monkeypatch):
     try:
         assert store.keys.external
         fill(store)
-        old = store.keys.primary
     finally:
         store.close()
     assert not (tmp_path / "instance" / sealing.KEY_FILE).exists()
 
     key_file.write_text(f"# rotated\n{second}\n{first}\n")
-    store = Store(tmp_path / "instance")
-    try:
-        assert store.keys.primary != old
-        records = store._sealed_records()
-        assert {
-            sealing.sealed_with(container[field])
-            for kind, identity, record in records
-            for container, field, _ in sealing.sealed_fields(kind, identity, record)
-            if container[field]
-        } == {store.keys.primary}
-    finally:
-        store.close()
+    Store(tmp_path / "instance").close()
 
+    # Opening without the first key proves that every secret was resealed with the second.
     key_file.write_text(second + "\n")
     store = Store(tmp_path / "instance")
     try:

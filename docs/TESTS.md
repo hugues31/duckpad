@@ -44,17 +44,12 @@ results, just like changing other SQL.
 
 ## Inspect outcomes
 
-When a node's code declares tests, the **Tests** tab of the
-[results panel](RESULTS.md) shows each test with its latest outcome and a
-strip of its last ten attempts for that node and environment, including failed
-attempts with no published output. **Show the failing rows** recomputes a
-failing test's rows on demand.
-An out-of-scope launch does not replace this history. History also includes each
-test's status, name, associated output (when the query references exactly one),
-and observed count in run details. The canvas warning badge includes failed
-warning tests. Every test result is retained, independently of the 100-message
-limit. Server logs emit one structured `node_result` line for each failed test,
-with the same context and secret redaction as messages.
-
-See [SQL syntax](SQL.md) for the complete contract and
-[results and failing rows](RESULTS.md#tests) to investigate an outcome.
+The [**Tests** tab](RESULTS.md#tests) of the results panel shows each test's
+latest outcome, its last ten attempts in the environment, including failed
+attempts with no published output, and its failing rows on demand. An
+out-of-scope launch does not replace this history. Run details in History include
+each test's status, name, associated output (when the query references exactly
+one) and observed count. The canvas warning badge includes failed warning tests.
+Every test result is retained, independently of the 100-message limit. Server
+logs emit one structured `node_result` line for each failed test, with the same
+context and secret redaction as messages.

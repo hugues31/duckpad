@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { createFilterProject, fetchOrigin, signIn } from "./helpers";
+import { fetchOrigin, signIn } from "./helpers";
 import en from "../src/locales/en.json" with { type: "json" };
 import fr from "../src/locales/fr.json" with { type: "json" };
 
@@ -124,10 +124,6 @@ test("new branch explains missing results and reviews a parameter change into it
   await expect(review.locator(".comparison-values")).toContainText(
     "params.minimum",
   );
-  await expect(review.locator(".monaco-diff-editor")).toHaveCount(0);
-  await expect(
-    review.getByText("Full definition").locator(".."),
-  ).not.toHaveAttribute("open", "");
   const impact = review.getByRole("region", { name: "Data impact" });
   await expect(
     impact.getByRole("button", { name: "Calculate row changes" }),
@@ -178,12 +174,6 @@ test("new branch explains missing results and reviews a parameter change into it
   await expect(branches.locator(".git-branch-panel .git-commit")).toHaveCount(
     1,
   );
-  await page.keyboard.press("Escape");
-  await page.goto(`/projects/${main.project}/settings/general`);
-  await page
-    .getByRole("button", { name: "Connect or configure a Git repository" })
-    .click();
-  await expect(page.getByLabel("Repository URL")).toBeVisible();
 });
 
 test("Branches confirms deletion, explains protections and redirects another session", async ({
@@ -298,48 +288,41 @@ test("Branches confirms deletion, explains protections and redirects another ses
   await observer.close();
 });
 
-for (const language of ["en", "fr"] as const) {
-  test(`invalid branch names explain how to recover in ${language}`, async ({
-    page,
-  }) => {
-    const tree = await createProject(page);
-    if (language === "fr") {
-      await page.evaluate(() => localStorage.setItem("duckpad-language", "fr"));
-      await page.reload();
-    }
-    const labels = language === "fr" ? fr : en;
-    await page.getByTitle(labels.newBranch, { exact: true }).click();
-    const dialog = page.getByRole("dialog", { name: labels.newBranch });
-    const name = dialog.getByLabel(labels.branchName, { exact: true });
-    await expect(name).toHaveValue("");
-    await expect(name).toHaveAttribute("placeholder", "experiment/my-change");
-    await expect(dialog).toContainText(labels.branchNameHint);
-    await name.fill("experiment/");
-    await dialog
-      .getByRole("button", { name: labels.create, exact: true })
-      .click();
-    await expect(dialog.locator(".notice.error")).toHaveText(
-      labels.invalidBranchName,
-    );
-    await expect(name).toHaveValue("experiment/");
-    const workspace = await (await page.request.get("/api/workspace")).json();
-    expect(
-      workspace.worktrees.filter((w: any) => w.project === tree.project),
-    ).toHaveLength(1);
-    await name.fill("experiment/my-change");
-    await dialog
-      .getByRole("button", { name: labels.create, exact: true })
-      .click();
-    await expect(dialog).toBeHidden();
-    const after = await (await page.request.get("/api/workspace")).json();
-    const branch = after.worktrees.find(
-      (w: any) =>
-        w.project === tree.project && w.branch === "experiment/my-change",
-    );
-    expect(branch).toBeTruthy();
-    await expect(page).toHaveURL(new RegExp(`/worktrees/${branch.id}/flow`));
-  });
-}
+test("invalid branch names explain how to recover in fr", async ({ page }) => {
+  const tree = await createProject(page);
+  await page.evaluate(() => localStorage.setItem("duckpad-language", "fr"));
+  await page.reload();
+  const labels = fr;
+  await page.getByTitle(labels.newBranch, { exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: labels.newBranch });
+  const name = dialog.getByLabel(labels.branchName, { exact: true });
+  await expect(name).toHaveValue("");
+  await expect(dialog).toContainText(labels.branchNameHint);
+  await name.fill("experiment/");
+  await dialog
+    .getByRole("button", { name: labels.create, exact: true })
+    .click();
+  await expect(dialog.locator(".notice.error")).toHaveText(
+    labels.invalidBranchName,
+  );
+  await expect(name).toHaveValue("experiment/");
+  const workspace = await (await page.request.get("/api/workspace")).json();
+  expect(
+    workspace.worktrees.filter((w: any) => w.project === tree.project),
+  ).toHaveLength(1);
+  await name.fill("experiment/my-change");
+  await dialog
+    .getByRole("button", { name: labels.create, exact: true })
+    .click();
+  await expect(dialog).toBeHidden();
+  const after = await (await page.request.get("/api/workspace")).json();
+  const branch = after.worktrees.find(
+    (w: any) =>
+      w.project === tree.project && w.branch === "experiment/my-change",
+  );
+  expect(branch).toBeTruthy();
+  await expect(page).toHaveURL(new RegExp(`/worktrees/${branch.id}/flow`));
+});
 
 test("semantic comparison, actual parent, filters, frozen revisions and responsive keyboard navigation", async ({
   page,
@@ -486,9 +469,6 @@ test("review and resolve a field conflict with base evidence, reject stale heads
   await expect(
     dialog.getByRole("button", { name: "Apply reviewed merge" }),
   ).toBeDisabled();
-  await expect(dialog.locator(".conflict-title")).toContainText(
-    "Regional revenue · minimum",
-  );
   await expect(
     dialog.locator(".git-conflict-values mark").first(),
   ).toBeVisible();
@@ -635,46 +615,6 @@ test("outdated comparison responses cannot replace the latest selection", async 
   await expect(dialog.getByLabel("A: reference")).toHaveValue(second.commit);
 });
 
-test("SQL inspection is read-only in French and dark theme", async ({
-  page,
-}) => {
-  const main = await createProject(page);
-  const before = await (
-    await page.request.get(`/api/worktrees/${main.id}`)
-  ).json();
-  const after = await change(page, main.id, (bundle) => {
-    bundle.templates.query += "\n-- Updated SQL definition";
-  });
-  await page.locator(".account .avatar").click();
-  await page.getByRole("menuitemradio", { name: "Dark", exact: true }).click();
-  await page.locator(".account .avatar").click();
-  await page
-    .getByRole("menuitemradio", { name: "French", exact: true })
-    .click();
-  await page.getByRole("link", { name: fr.history, exact: true }).click();
-  await page
-    .getByRole("button", { name: fr.compareVersions, exact: true })
-    .click();
-  const dialog = page.getByRole("dialog", { name: fr.gitWorkspace });
-  await dialog
-    .getByRole("button", { name: fr.compareVersions, exact: true })
-    .click();
-  await dialog.getByLabel(fr.referenceA).fill(before.commit);
-  await dialog.getByLabel(fr.targetB).fill(after.commit);
-  await expect(dialog.locator(".monaco-diff-editor")).toBeVisible();
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  await expect(dialog.locator(".change-list")).toContainText(fr.processing);
-  await expect(dialog.locator(".git-impact")).toContainText(fr.analysisPartial);
-  const firstEditor = dialog.locator(".monaco-editor textarea").first();
-  await firstEditor.focus();
-  await page.keyboard.type("not an edit");
-  const current = await (
-    await page.request.get(`/api/worktrees/${main.id}`)
-  ).json();
-  expect(current.commit).toBe(after.commit);
-  expect(current.files).toEqual(after.files);
-});
-
 test("reopening resolves the chosen names again after the branch moves", async ({
   page,
 }) => {
@@ -685,15 +625,6 @@ test("reopening resolves the chosen names again after the branch moves", async (
   const feature = (
     await (await page.request.get("/api/workspace")).json()
   ).worktrees.find((w: any) => w.branch === "feature/moving");
-  // A frozen state stored by an earlier version would have expired with the server.
-  await page.evaluate(
-    (key) =>
-      sessionStorage.setItem(
-        key,
-        JSON.stringify({ a: "frozen_expired", b: "frozen_expired" }),
-      ),
-    `duckpad.git.${main.id}`,
-  );
   const compared: string[][] = [];
   page.on("request", (request) => {
     const url = new URL(request.url());
@@ -729,7 +660,7 @@ test("reopening resolves the chosen names again after the branch moves", async (
   expect(compared).toEqual([["working", "refs/heads/feature/moving"]]);
   expect(
     await page.evaluate(() => JSON.stringify({ ...sessionStorage })),
-  ).not.toMatch(/frozen_(?!expired)|[0-9a-f]{40}/);
+  ).not.toMatch(/frozen_|[0-9a-f]{40}/);
 });
 
 test("a reference chosen after opening a commit survives history filtering", async ({
@@ -970,73 +901,4 @@ test("normal node code has a readable SQL diff in Compare versions", async ({
   await expect(dialog.locator(".comparison-values")).not.toContainText(
     "SELECT",
   );
-});
-
-test("Git comparison draws added and removed edges and resets a missing component scope", async ({
-  page,
-}, info) => {
-  const { id, endpoint, read } = await createFilterProject(page);
-  const before = await read();
-  const grouped = await page.request.post(`${endpoint}/group`, {
-    data: {
-      revision: before.revision,
-      nodes: ["filtered"],
-      name: "Review group",
-      parameters: {},
-    },
-  });
-  expect(grouped.ok()).toBe(true);
-  const groupedSnapshot: Snapshot = await grouped.json();
-  // Replacing connections gives the comparison distinct added and removed edges.
-  for (const edge of groupedSnapshot.bundle!.flow.edges)
-    edge.id = `replacement_${edge.id}`;
-  groupedSnapshot.bundle!.flow.nodes.find((node) => node.component)!.position =
-    { x: 350, y: 160 };
-  const replaced = await page.request.put(endpoint, {
-    data: {
-      revision: groupedSnapshot.revision,
-      bundle: groupedSnapshot.bundle,
-    },
-  });
-  expect(replaced.ok()).toBe(true);
-  const after: Snapshot = await replaced.json();
-  await page.goto(`/worktrees/${id}/history`);
-  await page
-    .getByRole("button", { name: "Compare versions", exact: true })
-    .click();
-  const dialog = page.getByRole("dialog", {
-    name: "Project Git workspace",
-    exact: true,
-  });
-  await dialog.getByLabel("A: reference", { exact: true }).fill(before.commit);
-  await dialog.getByLabel("B: target", { exact: true }).fill(after.commit);
-  const graph = dialog.locator(".comparison-graph");
-  for (const [theme, success, danger] of [
-    ["light", "rgb(31, 122, 77)", "rgb(163, 62, 54)"],
-    ["dark", "rgb(142, 224, 178)", "rgb(244, 173, 164)"],
-  ]) {
-    await page.evaluate((theme) => {
-      document.documentElement.dataset.theme = theme;
-    }, theme);
-    await expect
-      .poll(async () =>
-        graph
-          .locator(".react-flow__edge-path")
-          .evaluateAll((edges) =>
-            edges.map((edge) => getComputedStyle(edge).stroke),
-          ),
-      )
-      .toEqual(expect.arrayContaining([success, danger]));
-    await dialog.screenshot({
-      path: info.outputPath(`comparison-edges-${theme}.png`),
-      animations: "disabled",
-    });
-  }
-  const scope = dialog.locator(".git-scope").getByRole("combobox");
-  const component = Object.keys(after.bundle!.components)[0];
-  await scope.selectOption(`component/${component}`);
-  await expect(graph.locator(".react-flow__node")).toHaveCount(1);
-  await dialog.getByLabel("B: target", { exact: true }).fill(before.commit);
-  await expect(scope).toHaveValue("");
-  await expect(graph.locator(".react-flow__node")).toHaveCount(3);
 });

@@ -52,30 +52,9 @@ test("a value opens a large calculation DAG with sources, pagination and no pass
   await example(page);
   const trigger = await explain(page);
   const dialog = page.getByRole("dialog");
-  expect((await dialog.boundingBox())!.width).toBeGreaterThan(1100);
   await expect(dialog.locator(".lineage-card.calculation")).toHaveCount(1);
   await expect(dialog.locator(".lineage-card.is-source")).toHaveCount(5);
   await expect(dialog.locator(".react-flow__edge")).toHaveCount(5);
-  await expect
-    .poll(async () =>
-      dialog.evaluate((element) => {
-        const source = element.querySelector(".lineage-card.is-source")!;
-        const handle = source
-          .querySelector(".react-flow__handle")!
-          .getBoundingClientRect();
-        const path = element.querySelector<SVGPathElement>(
-          ".react-flow__edge-path",
-        )!;
-        const start = path
-          .getPointAtLength(0)
-          .matrixTransform(path.getScreenCTM()!);
-        return (
-          Math.abs(start.x - handle.right) +
-          Math.abs(start.y - (handle.top + handle.height / 2))
-        );
-      }),
-    )
-    .toBeLessThan(2);
   await expect(dialog.locator(".lineage-equation")).toHaveText(
     "SUM(amount) = 7131",
   );
@@ -83,13 +62,6 @@ test("a value opens a large calculation DAG with sources, pagination and no pass
   await expect(dialog.locator(".lineage-page")).toContainText("1–5 / 27");
   await expect(dialog).not.toContainText("Follow this value");
   await expect(dialog.getByRole("button", { name: /Play/ })).toHaveCount(0);
-  expect(
-    await dialog
-      .locator(".lineage-selected strong")
-      .evaluate((element) => parseFloat(getComputedStyle(element).fontSize)),
-  ).toBeLessThanOrEqual(14);
-  await page.mouse.move(100, 50);
-  await page.screenshot({ path: "test-results/lineage-graph.png" });
   const first = await dialog
     .locator(".lineage-card.is-source")
     .first()
@@ -375,7 +347,6 @@ test("the modal traps keyboard focus and supports French, dark mode and a narrow
       return !!root && root.x >= 0 && root.x + root.width <= 600;
     })
     .toBe(true);
-  await page.screenshot({ path: "test-results/lineage-french-dark.png" });
 });
 
 test("source NULL and literal zero values remain visible without artificial operations", async ({

@@ -40,7 +40,6 @@ either can show different results or none at all; it never starts a run.
 SQL, parameter and upstream processing changes can invalidate results. Editing
 layout or documentation does not. Saving never launches a run, and changing an
 external source file does not refresh an existing result: run again to read it.
-Data samples also leave the underlying pipeline result unchanged.
 
 History keeps execution records, SQL and outcomes after a restart; it is not a
 stored copy of every historical result table. Use an export when you need a
@@ -103,17 +102,10 @@ For external editing, see the [saved view file format](AUTHORING.md#saved-views)
 ![The Chart tab: revenue by region, the leading region first](images/results-chart.png)
 
 The **Chart** tab draws the shown dataset with the Vega-Lite charts declared for
-it in `charts.json`; a selector switches between several charts by name. A chart
-plots the whole retained result, up to 5,000 rows, never the displayed sample.
-Above that, aggregate the output upstream in a SQL node. The tab follows the
-same Stale, Run and failure states as the Data tab, and saving a chart never
-makes a result stale.
-
-An output without a chart explains how to declare one; editors also get **Add a
-chart**, which saves a starter bar chart and opens `charts.json` in Code. While
-`charts.json` has diagnostics, the tab lists them and draws nothing. See the
-[charts guide](CHARTS.md) for the format, the allowed specs, value conversion
-and the security model.
+it in `charts.json`. A chart plots the whole retained result, up to 5,000 rows,
+never the displayed sample. Editors can choose **Add a chart** on an output
+without one. See the [charts guide](CHARTS.md) for the format, the allowed specs,
+value conversion and the security model.
 
 ## Columns and statistics
 
@@ -129,9 +121,7 @@ run".
 
 **Compute statistics** scans the whole retained result once, never the displayed
 sample: null percentage, approximate distinct values, range and distribution of
-numbers and dates, and top values of text. The range rounds numbers to two
-decimals, keeping two significant digits below 0.1 (such as 0.00012), and
-hovering it shows the exact bounds. The tab never starts this computation
+numbers and dates, and top values of text. The tab never starts this computation
 by itself, since it competes with runs for the CPU on large results. Statistics
 are kept for that result: reopening the tab, coming back to the node or another
 user shows them at once with the time they were computed, and the run that
@@ -182,34 +172,3 @@ Database and remote-storage destinations do not offer browser downloads.
 **Code → Download project ZIP** shares the pipeline definitions, excluding data
 and Git history. It does not download the displayed table. See
 [project files and imports](AUTHORING.md#edit-and-share-project-files).
-
-## API
-
-This section is a reference for integrations with the results interface. For
-supported Job automation, start with [CLI and automation](AUTOMATION.md).
-
-These internal UI routes require an explicit `environment` query parameter.
-
-- `GET /api/worktrees/{worktree}/preview/{node}?environment=dev` accepts `search` (all columns),
-  `filter` (a SQL condition), `order` (a JSON list of `[column, direction]`),
-  `method` (`first` or `random`), `rows` and `seed` besides `port`, `limit` and
-  `offset`. `matched_count` counts the rows matching the filter and search;
-  `filtered_count` the rows to page through.
-- `GET /api/worktrees/{worktree}/statistics/{node}?environment&port` returns the
-  columns, the statistics when they were computed for the current result, and
-  the schema changes since the previous run. `POST` computes them; `DELETE`
-  cancels a computation in progress. Readers may use all three.
-- `GET /api/worktrees/{worktree}/test-rows/{node}/{test}?environment&limit&offset`
-  returns a page of a test's failing rows for a valid result.
-- Run records keep each output's `duration` in seconds.
-- `POST /api/worktrees/{worktree}/draft-preview/{node}` with `{"environment", "code",
-  "rows"}` computes a node's outputs from the first `rows` rows (100, 1000 or
-  10000; `null` for all) of its retained inputs, with `code` replacing the saved
-  code for that request. It keeps nothing and needs edit access. A missing input
-  result returns 409 with the `missing` inputs; an active run of the branch
-  returns 409 too.
-- `GET /api/worktrees/{worktree}/input-columns/{node}?environment` lists the
-  columns of each input, from its upstream result (`origin: "result"`) or
-  described from the upstream code (`"description"`).
-- `POST /api/worktrees/{worktree}/runs` with `"ancestors": true` and a `node` runs
-  only the upstream nodes of that node.

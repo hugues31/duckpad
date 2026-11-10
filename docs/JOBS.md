@@ -25,7 +25,7 @@ After creation, **Run from an API or scheduler** in the Job details shows a curl
 call and a cron example for this server. Use an API token with run permission and
 configure scheduling outside Duckpad.
 
-Run-time variable overrides are not available yet; each run uses the versioned
+Run-time variable overrides are not available; each run uses the versioned
 `variables.json` values for the selected environment.
 
 ## Change version and roll back

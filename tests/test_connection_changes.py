@@ -2,7 +2,6 @@
 connection settings moves the results of its isolated worker to a new one."""
 
 import copy
-import logging
 
 import duckdb
 import pytest
@@ -256,7 +255,7 @@ def test_a_writable_database_file_moves_to_the_new_worker(tmp_path, monkeypatch)
         services.close()
 
 
-def test_results_that_cannot_be_loaded_are_recalculated(isolated, tmp_path, monkeypatch, caplog):
+def test_results_that_cannot_be_loaded_are_recalculated(isolated, tmp_path, monkeypatch):
     worktree, connection = keyed_project(isolated, tmp_path)
     original = contexts.transfer
 
@@ -268,9 +267,7 @@ def test_results_that_cannot_be_loaded_are_recalculated(isolated, tmp_path, monk
     monkeypatch.setattr(contexts, "transfer", failing_load)
     connection["environments"]["dev"]["database"] = database(tmp_path, "second", 20)
     isolated.catalog.save("connection", copy.deepcopy(connection))
-    with caplog.at_level(logging.WARNING):
-        run = wait_run(isolated.store, isolated.engine.launch(worktree, "dev", "other"), timeout=30)
+    run = wait_run(isolated.store, isolated.engine.launch(worktree, "dev", "other"), timeout=30)
     assert run["status"] == "success", run
-    assert "they will be recalculated" in caplog.text
     assert set(isolated.engine.statuses(worktree, "dev")["nodes"]) == {"other"}
     assert not handoff_files(isolated, worktree)

@@ -18,17 +18,8 @@ history. Active runs must finish or be stopped first. At least one environment
 must remain.
 
 The confirmation option applies to workspace pipeline/node and browser Job
-launches. The dialog identifies the environment, project, branch and execution
-target; canceling it starts nothing. The server also checks the current option
-on every `entry_point: "ui"` launch and requires `confirmed: true` when enabled.
-Programmatic API launches remain non-interactive. This is an execution
-safeguard, not a replacement for project permissions.
-
-Administrators can create an environment with `POST /api/environments`
-(`id`, `label`, `color` as a six-digit hex color, `confirm_before_run` as a boolean),
-edit its settings with `PUT /api/environments/{id}`, or delete it with
-`DELETE /api/environments/{id}`. `/api/workspace` exposes `catalog.environment_details`
-alongside the identifier list.
+launches; the server checks it too. API launches remain non-interactive. This is
+an execution safeguard, not a replacement for project permissions.
 
 ![Environment labels, colors and confirmation policies in instance settings](images/environments.png)
 

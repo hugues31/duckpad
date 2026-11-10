@@ -202,8 +202,7 @@ Unimplemented automation proposals are tracked separately in the
 ## Lineage concurrency
 
 Public views expose the original query columns. Private tables retain stable row
-identities, input witnesses and grouping keys where supported. Native-equivalence
-tests compare values, types and multiplicities with uninstrumented DuckDB.
+identities, input witnesses and grouping keys where supported.
 Unsupported lineage never changes query results; the
 [coverage matrix](LINEAGE.md) lists the limits.
 

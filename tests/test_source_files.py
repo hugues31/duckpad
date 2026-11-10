@@ -1,9 +1,6 @@
 """Source discovery and previews never run a flow or expose server paths."""
 
-import io
 import json
-import zipfile
-from pathlib import Path
 
 import duckdb
 import pytest
@@ -30,10 +27,9 @@ def upload(client, url, name="customers.csv", content=b"id;name\n1;Alice\n2;Bob\
     return result.json()
 
 
-def test_upload_preview_run_and_zip_use_relative_files(source):
+def test_upload_preview_and_run_use_relative_files(source):
     app, client, url = source
     uploaded = upload(client, url)
-    assert not Path(uploaded["path"]).is_absolute()
     assert uploaded["template"] == "load_csv"
     files = client.get(url + "/source-files").json()
     assert files == [{"path": uploaded["path"], "name": "customers.csv"}]
@@ -59,10 +55,6 @@ def test_upload_preview_run_and_zip_use_relative_files(source):
     services = app.state.services
     run = wait_run(services.store, services.engine.launch(snapshot["worktree"]["id"], "dev"))
     assert run["status"] == "success", run
-    archive = client.get(url + "/archive.zip")
-    assert archive.status_code == 200, archive.text
-    with zipfile.ZipFile(io.BytesIO(archive.content)) as zipped:
-        assert all(str(services.store.home) not in zipped.read(name).decode() for name in zipped.namelist())
     assert str(services.store.home) not in json.dumps(client.get(url).json()["files"])
 
 

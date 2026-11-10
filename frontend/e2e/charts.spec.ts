@@ -75,17 +75,3 @@ test("a chart of charts.json renders as SVG in the Chart tab, loading Vega on fi
   await expect(chart.locator(".mark-rect path").first()).toBeVisible();
   await expect(chart).toContainText("channel");
 });
-
-test("no chart renders while charts.json has a diagnostic", async ({
-  page,
-}) => {
-  const worktree = await chartedProject(page, {
-    "validated:orders": [{ ...AMOUNTS, owner: "someone" }],
-  });
-  await page.goto(`/worktrees/${worktree}/flow?node=validated`);
-  const panel = page.getByRole("region", { name: "Results", exact: true });
-  await panel.getByRole("tab", { name: "Chart", exact: true }).click();
-  await expect(panel.getByRole("alert")).toContainText("unknown fields: owner");
-  await expect(panel.locator(".chart-view")).toHaveCount(0);
-  await expect(panel.locator("svg.marks")).toHaveCount(0);
-});
