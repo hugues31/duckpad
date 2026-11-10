@@ -42,11 +42,14 @@ async def stream(messages, info):
     elif isinstance(prompt, str) and "Explain Duckpad's @param" in prompt:
         edit = ("read_guide", {"topic": "sql"})
     elif isinstance(prompt, str) and "Delete the project variable obsolete" in prompt:
-        edit = ("edit_variable", {"operation": "delete", "name": "obsolete"})
+        edit = ("edit_variable", {"change": {"operation": "delete", "name": "obsolete"}})
     elif isinstance(prompt, str) and "Delete the project variable minimum" in prompt:
-        edit = ("edit_variable", {"operation": "delete", "name": "minimum"})
+        edit = ("edit_variable", {"change": {"operation": "delete", "name": "minimum"}})
     elif isinstance(prompt, str) and "Remove only the dev environment override" in prompt:
-        edit = ("edit_variable", {"operation": "update", "name": "minimum", "remove_environments": ["dev"]})
+        edit = (
+            "edit_variable",
+            {"change": {"operation": "update", "name": "minimum", "remove_environments": ["dev"]}},
+        )
     if info.function_tools and not any(isinstance(p, ToolReturnPart) for p in messages[-1].parts):
         name, args = edit or (
             ("read_flow", {"section": "nodes"})
