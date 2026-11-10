@@ -14,7 +14,7 @@ from .. import variables, views
 from ..auth import Auth
 from ..components import expand_for
 from ..execution.samples import Sample
-from ..graph import connection_references
+from ..graph import connection_references, reachable
 from ..node_code import code_path, find_node, template_path
 from ..search import node_entries
 from ..services import Services
@@ -137,6 +137,27 @@ class Dependencies:
             environment = self.context["environment"]
             self.services.catalog.environment(environment)
             self.require_connections(expand_for(bundle, environment, tolerant=True)[0])
+
+    def output_columns(self, bundle, node, port):
+        """The column names of an expanded output in the page's environment, from schema metadata only.
+
+        None when the output was never run there or its rows come from a connection that is not
+        granted. Errors elsewhere in the flow do not matter.
+        """
+        environment = self.context["environment"]
+        try:
+            self.services.catalog.environment(environment)
+            nodes, edges, _ = expand_for(bundle, environment, tolerant=True)
+            lineage = reachable({node}, edges, upstream=True)
+            self.require_connections({k: v for k, v in nodes.items() if k in lineage})
+        except Problem:
+            return None
+        context = self.services.engine.pool.find(self.context["worktree"], environment)
+        if not context:
+            return None
+        with context.lock:
+            dataset = context.outputs.get(node, {}).get(port)
+            return {column["name"] for column in dataset.columns} if dataset else None
 
     def require_connections(self, nodes):
         references = [ref for node in nodes.values() for ref in connection_references(node)]

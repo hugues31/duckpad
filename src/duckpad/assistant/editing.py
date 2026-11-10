@@ -7,9 +7,8 @@ from pydantic_ai import RunContext
 
 from .. import variables
 from ..bundle import bundle_to_files
-from ..charts import encoded_fields
-from ..components import expand, expand_for, group
-from ..graph import reachable
+from ..charts import unknown_fields
+from ..components import expand, group, output_port
 from ..node_code import code_path, find_node
 from ..util import Problem
 from .arguments import (
@@ -268,45 +267,6 @@ def group_nodes(ctx: RunContext[Dependencies], nodes: list[str], name: str, comp
     return save(ctx, snapshot, bundle, selected=selected)
 
 
-def output_port(bundle, node, output):
-    """The `(node, port)` producing a node's output, through component instance boundaries."""
-    nodes, _, boundaries = expand(bundle, tolerant=True)
-    if node in boundaries:
-        ports = boundaries[node]["outputs"]
-    else:
-        ports = {port: (node, port) for port in nodes[node]["parsed"]["outputs"]}
-    if output not in ports:
-        raise Problem("Output port not found", 404)
-    return ports[output]
-
-
-def unknown_fields_warning(ctx, bundle, node, port, spec) -> dict:
-    """`unknown_fields`: the fields a chart encodes that the materialized columns of an output lack.
-
-    Reads schema metadata only, from the page's environment; nothing when the output was never run.
-    Errors elsewhere in the flow do not matter, but the connections the output's rows come from
-    must still be granted.
-    """
-    environment = ctx.deps.context["environment"]
-    try:
-        ctx.deps.services.catalog.environment(environment)
-        nodes, edges, _ = expand_for(bundle, environment, tolerant=True)
-        lineage = reachable({node}, edges, upstream=True)
-        ctx.deps.require_connections({k: v for k, v in nodes.items() if k in lineage})
-    except Problem:
-        return {}
-    context = ctx.deps.services.engine.pool.find(ctx.deps.context["worktree"], environment)
-    if not context:
-        return {}
-    with context.lock:
-        dataset = context.outputs.get(node, {}).get(port)
-        known = {column["name"] for column in dataset.columns} if dataset else None
-    if known is None:
-        return {}
-    unknown = [field for field in encoded_fields(spec) if field not in known]
-    return {"unknown_fields": unknown} if unknown else {}
-
-
 def edit_chart(
     ctx: RunContext[Dependencies],
     change: Annotated[
@@ -355,7 +315,9 @@ def edit_chart(
     # The save validates every chart: chart rules live in duckpad.charts only.
     result = save(ctx, snapshot, bundle)
     if isinstance(change, (CreateChart, UpdateChart)) and "error" not in result:
-        result |= unknown_fields_warning(ctx, bundle, producer, port, change.spec)
+        columns = ctx.deps.output_columns(bundle, producer, port)
+        if columns is not None and (unknown := unknown_fields(change.spec, columns)):
+            result["unknown_fields"] = unknown
     return result
 
 

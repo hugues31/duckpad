@@ -288,11 +288,11 @@ def check_chart(key, chart):
         raise Problem(f"{FILE}: chart {name} of {key}: {error}", 422) from None
 
 
-def encoded_fields(spec):
-    """The fields a valid spec encodes, in order and without duplicates.
+def unknown_fields(spec, columns):
+    """The fields a valid spec encodes that `columns` lack, in order and without duplicates.
 
-    Reads the top level and the layers, as the Chart tab's unknown-fields check does; a tooltip
-    may list several definitions.
+    Mirrors the Chart tab's unknownFields: reads the top level and the layers; a tooltip may list
+    several definitions.
     """
     fields = [
         definition.get("field")
@@ -300,7 +300,7 @@ def encoded_fields(spec):
         for channel in part.get("encoding", {}).values()
         for definition in (channel if isinstance(channel, list) else [channel])
     ]
-    return list(dict.fromkeys(field for field in fields if field is not None))
+    return list(dict.fromkeys(field for field in fields if field is not None and field not in columns))
 
 
 def declarations(bundle):
