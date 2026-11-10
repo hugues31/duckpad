@@ -322,6 +322,23 @@ export default function Inspector({
         ))}
       </div>
       <div className="inspector-body">
+        {node.muted && (
+          <p className="notice">
+            <strong>{t("mutedNode")}.</strong> {t("mutedNodeHint")}{" "}
+            {!readOnly && (
+              <button
+                className="text-button"
+                onClick={() =>
+                  actions()
+                    .find((item) => item.id === "mute")
+                    ?.run()
+                }
+              >
+                {t("unmuteNode")}
+              </button>
+            )}
+          </p>
+        )}
         {node.language === "python" && !snapshot.python_enabled && (
           <p className="notice">
             {t("pythonDisabledHint")}{" "}

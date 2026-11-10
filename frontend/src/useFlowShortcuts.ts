@@ -14,6 +14,7 @@ export function useFlowShortcuts({
   safe,
   copy,
   paste,
+  toggleMute,
 }: {
   canEdit: boolean;
   addingNode: boolean;
@@ -26,18 +27,34 @@ export function useFlowShortcuts({
   safe: (action: () => Promise<unknown>) => void;
   copy: (ids: string[]) => Promise<void>;
   paste: (copied: CopiedNodes) => Promise<void>;
+  toggleMute: (ids: string[]) => Promise<void>;
 }) {
   const shortcut = useEffectEvent((event: KeyboardEvent) => {
     if (
       event.defaultPrevented ||
       event.isComposing ||
       event.altKey ||
-      !(event.ctrlKey || event.metaKey) ||
       typingTarget(event.target) ||
       blockingDialogShown()
     )
       return;
     const key = event.key.toLowerCase();
+    if (!event.ctrlKey && !event.metaKey) {
+      if (
+        key !== "m" ||
+        event.shiftKey ||
+        !canEdit ||
+        busy ||
+        addingNode ||
+        !bundle
+      )
+        return;
+      const ids = selection.length ? selection : selected ? [selected] : [];
+      if (!ids.length) return;
+      event.preventDefault();
+      if (!event.repeat) safe(() => toggleMute(ids));
+      return;
+    }
     if (key === "z" || key === "y") {
       // Repeated undos queue up behind the one in flight.
       if (!canEdit || addingNode || !bundle) return;

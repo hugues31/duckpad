@@ -16,7 +16,7 @@ from typing import Any
 import duckdb
 
 from ..catalog import Catalog, redact
-from ..components import expand_for
+from ..components import expand_for, missing_node
 from ..datasets import Context, Dataset
 from ..graph import connection_references, reachable
 from ..node_code import code_path, find_node
@@ -58,11 +58,15 @@ class Located:
 
 
 def with_code(bundle: Record, full_node: str, code: str) -> Record:
-    """A copy of the bundle where the node runs `code`: its own file or its shared template."""
+    """A copy of the bundle where the node runs `code`: its own file or its shared template.
+
+    A muted node runs it too, so the code being edited can be previewed before unmuting.
+    """
     bundle = copy.deepcopy(bundle)
     node, parent = find_node(bundle, full_node)
     if node.get("component"):
         raise Problem("A component instance has no code; open the component to edit its nodes", 422)
+    node.pop("muted", None)
     if node.get("template"):
         bundle["templates"][node["template"]] = code
     else:
@@ -271,7 +275,7 @@ class DraftPreviews:
             raise Problem("A component instance has no code; open the component to preview its nodes", 422)
         node = nodes.get(full_node)
         if node is None:
-            raise Problem("Node not found", 404)
+            raise missing_node(nodes, full_node)
         return Located(node, edges, nodes)
 
     @staticmethod

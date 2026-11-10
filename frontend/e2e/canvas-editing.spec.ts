@@ -99,6 +99,97 @@ const node = (page: Page, id: string) =>
 const select = (page: Page, id: string, modifiers: "Shift"[] = []) =>
   node(page, id).locator(".node-shape").click({ modifiers });
 
+test("mute shortcuts and menu preserve the graph and bypass execution", async ({
+  page,
+}) => {
+  const { endpoint, read } = await prepare(page);
+  const original = (await read()).bundle!;
+  const doubled = node(page, "doubled");
+  await select(page, "doubled");
+  await autosaved(page, () => page.keyboard.press("m"));
+  await expect(doubled.locator(".pipeline-node")).toHaveClass(/is-muted/);
+  await expect(doubled.locator(".node-passthrough path")).toHaveCount(1);
+  await expect(doubled).toContainText("Muted");
+  // The selection ring stays visible on the faded node.
+  await expect(doubled.locator(".node-shape")).not.toHaveCSS(
+    "box-shadow",
+    "none",
+  );
+  const notice = page.locator(".inspector .notice", { hasText: "Muted." });
+  await expect(notice).toBeVisible();
+  const saved = (await read()).bundle!;
+  expect(saved.flow.nodes.find((item) => item.id === "doubled")?.muted).toBe(
+    true,
+  );
+  expect(saved.flow.edges).toEqual(original.flow.edges);
+  expect(saved.node_sql).toEqual(original.node_sql);
+
+  await page.reload();
+  await expect(doubled.locator(".pipeline-node")).toHaveClass(/is-muted/);
+  const run = async (expected: number) => {
+    const response = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        response.url().endsWith("/runs"),
+    );
+    await page.getByRole("button", { name: "Run all", exact: true }).click();
+    const started = await (await response).json();
+    await expect
+      .poll(
+        async () =>
+          (await (await page.request.get(`/api/runs/${started.id}`)).json())
+            .status,
+      )
+      .toBe("success");
+    const preview = await (
+      await page.request.get(`${endpoint}/preview/doubled?environment=dev`)
+    ).json();
+    expect(preview.rows[0].values).toEqual([expected]);
+  };
+  await run(1);
+  await doubled.click({ button: "right" });
+  await autosaved(page, () =>
+    page
+      .getByRole("menuitem", { name: "Unmute node (M)", exact: true })
+      .click(),
+  );
+  await expect(doubled.locator(".pipeline-node")).not.toHaveClass(/is-muted/);
+  await run(2);
+  await page.keyboard.press("ControlOrMeta+Z");
+  await expect(doubled.locator(".pipeline-node")).toHaveClass(/is-muted/);
+  await select(page, "doubled");
+  await autosaved(page, () =>
+    notice.getByRole("button", { name: "Unmute node (M)" }).click(),
+  );
+  await expect(doubled.locator(".pipeline-node")).not.toHaveClass(/is-muted/);
+  await expect(notice).toHaveCount(0);
+  await select(page, "rows");
+  await node(page, "rows").click({ button: "right" });
+  await expect(
+    page.getByRole("menuitem", { name: "Mute node (M)", exact: true }),
+  ).toBeDisabled();
+});
+
+test("mute handles multiple selected nodes and yields to typing", async ({
+  page,
+}) => {
+  const { read } = await prepare(page);
+  await select(page, "filtered");
+  await select(page, "doubled", ["Shift"]);
+  await autosaved(page, () => page.keyboard.press("m"));
+  await expect(page.locator(".pipeline-node.is-muted")).toHaveCount(2);
+  await autosaved(page, () => page.keyboard.press("m"));
+  await expect(page.locator(".pipeline-node.is-muted")).toHaveCount(0);
+  await select(page, "doubled");
+  await autosaved(page, () =>
+    page.getByRole("textbox", { name: "Display name", exact: true }).press("m"),
+  );
+  await expect(page.locator(".pipeline-node.is-muted")).toHaveCount(0);
+  expect((await read()).bundle!.flow.nodes.some((item) => item.muted)).toBe(
+    false,
+  );
+});
+
 test("selected links delete, undo and survive a rejected save without deleting nodes", async ({
   page,
 }) => {
@@ -478,6 +569,8 @@ test("canvas shortcuts yield to fields, editors and dialogs", async ({
   // The docked code editor keeps its own shortcuts.
   const panel = await openCode(page);
   await panel.locator(".monaco-editor textarea").focus();
+  await page.keyboard.press("m");
+  await page.keyboard.press("ControlOrMeta+Z");
   await page.keyboard.press("ControlOrMeta+V");
   await page.keyboard.press("ControlOrMeta+Z");
   await closeCode(page);
@@ -488,11 +581,16 @@ test("canvas shortcuts yield to fields, editors and dialogs", async ({
     .click();
   const dialog = page.getByRole("dialog", { name: "New SQL template" });
   await expect(dialog.locator(".monaco-editor")).toBeVisible();
+  await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
+  await page.keyboard.press("m");
   await page.keyboard.press("ControlOrMeta+Z");
   await page.keyboard.press("ControlOrMeta+V");
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
   expect(reverts).toEqual([]);
+  expect((await read()).bundle!.flow.nodes.some((item) => item.muted)).toBe(
+    false,
+  );
   expect((await read()).bundle!.flow.nodes).toHaveLength(4);
   await expect(page.locator(".react-flow__node")).toHaveCount(4);
 });

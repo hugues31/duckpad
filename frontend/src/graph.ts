@@ -102,7 +102,7 @@ export function exposedSource(
 ) {
   const source = { node, port };
   const seen = new Set<string>();
-  while (current?.component && !seen.has(current.component)) {
+  while (current?.component && !current.muted && !seen.has(current.component)) {
     seen.add(current.component);
     const definition: ComponentDefinition | undefined =
       components[current.component];

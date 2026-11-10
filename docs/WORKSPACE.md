@@ -36,6 +36,19 @@ view. **Auto-arrange nodes** places dependencies in columns, orders each column 
 avoid crossing links, and lines up linked sockets. Drag a port onto empty space to
 add a compatible connected node.
 
+Select one or more nodes and press **M**, or choose **Mute node (M)** from **Node
+actions**, to bypass their code; repeat to restore it. A muted node is faded, with a
+dashed outline and its links drawn through it, and its inspector offers **Unmute
+node (M)**. Code, parameters and links are kept, the state is saved with the
+project, and undo works as for other edits.
+
+Each output receives the input in the same position; extra outputs reuse the first
+input, and other inputs are ignored. A muted component bypasses its whole subgraph,
+and a muted export writes nothing. Sources have no input to pass through, so they
+cannot be muted. Muting or unmuting makes downstream results stale until the next
+run, and downstream code must accept the passthrough columns. The code editor's
+preview still computes the node's own code.
+
 Node names come from **Display name**, then the SQL `-- @label` directive or
 template name. Diagnostics, lineage, variable usage, conflict titles and new
 Git commits use the same names. References inside a component include its parent

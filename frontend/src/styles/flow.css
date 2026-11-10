@@ -614,6 +614,33 @@ fieldset.palette-bottom {
   color: var(--accent);
   background: var(--surface);
 }
+/* The links a muted node passes through, drawn like canvas links. */
+.node-passthrough {
+  position: absolute;
+  top: 0;
+  left: 0;
+  fill: none;
+  stroke: var(--edge);
+  stroke-width: 1.8;
+  pointer-events: none;
+}
+.pipeline-node.is-selected .node-passthrough,
+.pipeline-node:hover .node-passthrough {
+  stroke: var(--accent);
+  stroke-width: 2.3;
+}
+.pipeline-node.is-muted .node-shape {
+  background: color-mix(in srgb, var(--surface) 35%, transparent);
+  border-style: dashed;
+  color: var(--muted);
+  box-shadow: none;
+}
+.pipeline-node.is-muted .node-shape > svg {
+  opacity: 0.3;
+}
+.pipeline-node.is-muted .node-title {
+  color: var(--muted);
+}
 .pipeline-node.is-selected .node-shape {
   border-color: var(--accent);
   box-shadow:

@@ -17,6 +17,8 @@ def inputs(bundle, node, *, python_runtime=None, entry=None):
     python = node.get("language") == "python"
     collected = node.get("partition_collect_inputs", [])
     return {
+        # Absent unless muted, so existing results keep their fingerprints.
+        **({"mute_inputs": node["mute_inputs"]} if node.get("muted") else {}),
         "sql": executable(node["template_sql"], node.get("language", "sql")),
         "python": [
             python_runtime,
