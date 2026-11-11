@@ -4,6 +4,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, JsonValue, model_validator
 
+from ..project_schema import Identity
+
 
 class Arguments(BaseModel):
     """Tool arguments that reject unknown fields and treat null as omitted."""
@@ -114,13 +116,14 @@ class Position(Arguments):
     y: FiniteFloat
 
 
-NodeId = Annotated[str, Field(pattern=r"^[A-Za-z0-9_-]+$", max_length=100)]
+# Existing nodes and edges keep whatever ID their project gave them: only created ones are limited.
+NewNodeId = Annotated[str, Field(pattern=r"^[A-Za-z0-9_-]+$", max_length=100)]
 
 
 class NodeChange(Arguments):
     """Fields shared by adding and updating a node."""
 
-    id: NodeId
+    id: Identity
     label: str | None = None
     position: Position | None = None
     params: dict[str, JsonValue] | None = None
@@ -130,6 +133,7 @@ class AddNode(NodeChange):
     """Add a node with at most one of sql, python, template or component; SELECT 1 by default."""
 
     operation: Literal["add"]
+    id: NewNodeId
     template: str | None = None
     component: str | None = None
     sql: str | None = None
@@ -162,7 +166,7 @@ class RemoveNode(Arguments):
     """Remove a node, its code and its connections."""
 
     operation: Literal["remove"]
-    id: NodeId
+    id: Identity
 
 
 class ConnectEdge(Arguments):
@@ -170,9 +174,8 @@ class ConnectEdge(Arguments):
 
     operation: Literal["connect"]
     id: str = Field(min_length=1, max_length=100)
-    # Existing nodes keep whatever ID their project gave them; NodeId only limits the IDs of new nodes.
-    source: str = Field(min_length=1)
-    target: str = Field(min_length=1)
+    source: Identity
+    target: Identity
     source_port: str = "result"
     target_port: str = "input"
 
@@ -181,7 +184,7 @@ class DisconnectEdge(Arguments):
     """Remove a connection."""
 
     operation: Literal["disconnect"]
-    id: str = Field(min_length=1, max_length=100)
+    id: Identity
 
 
 class ProjectDocumentation(Arguments):
