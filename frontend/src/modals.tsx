@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import { useT } from "./i18n";
+import { shownDialogs } from "./searchShortcuts";
 import { useAsyncAction } from "./useAsyncAction";
 
 const CodeEditor = lazy(() => import("./Editor"));
@@ -133,13 +134,7 @@ export function ModalForm({
 
 /** The last visible blocking dialog receives keyboard dismissal and focus cycling. */
 function topDialog() {
-  return [
-    ...document.querySelectorAll<HTMLElement>(
-      '[role="dialog"]:not([aria-modal="false"])',
-    ),
-  ]
-    .filter((dialog) => dialog.getClientRects().length > 0)
-    .at(-1);
+  return shownDialogs('[role="dialog"]:not([aria-modal="false"])').at(-1);
 }
 
 const TABBABLE =

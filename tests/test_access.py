@@ -32,6 +32,7 @@ ROUTE_ACCESS = {
         "GET /api/search",
         "GET /api/workspace",
         "GET /api/library",
+        "GET /api/code-catalog",
         "GET /api/runs",
         "GET /api/projects",
         "POST /api/projects",

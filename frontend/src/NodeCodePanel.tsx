@@ -4,9 +4,11 @@ import {
   Suspense,
   useEffect,
   useEffectEvent,
+  useMemo,
   useRef,
   useState,
 } from "react";
+import { nodeCodeContext, savedProblems } from "./codeContext";
 import {
   insertText,
   revealPosition,
@@ -18,7 +20,12 @@ import {
   type SampleSize,
 } from "./draftPreview";
 import { useT } from "./i18n";
-import { nodeCode, setNodeCode, templateUsage } from "./nodeCode";
+import {
+  nodeCode,
+  nodeSourcePath,
+  setNodeCode,
+  templateUsage,
+} from "./nodeCode";
 import { quoteIdentifier } from "./samples";
 import SaveState from "./SaveState";
 import Select from "./Select";
@@ -149,6 +156,22 @@ export default function NodeCodePanel({
     ? templateUsage(snapshot.bundle!, node.template)
     : 0;
   const columns = useInputColumns(snapshot, fullNode, environment, statuses);
+  const context = useMemo(
+    () =>
+      nodeCodeContext(
+        snapshot,
+        node,
+        columns.data,
+        environment,
+        t,
+        statuses.nodes[fullNode],
+      ),
+    [snapshot, node, columns.data, environment, t, statuses.nodes, fullNode],
+  );
+  const problems = useMemo(
+    () => savedProblems(snapshot, nodeSourcePath(node, parent), draft),
+    [snapshot, node, parent, draft],
+  );
   return (
     <aside className="code-panel" ref={panel} aria-label={t("codePanel")}>
       <div className="inspector-title">
@@ -248,6 +271,8 @@ export default function NodeCodePanel({
             diagnostic={diagnostic}
             label={t("codePanel")}
             onEditor={setEditor}
+            context={context}
+            problems={problems}
           />
         </Suspense>
       </div>
