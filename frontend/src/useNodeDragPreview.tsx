@@ -23,10 +23,12 @@ export function useNodeDragPreview({ parsed, components }: CanvasProps) {
   const { getZoom } = useReactFlow();
   const element = useRef<HTMLDivElement>(null);
   const [preview, setPreview] = useState<{
+    node: Parameters<typeof nodeInterface>[0];
     data: PipelineNode["data"];
     zoom: number;
   } | null>(null);
   return {
+    node: preview?.node,
     preview:
       preview &&
       createPortal(
@@ -60,6 +62,7 @@ export function useNodeDragPreview({ parsed, components }: CanvasProps) {
       const signature = nodeInterface(node, parsed, components);
       transfer.setDragImage(transparent, 0, 0);
       setPreview({
+        node,
         zoom: getZoom(),
         data: {
           fullNode: "",

@@ -7,6 +7,7 @@ import {
 } from "react";
 import { api, send, uploadSourceFile } from "./api";
 import type { CanvasHandle, FocusRequest } from "./canvasTypes";
+import type { EdgeInsertion } from "./edgeInsertion";
 import {
   addFlowFilter,
   addFlowNode,
@@ -124,6 +125,7 @@ export function useFlowEditing({
     position?: FlowNode["position"],
     connection?: NodeConnection,
     linked = false,
+    insertion?: EdgeInsertion,
   ) {
     if (connection && !graph?.nodes.some((n) => n.id === connection.nodeId))
       return;
@@ -139,7 +141,7 @@ export function useFlowEditing({
         findNodePosition(graph?.nodes || []),
     };
     const added = await insertNode((value) =>
-      addFlowNode(value, path, created, kind, linked, connection),
+      addFlowNode(value, path, created, kind, linked, connection, insertion),
     );
     if (added && !position)
       setFocusRequest({ id: created.id, key: created.id, reveal: true });

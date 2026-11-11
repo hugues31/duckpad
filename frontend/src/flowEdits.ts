@@ -11,6 +11,7 @@ import {
   nodeCodePath,
   setNodeCode,
 } from "./nodeCode";
+import { insertOnEdge, type EdgeInsertion } from "./edgeInsertion";
 import type { Bundle, FlowEdge, FlowNode, Json, ParsedTemplate } from "./types";
 
 /** A Filter node's code when the project has no `filter` template to copy. */
@@ -24,6 +25,7 @@ export function addFlowNode(
   kind: NodeKind,
   linked: boolean,
   connection?: NodeConnection,
+  insertion?: EdgeInsertion,
 ) {
   const parent = path.at(-1)?.definition;
   const g = graphAt(value, path);
@@ -32,6 +34,7 @@ export function addFlowNode(
     freshNodeCode(value, created, parent);
   }
   g.nodes.push(created);
+  if (insertion) insertOnEdge(g, created.id, insertion);
   if (connection)
     connectInput(
       g,
