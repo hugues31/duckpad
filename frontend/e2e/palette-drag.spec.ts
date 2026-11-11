@@ -27,10 +27,11 @@ async function startDrag(page: Page, label: string) {
   const item = page
     .locator(".palette")
     .getByRole("button", { name: label, exact: true });
+  await item.scrollIntoViewIfNeeded();
   const bounds = (await item.boundingBox())!;
   await page.mouse.move(bounds.x + 15, bounds.y + 10);
   await page.mouse.down();
-  return { x: bounds.x + 60, y: bounds.y + 12 };
+  return { x: Math.round(bounds.x + 60), y: Math.round(bounds.y + 12) };
 }
 
 /** The preview's shape center follows the pointer, where the drop puts it. */
@@ -108,7 +109,7 @@ test("palette drags preview nodes at the canvas zoom and refuse drops outside th
   const inspector = (await page.locator(".inspector").boundingBox())!;
   for (const entry of [
     { label: "Join", shape: "round-node", zoom: 0 },
-    { label: "Filter", shape: "round-node", zoom: -20 },
+    { label: "Export CSV", shape: "square-node", zoom: -20 },
     { label: "Regional report", shape: "component", zoom: 22 },
   ]) {
     for (let n = 0; n < Math.abs(entry.zoom); n++) {
@@ -161,5 +162,5 @@ test("a first palette drop keeps the viewport, and a canceled drag adds nothing"
     x: Math.round(area.x + area.width / 3),
     y: Math.round(area.y + area.height / 3),
   });
-  await expect(node.locator(".pipeline-node")).toHaveClass(/source-node/);
+  await expect(node.locator(".pipeline-node")).toHaveClass(/square-node/);
 });

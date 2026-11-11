@@ -320,14 +320,12 @@
   border-radius: 9px;
   flex-shrink: 0;
 }
-.palette-icon.sources {
+.palette-icon.sources,
+.palette-icon.exports {
   color: var(--accent);
 }
 .palette-icon.components {
   color: light-dark(#6b589c, #d0bcff);
-}
-.palette-icon.exports {
-  color: light-dark(#886025, #f0cf92);
 }
 .palette-plus {
   opacity: 0;
@@ -598,7 +596,8 @@ fieldset.palette-bottom {
   color: var(--accent);
   position: relative;
 }
-.source-node .node-shape {
+/* Sources and exports: where data enters or leaves the pipeline. */
+.square-node .node-shape {
   border-radius: 8px;
   border-color: var(--accent);
   color: light-dark(#1559df, #f2f6ff);
@@ -607,11 +606,6 @@ fieldset.palette-bottom {
 .pipeline-node.component .node-shape {
   border-color: #9481c4;
   color: light-dark(#6b589c, #d0bcff);
-  background: var(--surface);
-}
-.pipeline-node.export .node-shape {
-  border-color: var(--accent);
-  color: var(--accent);
   background: var(--surface);
 }
 /* The links a muted node passes through, drawn like canvas links. */
