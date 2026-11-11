@@ -91,7 +91,7 @@ async function capture(
   await mkdir(resolve("../docs/images"), { recursive: true });
   await page.evaluate(() => document.fonts.ready);
   await page.mouse.move(0, 0);
-  await region.screenshot({
+  return region.screenshot({
     path: resolve("../docs/images", `${name}.png`),
     animations: "disabled",
     caret: "hide",
@@ -100,6 +100,42 @@ async function capture(
       ".toast, .resource-monitor, .git-revisions small { visibility: hidden !important; }" +
       extraStyle,
   });
+}
+
+/**
+ * A capture for the README, which sits on GitHub's light or dark page: the
+ * image keeps the rounded corners of the captured window, or lightly rounded
+ * ones for a whole page, and what lies outside them becomes transparent.
+ */
+async function captureForReadme(
+  page: Page,
+  name: string,
+  region: Page | Locator = page,
+  extraStyle = "",
+) {
+  const image = await capture(page, name, region, extraStyle);
+  const radius =
+    "boundingBox" in region
+      ? await region.evaluate((element) =>
+          parseFloat(getComputedStyle(element).borderTopLeftRadius),
+        )
+      : 12;
+  expect(radius).toBeGreaterThan(0);
+  // Chromium draws the capture again under its rounded outline, pixel for
+  // pixel, and leaves the page behind it out of the new image.
+  const frame = await page.context().newPage();
+  const density = await frame.evaluate(() => devicePixelRatio);
+  // The width in the PNG header is in device pixels.
+  const width = image.readUInt32BE(16) / density;
+  await frame.setContent(
+    `<img style="display: block; width: ${width}px; border-radius: ${radius}px"
+      src="data:image/png;base64,${image.toString("base64")}">`,
+  );
+  await frame.locator("img").screenshot({
+    path: resolve("../docs/images", `${name}.png`),
+    omitBackground: true,
+  });
+  await frame.close();
 }
 
 function node(page: Page, label: string) {
@@ -119,7 +155,7 @@ async function example(page: Page) {
   return worktree;
 }
 
-async function run(page: Page) {
+async function run(page: Page, timeout = 30000) {
   const response = page.waitForResponse(
     (r) => r.url().endsWith("/runs") && r.request().method() === "POST",
   );
@@ -132,9 +168,26 @@ async function run(page: Page) {
       async () =>
         (await (await page.request.get(`/api/runs/${execution.id}`)).json())
           .status,
-      { timeout: 30000 },
+      { timeout },
     )
     .toBe("success");
+}
+
+/** Fit the graph in the canvas and wait until the viewport stops moving. */
+async function fitted(page: Page) {
+  await page.getByRole("button", { name: "Fit view", exact: true }).click();
+  const viewport = page.locator(".react-flow__viewport");
+  let previous = "";
+  await expect
+    .poll(async () => {
+      const current = await viewport.evaluate(
+        (element) => getComputedStyle(element).transform,
+      );
+      const stable = current === previous;
+      previous = current;
+      return stable;
+    })
+    .toBe(true);
 }
 
 test("capture project creation, results, lineage and SQL", async ({ page }) => {
@@ -165,6 +218,7 @@ test("capture project creation, results, lineage and SQL", async ({ page }) => {
   });
   await expect(lineage.locator(".lineage-card.is-source")).toHaveCount(5);
   await capture(page, "lineage", lineage);
+  await captureForReadme(page, "readme-lineage", lineage);
   await page.keyboard.press("Escape");
   await page.getByRole("link", { name: "Code", exact: true }).click();
   await page.getByRole("treeitem", { name: "templates", exact: true }).click();
@@ -431,6 +485,12 @@ test("capture the docked code editor and its preview", async ({ page }) => {
   await capture(
     page,
     "code-preview",
+    page,
+    ".draft-preview-time { visibility: hidden !important; }",
+  );
+  await captureForReadme(
+    page,
+    "readme-code-preview",
     page,
     ".draft-preview-time { visibility: hidden !important; }",
   );
@@ -872,6 +932,7 @@ test("capture branch creation and a real parameter comparison", async ({
     git.locator(".comparison-values tr").filter({ hasText: "refunded" }),
   ).toBeInViewport({ ratio: 1 });
   await capture(page, "git-comparison", git);
+  await captureForReadme(page, "readme-git-comparison", git);
 });
 
 test("capture account roles, project access and personal preferences", async ({
@@ -1127,6 +1188,154 @@ test("capture SSO configuration and the enabled sign-in choice", async ({
       (await page.request.put("/api/sso", { data: { enabled: false } })).ok(),
     ).toBeTruthy();
   }
+});
+
+// The README shows the application at GitHub's content width: a smaller
+// viewport at double density keeps its text legible there.
+test.describe("README", () => {
+  test.use({ viewport: { width: 1280, height: 960 }, deviceScaleFactor: 2 });
+
+  test("capture the README workspace in both themes", async ({ page }) => {
+    await example(page);
+    await run(page);
+    await page.evaluate(() =>
+      localStorage.setItem(
+        "duckpad-panel-sizes",
+        JSON.stringify({ preview: 320 }),
+      ),
+    );
+    for (const theme of ["light", "dark"] as const) {
+      // Added after the suite's light theme, so this one applies on reload.
+      await page.addInitScript(
+        (value) => localStorage.setItem("duckpad-theme", value),
+        theme,
+      );
+      await page.emulateMedia({ colorScheme: theme });
+      await page.reload();
+      await node(page, "Paid orders").click();
+      await expect(page.locator(".preview-header .badge")).toHaveText("Valid");
+      // The canvas takes the inspector's room and fits the whole example.
+      await page
+        .getByRole("button", { name: "Toggle inspector", exact: true })
+        .click();
+      await expect(page.locator(".inspector")).toBeHidden();
+      await fitted(page);
+      await captureForReadme(
+        page,
+        theme === "light" ? "readme-workspace" : "readme-workspace-dark",
+      );
+    }
+  });
+
+  test("capture custom nodes using the code printed in the README", async ({
+    page,
+  }) => {
+    // The first Python run also prepares the project's environment.
+    test.setTimeout(240000);
+    await page.setViewportSize({ width: 1280, height: 860 });
+    const readme = readFileSync(resolve("../README.md"), "utf8");
+    const printed = (language: string) => {
+      const blocks = [
+        ...readme.matchAll(
+          new RegExp("```" + language + "\\n([\\s\\S]*?)```", "g"),
+        ),
+      ];
+      expect(blocks).toHaveLength(1);
+      return blocks[0][1];
+    };
+    const tree = await (
+      await page.request.post("/api/projects", {
+        data: { name: "Custom nodes" },
+      })
+    ).json();
+    expect(
+      (
+        await page.request.put(`/api/projects/${tree.project}/python`, {
+          data: { enabled: true, allow_builds: false },
+        })
+      ).ok(),
+    ).toBeTruthy();
+    const url = `/api/worktrees/${tree.id}`;
+    const snapshot = await (await page.request.get(url)).json();
+    const flow = JSON.parse(snapshot.files["flow.json"]);
+    flow.nodes = [
+      { id: "orders", params: {}, position: { x: 40, y: 120 } },
+      {
+        id: "split",
+        template: "split_orders.py",
+        language: "python",
+        params: {},
+        position: { x: 330, y: 120 },
+      },
+      {
+        id: "revenue",
+        template: "revenue_breakdown",
+        params: {},
+        position: { x: 620, y: 60 },
+      },
+    ];
+    flow.edges = [
+      {
+        id: "orders_split",
+        source: "orders",
+        sourceHandle: "result",
+        target: "split",
+        targetHandle: "orders",
+      },
+      {
+        id: "split_revenue",
+        source: "split",
+        sourceHandle: "accepted",
+        target: "revenue",
+        targetHandle: "orders",
+      },
+    ];
+    const saved = await page.request.put(url, {
+      data: {
+        revision: snapshot.revision,
+        files: {
+          ...snapshot.files,
+          "flow.json": JSON.stringify(flow),
+          "nodes/orders.sql": `-- @label Orders
+-- @output result
+SELECT i AS order_id,
+  ['Juniper Studio', 'Atlas Bikes', 'Cedar & Co', 'Harbor Foods'][1 + i % 4] AS customer_name,
+  ['North', 'South', 'East', 'West'][1 + (i // 4) % 4] AS region,
+  60 + (i * 37) % 440 AS amount
+FROM range(1, 121) t(i);
+`,
+          "templates/revenue_breakdown.sql": printed("sql"),
+          "templates/split_orders.py": printed("python"),
+        },
+      },
+    });
+    expect(saved.ok(), await saved.text()).toBeTruthy();
+    await page.evaluate(() =>
+      localStorage.setItem(
+        "duckpad-panel-sizes",
+        JSON.stringify({ preview: 300 }),
+      ),
+    );
+    await page.goto(`/worktrees/${tree.id}/flow`);
+    await expect(page.locator(".react-flow__node")).toHaveCount(3);
+    await run(page, 180000);
+    // Reloading leaves the environment preparation notice behind.
+    await page.reload();
+    await node(page, "Split orders").click();
+    await expect(page.locator(".preview-header .badge")).toHaveText("Valid");
+    // The form comes from the class attributes; the palette lists both nodes.
+    const inspector = page.locator(".inspector");
+    await expect(
+      inspector.getByRole("textbox", { name: /minimum/ }),
+    ).toHaveValue("300");
+    const palette = page.locator(".palette-list");
+    await palette.evaluate((list) => list.scrollTo(0, list.scrollHeight));
+    for (const name of ["Revenue breakdown", "Split orders"])
+      await expect(
+        palette.getByRole("button", { name, exact: true }),
+      ).toBeInViewport();
+    await captureForReadme(page, "readme-custom-nodes");
+  });
 });
 
 test("assistant settings and contextual chat", async ({ page }) => {
