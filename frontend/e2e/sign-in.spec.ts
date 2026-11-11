@@ -82,6 +82,15 @@ test("an expired setup link and a failed sign-in explain how to get back in", as
   await submitLogin(page);
 });
 
+test("the sign-in screen carries the Duckpad favicon", async ({ page }) => {
+  await page.goto("/");
+  const href = await page.locator('link[rel="icon"]').getAttribute("href");
+  // Any unknown path answers with the application page, so check the image.
+  const icon = await page.request.get(href!);
+  expect(icon.headers()["content-type"]).toContain("image/svg+xml");
+  expect(await icon.text()).toContain("<svg");
+});
+
 test("the drifting sign-in logo glides under the pointer instead of jumping", async ({
   page,
 }) => {
