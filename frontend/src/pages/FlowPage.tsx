@@ -314,6 +314,7 @@ export default function FlowPage() {
       worktree,
       removeNodes,
       toggleMute,
+      selection,
     });
   return (
     <div

@@ -5,13 +5,14 @@ import {
   type RefObject,
   type SetStateAction,
 } from "react";
-import { api, uploadSourceFile } from "./api";
+import { api, errorDetail, send, uploadSourceFile } from "./api";
 import type { CanvasHandle, FocusRequest } from "./canvasTypes";
 import {
   addFlowFilter,
   addFlowNode,
   dropFlowFiles,
   removeFlowNodes,
+  type RemovalMode,
 } from "./flowEdits";
 import {
   graphAt,
@@ -21,8 +22,9 @@ import {
   type PathPart,
 } from "./graph";
 import { findNodePosition } from "./graphLayout";
-import { useT } from "./i18n";
+import { countLabel, useT } from "./i18n";
 import { canMute } from "./nodeCode";
+import { planNodeReconnection } from "./nodeRemoval";
 import {
   copyNodes,
   pastableNodes,
@@ -63,6 +65,7 @@ export function useFlowEditing({
     saving,
     settle,
     save,
+    commit,
     undo,
     redo,
   } = useLoadedWorktree();
@@ -73,7 +76,9 @@ export function useFlowEditing({
   const additionPending = useRef(false);
   // Undos and redos in flight; editors stay inert so no edit races them.
   const [reverting, setReverting] = useState(0);
-  const busy = addingNode || reverting > 0;
+  const [removing, setRemoving] = useState(false);
+  const removalPending = useRef(false);
+  const busy = addingNode || reverting > 0 || removing;
   async function updateGraph(change: (graph: Graph) => void) {
     if (!canEdit) return;
     await save(snapshot, (value) => change(graphAt(value, path)));
@@ -182,19 +187,69 @@ export function useFlowEditing({
       setAddingNode(false);
     }
   }
-  async function removeNodes(ids: string[], edges: string[] = []) {
-    const { change } = await save(snapshot, (value) =>
-      removeFlowNodes(value, path, ids, edges),
-    );
-    if (selected && ids.includes(selected)) select(null);
-    if (change && ids.length)
-      notify(
-        ids.length === 1
-          ? t("nodeDeleted")
-          : t("nodesDeleted").replace("{count}", String(ids.length)),
-        false,
-        { label: t("undo"), run: () => revert("undo", change) },
-      );
+  async function removeNodes(
+    ids: string[],
+    edges: string[] = [],
+    mode: RemovalMode = "disconnect",
+  ) {
+    if (!canEdit || busy || removalPending.current) return;
+    removalPending.current = true;
+    setRemoving(true);
+    try {
+      let reconnected = 0;
+      const { change } =
+        mode === "reconnect"
+          ? await commit(async (base) => {
+              if (selection.length > 1)
+                throw new Error(t("reconnectSingleNode"));
+              const shown = planNodeReconnection(snapshot, ids, parent);
+              const plan = planNodeReconnection(base, ids, parent);
+              if (plan.reason) throw new Error(t(plan.reason));
+              if (shown.reason || shown.connections !== plan.connections)
+                throw new Error(t("reconnectChanged"));
+              const value = structuredClone(base.bundle!);
+              canvas.current?.preserveViewport();
+              removeFlowNodes(value, path, ids, edges, plan.edges);
+              reconnected = plan.edges.length;
+              return api<Snapshot>(
+                `/worktrees/${worktree}`,
+                send(
+                  {
+                    revision: base.revision,
+                    bundle: value,
+                    strict_revision: true,
+                  },
+                  "PUT",
+                ),
+              );
+            })
+          : await save(snapshot, (value) =>
+              removeFlowNodes(value, path, ids, edges),
+            );
+      if (selected && ids.includes(selected)) select(null);
+      if (change && ids.length)
+        notify(
+          mode === "reconnect"
+            ? countLabel(
+                t,
+                reconnected,
+                "nodeReconnectedOne",
+                "nodeReconnectedMany",
+              )
+            : ids.length === 1
+              ? t("nodeDeleted")
+              : t("nodesDeleted").replace("{count}", String(ids.length)),
+          false,
+          { label: t("undo"), run: () => revert("undo", change) },
+        );
+    } catch (error) {
+      if (errorDetail(error).code === "stale_revision")
+        throw new Error(t("reconnectChanged"), { cause: error });
+      throw error;
+    } finally {
+      removalPending.current = false;
+      setRemoving(false);
+    }
   }
   /** Undo or redo a change, from a shortcut or a toast, and report it. */
   function revert(direction: "undo" | "redo", change?: string) {

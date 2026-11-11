@@ -1,4 +1,6 @@
 import { Loader2, Play } from "lucide-react";
+import { useState } from "react";
+import { ActionMenu } from "./ActionMenu";
 import { useT } from "./i18n";
 import type { NodeAction } from "./nodeActions";
 
@@ -18,6 +20,18 @@ export default function InspectorActions({
   onRun: () => void;
 }) {
   const t = useT();
+  const [menu, setMenu] = useState<{
+    x: number;
+    y: number;
+    trigger: HTMLButtonElement;
+  } | null>(null);
+  const removal = others.filter(
+    (action) => action.id === "remove" || action.id === "removeReconnect",
+  );
+  const openRemoval = (trigger: HTMLButtonElement) => {
+    const bounds = trigger.getBoundingClientRect();
+    setMenu({ x: bounds.left, y: bounds.bottom + 4, trigger });
+  };
   return (
     <div
       className="inspector-actions"
@@ -47,21 +61,46 @@ export default function InspectorActions({
             <Play size={15} aria-hidden="true" />
           )}
         </button>
-        {others.map((action) => (
-          <button
-            key={action.id}
-            className={
-              action.danger ? "danger" : action.active ? "active" : undefined
-            }
-            aria-label={action.label}
-            data-tooltip={action.label}
-            disabled={action.disabled}
-            onClick={action.run}
-          >
-            <action.icon size={15} aria-hidden="true" />
-          </button>
-        ))}
+        {others
+          .filter((action) => action.id !== "removeReconnect")
+          .map((action) => (
+            <button
+              key={action.id}
+              className={
+                action.danger ? "danger" : action.active ? "active" : undefined
+              }
+              aria-label={action.label}
+              data-tooltip={action.label}
+              disabled={action.disabled}
+              aria-haspopup={action.id === "remove" ? "menu" : undefined}
+              aria-expanded={action.id === "remove" ? !!menu : undefined}
+              onClick={(event) =>
+                action.id === "remove"
+                  ? openRemoval(event.currentTarget)
+                  : action.run()
+              }
+              onKeyDown={(event) => {
+                if (action.id === "remove" && event.key === "ArrowDown") {
+                  event.preventDefault();
+                  openRemoval(event.currentTarget);
+                }
+              }}
+            >
+              <action.icon size={15} aria-hidden="true" />
+            </button>
+          ))}
       </div>
+      {menu && (
+        <ActionMenu
+          label={t("deleteNode")}
+          items={removal}
+          position={menu}
+          onClose={() => {
+            setMenu(null);
+            menu.trigger.focus();
+          }}
+        />
+      )}
     </div>
   );
 }

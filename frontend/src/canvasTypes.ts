@@ -14,6 +14,7 @@ import type {
 } from "./types";
 
 export interface CanvasHandle {
+  preserveViewport: () => void;
   newNodePosition: (nodes: FlowNode[]) => FlowNode["position"];
   previewDrag: (kind: NodeKind, id: string, transfer: DataTransfer) => void;
 }

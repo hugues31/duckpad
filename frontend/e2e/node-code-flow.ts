@@ -183,6 +183,9 @@ export async function verifyNodeCode(page: Page) {
   await inspector
     .getByRole("button", { name: "Remove node", exact: true })
     .click();
+  await page
+    .getByRole("menuitem", { name: "Remove node", exact: true })
+    .click();
   await expect
     .poll(async () => (await read()).files[`nodes/${duplicate.id}.sql`])
     .toBeUndefined();

@@ -114,7 +114,7 @@ def router(ctx: Context) -> APIRouter:
     )
     def save_project(worktree: str, data: schemas.Save) -> Record:
         proposal = data.files if data.files is not None else bundle_to_files(data.bundle)
-        return projects.write(worktree, data.revision, proposal)
+        return projects.write(worktree, data.revision, proposal, strict_revision=data.strict_revision)
 
     @api.post(
         "/api/worktrees/{worktree}/revert",

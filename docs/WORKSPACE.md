@@ -33,7 +33,16 @@ SQL or Python node to edit its code; a linked node opens its shared template.
 **Edit code** at the top of the inspector does the same. The icons under it run
 the node with its ancestors, mute it, duplicate it, link it to a template or
 remove it; point at an icon for its name, or right-click the node for the same
-actions in a menu. Removing a node can be undone with **Undo** in the
+actions in a menu. The removal button opens a menu with **Remove node** and
+**Remove node and reconnect**. For `A -> B -> C`, removing B normally disconnects
+A and C; reconnecting makes A feed C directly. Delete and Backspace keep ordinary
+removal. Reconnection is available for a single transformation in the main flow
+with one input, one output and no declared external writes, one connected source
+and at least one consumer. All consumers receive the upstream output; nodes stay
+at their current positions. Unavailable reconnection shows its reason in the menu.
+Check downstream column expectations after bypassing a step: links can be valid
+while the data no longer fits its consumers. Removing a node and reconnecting its
+links can be undone together with **Undo** in the
 notification or Ctrl/Cmd+Z. Double-click a [component](COMPONENTS.md) to open
 its contents; use the breadcrumbs to return. **Fit view** brings the graph into
 view. **Auto-arrange nodes** places dependencies in columns, orders each column to

@@ -103,7 +103,10 @@ export async function verifyNodeCreation(page: Page) {
   ).toHaveCount(0);
   await page.keyboard.press("End");
   await expect(
-    menu.getByRole("menuitem", { name: "Remove node", exact: true }),
+    menu.getByRole("menuitem", {
+      name: "Remove node and reconnect",
+      exact: true,
+    }),
   ).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(menu).toHaveCount(0);
@@ -119,6 +122,9 @@ export async function verifyNodeCreation(page: Page) {
   );
   await inspector
     .getByRole("button", { name: "Remove node", exact: true })
+    .click();
+  await page
+    .getByRole("menuitem", { name: "Remove node", exact: true })
     .click();
   await expect(page.locator(".react-flow__node")).toHaveCount(2);
 

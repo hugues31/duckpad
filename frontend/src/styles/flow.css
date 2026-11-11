@@ -920,6 +920,17 @@ fieldset.palette-bottom {
   flex-shrink: 0;
   color: var(--muted);
 }
+.node-action-menu .action-description {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: normal;
+}
+.node-action-menu button[aria-disabled="true"] {
+  color: var(--muted);
+  cursor: default;
+}
 .node-action-menu .danger svg {
   color: inherit;
 }

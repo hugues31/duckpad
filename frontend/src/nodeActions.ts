@@ -10,10 +10,12 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { ActionItem } from "./ActionMenu";
+import type { RemovalMode } from "./flowEdits";
 import type { Translate } from "./i18n";
 import { countLabel, isBuiltinTemplate } from "./i18n";
 import { nodeCopies, type CopiedNodes } from "./nodeClipboard";
 import { canMute, detachNode, nodeGraph, templateUsage } from "./nodeCode";
+import { planNodeReconnection } from "./nodeRemoval";
 import type { useShell } from "./shell";
 import type { Bundle, FlowNode, Snapshot } from "./types";
 import type { useLoadedWorktree } from "./worktree";
@@ -41,6 +43,7 @@ export function nodeActions(
     worktree,
     removeNodes,
     toggleMute,
+    selection,
   }: {
     t: Translate;
     canEdit: boolean;
@@ -54,8 +57,13 @@ export function nodeActions(
     snapshot: Snapshot;
     openModal: ReturnType<typeof useShell>["openModal"];
     worktree: string;
-    removeNodes: (ids: string[]) => Promise<void>;
+    removeNodes: (
+      ids: string[],
+      edges?: string[],
+      mode?: RemovalMode,
+    ) => Promise<void>;
     toggleMute: (ids: string[]) => Promise<void>;
+    selection: string[];
   },
 ): NodeAction[] {
   const item = (
@@ -146,6 +154,19 @@ export function nodeActions(
     ...item("remove", Trash2, t("deleteNode"), () =>
       safe(() => removeNodes([target.id])),
     ),
+    danger: true,
+  });
+  const reconnection = planNodeReconnection(
+    snapshot,
+    selection.length > 1 ? selection : [target.id],
+    parent,
+  );
+  actions.push({
+    ...item("removeReconnect", Trash2, t("deleteNodeReconnect"), () =>
+      safe(() => removeNodes([target.id], [], "reconnect")),
+    ),
+    description: t(reconnection.reason || "reconnectHint"),
+    disabled: !canEdit || busy || !!reconnection.reason,
     danger: true,
   });
   return actions;
