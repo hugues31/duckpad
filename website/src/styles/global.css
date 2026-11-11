@@ -140,6 +140,27 @@ h2 {
   color: var(--blue);
   margin-left: -9px;
 }
+/* The logo tile wears the button's gradient and glides the same way. */
+.mark {
+  border-radius: 25%;
+  background-color: #1559df;
+  background-image: var(--blue-gradient);
+  background-size: 180% 180%;
+  background-position:
+    0% 0%,
+    100% 100%;
+  transition: background-position 600ms ease;
+  /* The duck is white: its tile must survive printing and forced colors. */
+  print-color-adjust: exact;
+  forced-color-adjust: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .brand:is(:hover, :focus-visible) .mark {
+    background-position:
+      100% 100%,
+      0% 0%;
+  }
+}
 .desktop-nav,
 .header-actions {
   display: flex;

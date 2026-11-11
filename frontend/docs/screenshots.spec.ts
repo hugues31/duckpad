@@ -96,7 +96,11 @@ async function capture(
     animations: "disabled",
     caret: "hide",
     // Hide transient notifications and variable Git metadata, not product state.
+    // Reduced motion gives every element a brief transition: without this
+    // reset, hiding reaches one nested level per frame and the capture can
+    // still show the text of the resource monitor.
     style:
+      "*, *::before, *::after { transition: none !important; }" +
       ".toast, .resource-monitor, .git-revisions small { visibility: hidden !important; }" +
       extraStyle,
   });
@@ -171,6 +175,11 @@ async function run(page: Page, timeout = 30000) {
       { timeout },
     )
     .toBe("success");
+  // The page learns the outcome from its own poll: no capture may show the
+  // run still in progress.
+  await expect(
+    page.getByRole("button", { name: "Run all", exact: true }),
+  ).toBeVisible();
 }
 
 /** Fit the graph in the canvas and wait until the viewport stops moving. */

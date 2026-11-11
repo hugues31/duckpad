@@ -22,6 +22,11 @@
   --accent-gradient:
     radial-gradient(ellipse at 18% 20%, var(--accent-glow), transparent 55%),
     radial-gradient(ellipse at 85% 80%, var(--accent-depth), transparent 60%);
+  /* The logo keeps the light theme's accent blues in both themes. */
+  --brand: #1559df;
+  --brand-gradient:
+    radial-gradient(ellipse at 18% 20%, #2b6be8, transparent 55%),
+    radial-gradient(ellipse at 85% 80%, #1241aa, transparent 60%);
   --edge: #92929e;
   --glass: #ffffff8c;
   --glass-border: #71717a40;
