@@ -598,8 +598,10 @@ fieldset.palette-bottom {
   color: var(--accent);
   position: relative;
 }
-.source-node .node-shape {
+.square-node .node-shape {
   border-radius: 8px;
+}
+.pipeline-node.source .node-shape {
   border-color: var(--accent);
   color: light-dark(#1559df, #f2f6ff);
   background: light-dark(#c0d6ff, #245bb8);

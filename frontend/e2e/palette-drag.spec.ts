@@ -161,5 +161,5 @@ test("a first palette drop keeps the viewport, and a canceled drag adds nothing"
     x: Math.round(area.x + area.width / 3),
     y: Math.round(area.y + area.height / 3),
   });
-  await expect(node.locator(".pipeline-node")).toHaveClass(/source-node/);
+  await expect(node.locator(".pipeline-node")).toHaveClass(/square-node/);
 });
