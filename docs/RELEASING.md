@@ -11,6 +11,11 @@ a `SHA256SUMS` file, and Conventional Commit release notes. Regular branch pushe
 and pull requests never publish packages. No version bump or Git tag is created
 by the workflow.
 
+The PyPI project page shows `README.md`. PyPI does not resolve relative links,
+so the build points the README's repository links and images at the files of
+the release tag; the smoke test rejects a description that keeps a relative one.
+Keep links in `README.md` relative, as GitHub expects.
+
 ## One-time configuration
 
 1. In the GitHub repository settings, create an environment named `pypi`. Allow

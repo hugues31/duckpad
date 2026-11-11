@@ -18,6 +18,21 @@ def smoke(python):
         # The assistant's guides ship inside the wheel; the checkout's docs/ is out of reach here.
         guides = "from duckpad.assistant.knowledge import guide_text; assert '-- @param' in guide_text('sql')"
         subprocess.run([python, "-I", "-c", guides], cwd=folder, check=True, timeout=60)
+        # PyPI shows the description outside the repository: its links and images must be absolute.
+        description = "from importlib.metadata import metadata; print(metadata('duckpad')['Description'])"
+        published = subprocess.run(
+            [python, "-I", "-c", description],
+            cwd=folder,
+            check=True,
+            timeout=60,
+            capture_output=True,
+            text=True,
+        ).stdout
+        targets = re.findall(
+            r'(?:\]\(|\b(?:src|srcset|href)=")([^)"\s]+)',
+            re.sub(r"```.*?```", "", published, flags=re.DOTALL),
+        )
+        assert targets and all(re.match(r"https://|#", target) for target in targets), targets
         with socket.socket() as reservation:
             reservation.bind(("127.0.0.1", 0))
             port = reservation.getsockname()[1]
