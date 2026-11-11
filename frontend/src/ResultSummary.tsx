@@ -17,6 +17,7 @@ export default function ResultSummary({
   bundle,
   fullNode,
   ports,
+  hasInputs = false,
   statuses,
   onOpen,
 }: {
@@ -24,6 +25,7 @@ export default function ResultSummary({
   fullNode: string;
   /** The output ports the node declares. */
   ports: string[];
+  hasInputs?: boolean;
   statuses: Statuses;
   onOpen: (tab: ResultsTab) => void;
 }) {
@@ -153,7 +155,7 @@ export default function ResultSummary({
       )}
       <button
         className="summary-link results-link"
-        onClick={() => onOpen(ports.length ? "data" : "log")}
+        onClick={() => onOpen(ports.length || hasInputs ? "data" : "log")}
       >
         {t("results")}
         <ChevronRight size={13} aria-hidden="true" />

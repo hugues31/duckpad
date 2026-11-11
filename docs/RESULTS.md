@@ -14,9 +14,17 @@ node's outputs and, under **Inputs, to compare**, the datasets connected to its
 inputs: showing an input keeps the current sample when its columns allow it, to
 check an operation before and after. A sample filter is kept only when the other
 dataset has every column of the current one; otherwise that dataset's own sample
-is restored, as when opening failing rows from an input. An export node has no
-rows: its panel opens on **Log**, with **Tests**. A component instance shows its
-exposed outputs.
+is restored, as when opening failing rows from an input. An export node shows its
+connected input in **Data**, **Columns** and **Chart**. The header names the
+upstream dataset; with several connected inputs, the **Inputs** selector lets you
+choose. These are the retained input rows, not a readback of the destination file
+or database; inspecting them does not execute the export, and before they exist
+**Run ancestors** computes them without writing the destination. Charts belong to
+the upstream dataset, so a chart added here is also available at its source node.
+**Log**, **Tests** and downloads still describe the export itself: a failed
+export shows its error above the input rows, and the header keeps the download
+button in every tab. Without a connected input, only **Log** and **Tests** are
+available. A component instance shows its exposed outputs.
 
 The inspector's result summary links to Data, Log and Tests, showing validity,
 warnings and the latest failure for the selected environment.
@@ -159,8 +167,10 @@ the statements, bound values and variables of that run, with secrets masked.
 
 Use an **Export CSV** or **Export XLSX** node to write the full input table,
 including the format options configured on that node. After a successful run,
-select the export and choose **Log → Download exported data**. For a first
-export, follow [Use your own data](YOUR_DATA.md#3-export-and-download).
+select the export and use the download button of the results header, or choose
+**Log → Download exported data**, which also names the file, its time and its
+execution. For a first export, follow
+[Use your own data](YOUR_DATA.md#3-export-and-download).
 
 Downloads apply to a single `COPY ... TO` statement using a `destination`
 parameter and a local CSV/XLSX target. They use a saved copy of the exported

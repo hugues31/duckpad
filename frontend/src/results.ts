@@ -38,6 +38,8 @@ export interface RunState {
   starting?: boolean;
   onRun: () => void;
   runLabel?: string;
+  /** What the run brings, when it is not this node's own result. */
+  hint?: string;
   /** Why the node has no result, such as the inputs a blocked collector waits for. */
   reason?: string;
   /** The panel already shows the node's last run error above the tab. */
