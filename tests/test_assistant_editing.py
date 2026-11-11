@@ -4,11 +4,13 @@ import asyncio
 import json
 import threading
 import time
+from itertools import pairwise
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 from helpers import asgi_client, assert_responsive
+from pydantic import ValidationError
 from pydantic_ai.messages import ToolReturnPart, UserPromptPart
 from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 from pydantic_ai.models.test import TestModel
@@ -16,7 +18,7 @@ from test_assistant import configure, conversation, dependencies, project, turn
 from test_assistant import instance as instance
 from test_project_save_atomicity import observe_after_quiet_period
 
-from duckpad.assistant.arguments import AddNode, RemoveNode, UpdateNode
+from duckpad.assistant.arguments import AddNode, ConnectEdge, DisconnectEdge, RemoveNode, UpdateNode
 from duckpad.assistant.editing import WRITE_TOOLS, edit_flow
 from duckpad.assistant.runs import RUN_TOOLS
 from duckpad.bundle import bundle_to_files
@@ -28,7 +30,8 @@ SQL = "-- @output result\nSELECT 1 AS value;\n"
 BAR = {"mark": "bar", "encoding": {"x": {"field": "value", "type": "quantitative"}}}
 CONSUMER = "-- @input input\n-- @output result\nSELECT * FROM {{ input }};"
 LINE = {"mark": "line", "encoding": {"y": {"field": "value", "type": "quantitative"}}}
-EXISTING_NODE_IDS = ["keep.rows", "kept rows / 日本語", "n" * 101]
+# IDs a project accepts for linked nodes and edges, beyond what the assistant may create.
+EXISTING_IDS = ["keep.rows", "kept rows / 日本語", "n" * 101]
 
 
 def seed(app, client):
@@ -413,13 +416,7 @@ def test_rejected_variable_arguments_save_nothing(instance, change, field):
 @pytest.mark.parametrize(
     ("args", "field"),
     [
-        *[
-            (flow({"operation": "add", "id": node_id, "template": "filter"}), "id")
-            for node_id in EXISTING_NODE_IDS
-        ],
-        (flow({"operation": "add", "id": ""}), "id"),
-        (flow({"operation": "update", "id": "", "label": "Renamed"}), "id"),
-        (flow({"operation": "remove", "id": ""}), "id"),
+        (flow({"operation": "add", "id": "keep.rows", "template": "filter"}), "id"),
         (flow({"operation": "add", "id": "added", "sql": SQL, "template": "filter"}), "Choose one of"),
         (flow({"operation": "add", "id": "added", "remove_parameters": ["x"]}), "remove_parameters"),
         (flow({"operation": "update", "id": "first", "sql": SQL}), "sql"),
@@ -634,6 +631,29 @@ def test_null_documentation_arguments_count_as_omitted(instance):
     )
 
 
+@pytest.mark.parametrize("identity", EXISTING_IDS)
+def test_only_created_nodes_and_edges_restrict_their_ids(identity):
+    UpdateNode(operation="update", id=identity, label="Renamed")
+    RemoveNode(operation="remove", id=identity)
+    ConnectEdge(operation="connect", id="link", source=identity, target=identity)
+    DisconnectEdge(operation="disconnect", id=identity)
+    with pytest.raises(ValidationError, match="id"):
+        AddNode(operation="add", id=identity)
+    with pytest.raises(ValidationError, match="at most 100"):
+        ConnectEdge(operation="connect", id="e" * 101, source="first", target="second")
+
+
+def test_empty_ids_are_refused():
+    for model, fields in (
+        (AddNode, {"operation": "add"}),
+        (UpdateNode, {"operation": "update", "label": "Renamed"}),
+        (RemoveNode, {"operation": "remove"}),
+        (DisconnectEdge, {"operation": "disconnect"}),
+    ):
+        with pytest.raises(ValidationError, match="id"):
+            model(id="", **fields)
+
+
 def test_edges_connect_existing_nodes_whatever_their_id(instance):
     app, client = instance
     worktree, context = seed(app, client)
@@ -650,8 +670,8 @@ def test_edges_connect_existing_nodes_whatever_their_id(instance):
     assert [(e["source"], e["target"]) for e in edges] == [("first", "keep.rows")]
 
 
-def seed_existing_node(app, client, node_id, component):
-    """A linked node between a source and another instance of the same template."""
+def seed_existing_nodes(app, client, component):
+    """Linked nodes with project-given IDs, chained from a source to another instance of their template."""
     worktree, context = seed(app, client)
 
     def add_graph(bundle):
@@ -669,49 +689,48 @@ def seed_existing_node(app, client, node_id, component):
                 {"id": name, "component": component} for name in ("summary", "other_summary")
             )
         graph["nodes"].extend(
-            [
-                {"id": node_id, "template": "filter", "params": {"minimum": 1, "maximum": 10}},
-                {"id": "last", "template": "filter", "params": {}},
-            ]
+            {"id": name, "template": "filter", "params": {"minimum": 1, "maximum": 10}}
+            for name in EXISTING_IDS
         )
+        graph["nodes"].append({"id": "last", "template": "filter", "params": {}})
         graph["edges"] = [
             {
-                "id": name,
+                "id": f"link_{index}",
                 "source": source,
                 "target": target,
                 "sourceHandle": "result",
                 "targetHandle": "input",
             }
-            for name, source, target in (("incoming", "first", node_id), ("outgoing", node_id, "last"))
+            for index, (source, target) in enumerate(pairwise(["first", *EXISTING_IDS, "last"]))
         ]
 
     change(app, worktree, add_graph)
     return worktree, context
 
 
-@pytest.mark.parametrize("node_id", EXISTING_NODE_IDS)
 @pytest.mark.parametrize("component", ["", "report"])
 @pytest.mark.parametrize("operation", ["update", "remove"])
-def test_existing_node_edits_keep_shared_templates_and_support_undo(instance, node_id, component, operation):
+def test_existing_node_edits_keep_shared_templates_and_support_undo(instance, component, operation):
     app, client = instance
-    worktree, context = seed_existing_node(app, client, node_id, component)
+    worktree, context = seed_existing_nodes(app, client, component)
     projects = app.state.services.projects
     before = projects.snapshot(worktree["id"])
     assert validate(before["bundle"]) == []
-    edit = {"operation": operation, "id": node_id}
+    edits: list[dict] = [{"operation": operation, "id": node_id} for node_id in EXISTING_IDS]
     edges = []
     if operation == "update":
-        edit.update(
-            label="Filtered rows",
-            position={"x": 20, "y": 40},
-            params={"minimum": 2},
-            remove_parameters=["maximum"],
-        )
+        for edit in edits:
+            edit.update(
+                label="Filtered rows",
+                position={"x": 20, "y": 40},
+                params={"minimum": 2},
+                remove_parameters=["maximum"],
+            )
     else:
-        # Removing the middle node must clear both incident edges before reconnecting its consumer.
+        # Removing the chain must clear its edges before its consumer is reconnected.
         edges = [{"operation": "connect", "id": "bypass", "source": "first", "target": "last"}]
     identity, result = write_turn(
-        app, client, context, [("edit_flow", {"component": component, "nodes": [edit], "edges": edges})]
+        app, client, context, [("edit_flow", {"component": component, "nodes": edits, "edges": edges})]
     )
     card = result["tools"][0]
     assert card["status"] == "complete", result
@@ -727,17 +746,21 @@ def test_existing_node_edits_keep_shared_templates_and_support_undo(instance, no
     graph = bundle["components"][component] if component else bundle["flow"]
     if component:
         assert bundle["flow"] == before["bundle"]["flow"]
+    edited = [n for n in graph["nodes"] if n["id"] in EXISTING_IDS]
     if operation == "update":
-        assert next(n for n in graph["nodes"] if n["id"] == node_id) == {
-            "id": node_id,
-            "template": "filter",
-            "label": "Filtered rows",
-            "position": {"x": 20, "y": 40},
-            "params": {"minimum": 2},
-        }
-        assert [e["id"] for e in graph["edges"]] == ["incoming", "outgoing"]
+        assert edited == [
+            {
+                "id": node_id,
+                "template": "filter",
+                "label": "Filtered rows",
+                "position": {"x": 20, "y": 40},
+                "params": {"minimum": 2},
+            }
+            for node_id in EXISTING_IDS
+        ]
+        assert [e["id"] for e in graph["edges"]] == [f"link_{index}" for index in range(4)]
     else:
-        assert node_id not in {n["id"] for n in graph["nodes"]}
+        assert edited == []
         assert [(e["id"], e["source"], e["target"]) for e in graph["edges"]] == [("bypass", "first", "last")]
     assert next(n for n in graph["nodes"] if n["id"] == "last")["template"] == "filter"
     undone = undo(client, identity, result, context)
@@ -746,9 +769,12 @@ def test_existing_node_edits_keep_shared_templates_and_support_undo(instance, no
 
 
 @pytest.mark.parametrize("component", ["", "report"])
-@pytest.mark.parametrize(
-    ("edit", "message"),
-    [
+def test_rejected_existing_node_edits_save_nothing(instance, component):
+    app, client = instance
+    worktree, context = seed_existing_nodes(app, client, component)
+    projects = app.state.services.projects
+    before = projects.snapshot(worktree["id"])
+    for edit, message in (
         ({"operation": "update", "id": "missing.node", "label": "Missing"}, "Node not found"),
         ({"operation": "remove", "id": "missing.node"}, "Node not found"),
         (
@@ -756,20 +782,16 @@ def test_existing_node_edits_keep_shared_templates_and_support_undo(instance, no
             "diagnostics",
         ),
         ({"operation": "remove", "id": "keep.rows"}, "missing_input"),
-    ],
-)
-def test_rejected_existing_node_edits_save_nothing(instance, component, edit, message):
-    app, client = instance
-    worktree, context = seed_existing_node(app, client, "keep.rows", component)
-    projects = app.state.services.projects
-    before = projects.snapshot(worktree["id"])
-    _, result = write_turn(app, client, context, [("edit_flow", {"component": component, "nodes": [edit]})])
-    card = result["tools"][0]
-    assert card["status"] == "error", result
-    assert message in card["summary"]
-    assert "action" not in card
-    after = projects.snapshot(worktree["id"])
-    assert (after["commit"], after["files"]) == (before["commit"], before["files"])
+    ):
+        _, result = write_turn(
+            app, client, context, [("edit_flow", {"component": component, "nodes": [edit]})]
+        )
+        card = result["tools"][0]
+        assert card["status"] == "error", result
+        assert message in card["summary"]
+        assert "action" not in card
+        after = projects.snapshot(worktree["id"])
+        assert (after["commit"], after["files"]) == (before["commit"], before["files"])
 
 
 CHART = {"operation", "node", "output", "name"}

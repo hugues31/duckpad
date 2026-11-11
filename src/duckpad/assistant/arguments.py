@@ -116,6 +116,7 @@ class Position(Arguments):
     y: FiniteFloat
 
 
+# Existing nodes and edges keep whatever ID their project gave them: only created ones are limited.
 NewNodeId = Annotated[str, Field(pattern=r"^[A-Za-z0-9_-]+$", max_length=100)]
 
 
@@ -173,9 +174,8 @@ class ConnectEdge(Arguments):
 
     operation: Literal["connect"]
     id: str = Field(min_length=1, max_length=100)
-    # Existing nodes keep whatever ID their project gave them; NewNodeId only limits IDs of new nodes.
-    source: str = Field(min_length=1)
-    target: str = Field(min_length=1)
+    source: Identity
+    target: Identity
     source_port: str = "result"
     target_port: str = "input"
 
@@ -184,7 +184,7 @@ class DisconnectEdge(Arguments):
     """Remove a connection."""
 
     operation: Literal["disconnect"]
-    id: str = Field(min_length=1, max_length=100)
+    id: Identity
 
 
 class ProjectDocumentation(Arguments):
