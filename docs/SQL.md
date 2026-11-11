@@ -20,7 +20,8 @@ or an input to insert its name at the cursor.
 
 ## Completion, hovers and problems
 
-The editor suggests what fits where you type, or on **Ctrl+Space**:
+The editor suggests what fits where you type, or on **Ctrl+Space**. Press
+**Tab** to insert a suggestion: in SQL, **Enter** always starts a new line.
 
 - after `-- @`, the directives; after `-- @param name:`, the parameter types,
   with the declared connection parameters or inputs that a type needs; in a

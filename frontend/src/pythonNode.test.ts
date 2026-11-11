@@ -38,6 +38,22 @@ describe("outlinePython", () => {
     });
   });
 
+  it("ignores docstrings and commas inside annotations", () => {
+    const outline = outlinePython(`import duckpad as dp
+class A(dp.Node):
+    """Split orders.
+
+    Inputs: orders
+    """
+    limit: int = 3
+
+    def run(self, orders: dp.Relation, extra: dict[str, int]) -> None:
+        pass
+`);
+    expect(outline.parameters.map((p) => p.name)).toEqual(["limit"]);
+    expect(outline.inputs).toEqual(["orders", "extra"]);
+  });
+
   it("reads single and absent outputs", () => {
     const node = (returns: string) =>
       outlinePython(

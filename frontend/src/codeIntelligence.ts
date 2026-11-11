@@ -167,6 +167,10 @@ const PARAM_KEYWORDS: Record<string, TranslationKey> = {
 };
 
 /** Inline code, with backticks inside the text kept as they are. */
+/** An entry of a lookup table, never an inherited key such as `constructor`. */
+const own = <T>(table: Record<string, T>, key: string): T | undefined =>
+  Object.hasOwn(table, key) ? table[key] : undefined;
+
 const code = (text: string) =>
   text.includes("`") ? "`` " + text + " ``" : "`" + text + "`";
 const markdown = (value: string): Markdown => ({ value });
@@ -448,7 +452,7 @@ function declarationHover(d: Declaration, context: Context): Markdown {
       }`;
     else if (value && value.value !== undefined)
       text += `\n\n${t("codeNodeValue")} ${code(json(value.value))}`;
-    const doc = TYPE_DOCS[baseOf(d.type!)];
+    const doc = own(TYPE_DOCS, baseOf(d.type!));
     if (doc) text += `\n\n${t(doc)}`;
   } else if (d.kind === "input")
     text += inputSummary(
@@ -462,8 +466,7 @@ function declarationHover(d: Declaration, context: Context): Markdown {
   return markdown(text);
 }
 
-const baseOf = (type: string) =>
-  type.trim().split(/[<(]/)[0].trim() as ParameterType;
+const baseOf = (type: string) => type.trim().split(/[<(]/)[0].trim();
 
 function signatureLabel(name: string, s: SqlFunction["signatures"][number]) {
   const parameters = s.parameters.map((p) =>
@@ -780,19 +783,24 @@ async function sqlCompletions(
           });
       suggestions.push(...columnItems(context, read, range, quoteIdentifier));
       const calling = after.trimStart().startsWith("(");
+      // Functions and keywords match the start of the word only: among a
+      // thousand names, loose matches would turn most words into a function.
+      const typed = cursor.prefix.toLowerCase();
       for (const item of sqlCatalogItems(t))
-        suggestions.push(
-          calling && item.kind !== Kind.Keyword
-            ? {
-                ...item,
-                insertText: item.label as string,
-                insertTextRules: undefined,
-                command: undefined,
-                range,
-              }
-            : { ...item, range },
-        );
-      return { suggestions };
+        if ((item.label as string).toLowerCase().startsWith(typed))
+          suggestions.push(
+            calling && item.kind !== Kind.Keyword
+              ? {
+                  ...item,
+                  insertText: item.label as string,
+                  insertTextRules: undefined,
+                  command: undefined,
+                  range,
+                }
+              : { ...item, range },
+          );
+      // Ask again as the word grows, so that the filter above applies.
+      return { suggestions, incomplete: true };
     }
   }
 }
@@ -823,7 +831,7 @@ async function sqlHover(
   if (directive) {
     const keyEnd = directive.keyColumn + directive.key.length;
     if (column >= directive.keyColumn - 1 && column <= keyEnd) {
-      const doc = DIRECTIVE_DOCS[directive.key as DirectiveName];
+      const doc = own(DIRECTIVE_DOCS, directive.key);
       return doc
         ? {
             range: lineRange(position, directive.keyColumn - 1, keyEnd),
@@ -836,7 +844,7 @@ async function sqlHover(
     const declaration = declared(word.word);
     if (declaration?.line === position.lineNumber)
       return { contents: [declarationHover(declaration, context)] };
-    const type = TYPE_DOCS[word.word as ParameterType];
+    const type = own(TYPE_DOCS, word.word);
     if (directive.key === "param" && type)
       return {
         range: lineRange(position, word.startColumn, word.endColumn),
@@ -1063,6 +1071,12 @@ function sqlCodeActions(
   return list;
 }
 
+/** Remove the checks of a text that is no longer a template. */
+export function clearTemplateChecks(model: Model) {
+  problemsOf.delete(model);
+  monaco.editor.setModelMarkers(model, "duckpad", []);
+}
+
 /** Whether the editor checks found an error in the text. */
 export const hasEditorErrors = (model: Model) =>
   monaco.editor
@@ -1233,15 +1247,16 @@ async function pythonHover(
   const outline = outlinePython(model.getValue());
   const name = word.word;
   const hover = (text: string) => ({ range, contents: [markdown(text)] });
-  if (owner && owner === outline.sdk && SDK_DOCS[name])
-    return hover(`**${owner}.${name}**\n\n${t(SDK_DOCS[name])}`);
+  const sdk = own(SDK_DOCS, name);
+  if (owner && owner === outline.sdk && sdk)
+    return hover(`**${owner}.${name}**\n\n${t(sdk)}`);
   if (owner === "self") {
     const parameter = outline.parameters.find((p) => p.name === name);
     if (parameter)
       return hover(
         `**${t("codeParameter")}** ${code(name)}: ${code(parameter.annotation)}`,
       );
-    const member = SELF_MEMBERS[name];
+    const member = own(SELF_MEMBERS, name);
     if (member) return hover(`${code("self." + member[0])}\n\n${t(member[1])}`);
     return null;
   }

@@ -59,6 +59,9 @@ export const PARAMETER_TYPES = {
   value_cleaning: "input",
 } as const;
 export type ParameterType = keyof typeof PARAMETER_TYPES;
+/** Whether a name is a parameter type, not an inherited object key such as `constructor`. */
+export const isParameterType = (name: string): name is ParameterType =>
+  Object.hasOwn(PARAMETER_TYPES, name);
 export const LIST_ITEM_TYPES = ["text", "number", "boolean", "column"];
 const CONNECTION_BOUND = new Set([
   "file",
@@ -213,8 +216,20 @@ export interface TemplateProblem {
   endColumn: number;
 }
 
+/**
+ * Line breaks or spaces for Python but not for the browser, or the reverse
+ * (the byte order mark): with them, lines and names could differ from the
+ * server's reading, so the checks stay silent.
+ */
+const AMBIGUOUS = /[\v\f\x85\u2028\u2029\ufeff]/;
+const ambiguous = (text: string) =>
+  AMBIGUOUS.test(text) ||
+  // The file, group, record and unit separators.
+  [...text].some((char) => char >= "\u001c" && char <= "\u001f");
+
 /** The problems of a SQL template that the server reports on save. */
 export function lintTemplate(text: string): TemplateProblem[] {
+  if (ambiguous(text)) return [];
   const problems: TemplateProblem[] = [];
   const lines = text.split(/\r?\n/);
   const at = (
@@ -257,7 +272,7 @@ export function lintTemplate(text: string): TemplateProblem[] {
       if (!parameter)
         return at("invalidParameter", value, number, valueColumn, value.length);
       const type = parameter[2];
-      if (!(baseType(type) in PARAMETER_TYPES)) {
+      if (!isParameterType(baseType(type))) {
         const column = valueColumn + value.indexOf(type, parameter[1].length);
         at("unknownParameterType", type.trim(), number, column, type.length);
       }
@@ -392,10 +407,10 @@ export function sqlCursor(before: string): SqlCursor {
       const declared = /^\w+\s*:\s*([^=]*)$/.exec(value);
       if (declared) {
         const argument = /^(\w+)\s*[(<]\s*([^)>|]*)$/.exec(declared[1]);
-        if (argument && argument[1] in PARAMETER_TYPES)
+        if (argument && isParameterType(argument[1]))
           return {
             kind: "typeArgument",
-            type: argument[1] as ParameterType,
+            type: argument[1],
             prefix: argument[2],
           };
         if (/^\w*$/.test(declared[1]))

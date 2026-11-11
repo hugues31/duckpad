@@ -75,6 +75,9 @@ export const savedProblems = (
 ): Pick<Diagnostic, "message">[] =>
   snapshot.files[path] === text
     ? snapshot.diagnostics.filter(
-        (diagnostic) => diagnostic.file === path && !diagnostic.node,
+        // A Python contract error names its node, but is about the file.
+        (diagnostic) =>
+          diagnostic.file === path &&
+          (!diagnostic.node || diagnostic.code === "python_contract"),
       )
     : [];

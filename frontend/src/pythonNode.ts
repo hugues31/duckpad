@@ -51,9 +51,15 @@ export function outlinePython(text: string): PythonOutline {
   // A class nested in the node, such as Outputs, with the indentation of its body.
   let nested: { name: string; indent: number } | null = null;
   const declared: Record<string, string[]> = {};
+  // Docstrings and other multi-line strings hold text, not declarations.
+  let quoted = false;
   for (let index = node + 1; index < lines.length; index++) {
     const line = lines[index];
+    const quotes = (line.match(/"""|'''/g) || []).length;
+    const inString = quoted || quotes > 0;
+    if (quotes % 2) quoted = !quoted;
     if (!line.trim() || line.trim().startsWith("#")) continue;
+    if (inString) continue;
     const indent = indentation(line);
     if (indent === 0) break;
     if (body < 0) body = indent;
@@ -79,8 +85,7 @@ export function outlinePython(text: string): PythonOutline {
     lines.slice(node).join("\n"),
   );
   if (run) {
-    outline.inputs = run[1]
-      .split(",")
+    outline.inputs = topLevel(run[1])
       .map((argument) => /^\s*(\w+)/.exec(argument)?.[1] ?? "")
       .filter((name) => name && name !== "self");
     const returned = (run[2] ?? "").trim();
@@ -92,6 +97,19 @@ export function outlinePython(text: string): PythonOutline {
           : (declared[returned.split(".").pop()!] ?? []);
   }
   return outline;
+}
+
+/** Arguments separated by commas outside brackets: `a: dict[str, int], b`. */
+function topLevel(text: string) {
+  const parts = [""];
+  let depth = 0;
+  for (const char of text) {
+    if ("([{".includes(char)) depth++;
+    else if (")]}".includes(char)) depth--;
+    if (char === "," && depth === 0) parts.push("");
+    else parts[parts.length - 1] += char;
+  }
+  return parts;
 }
 
 /** What the text before the cursor, on its line, is about to complete. */

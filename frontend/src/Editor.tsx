@@ -9,6 +9,7 @@ import {
 } from "./codeEditing";
 import {
   checkTemplate,
+  clearTemplateChecks,
   EDITOR_THEMES,
   hasEditorErrors,
   prepareCodeCatalog,
@@ -69,6 +70,7 @@ export function CodeDiff({
   }, [onChange]);
   const editable = !!onChange;
   const theme = editorTheme();
+  const overflow = useOverflowHost();
 
   useEffect(() => {
     if (!container.current) return;
@@ -80,7 +82,7 @@ export function CodeDiff({
       readOnly: !editable,
       originalEditable: false,
       fixedOverflowWidgets: true,
-      overflowWidgetsDomNode: overflowWidgets(),
+      overflowWidgetsDomNode: overflow,
       automaticLayout: true,
       minimap: { enabled: false },
       renderSideBySide: true,
@@ -104,7 +106,7 @@ export function CodeDiff({
       modified.dispose();
       models.current = null;
     };
-  }, [language, theme, editable, originalLabel, modifiedLabel]);
+  }, [language, theme, editable, originalLabel, modifiedLabel, overflow]);
   useEffect(() => {
     if (!models.current) return;
     const { original, modified } = models.current;
@@ -115,17 +117,21 @@ export function CodeDiff({
   return <div ref={container} style={{ height: 300, width: "100%" }} />;
 }
 /**
- * The suggestions, hovers and hints of every editor. They are fixed to the
- * viewport, which a panel's backdrop filter would replace by the panel itself.
+ * The container of an editor's suggestions, hovers and hints. They are fixed
+ * to the viewport, which a panel's backdrop filter would replace by the panel
+ * itself. Each editor removes its own: Monaco leaves part of it on disposal.
  */
-let overflowHost: HTMLElement | null = null;
-function overflowWidgets() {
-  if (!overflowHost) {
-    overflowHost = document.createElement("div");
-    overflowHost.className = "monaco-editor code-editor-overflow";
-    document.body.append(overflowHost);
-  }
-  return overflowHost;
+function useOverflowHost() {
+  const [host] = useState(() => {
+    const element = document.createElement("div");
+    element.className = "monaco-editor code-editor-overflow";
+    return element;
+  });
+  useEffect(() => {
+    document.body.append(host);
+    return () => host.remove();
+  }, [host]);
+  return host;
 }
 
 const editorTheme = () =>
@@ -168,6 +174,7 @@ export default function CodeEditor({
   problems?: SavedProblem[];
 }) {
   const t = useT();
+  const overflow = useOverflowHost();
   const editor = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const [model, setModel] = useState<monaco.editor.ITextModel | null>(null);
   useEffect(() => {
@@ -177,6 +184,7 @@ export default function CodeEditor({
   useEffect(() => {
     if (!model) return;
     if (template) checkTemplate(model, t);
+    else clearTemplateChecks(model);
     // Server problems explain what the editor checks cannot see.
     const saved = hasEditorErrors(model) ? [] : problems || [];
     monaco.editor.setModelMarkers(
@@ -239,12 +247,17 @@ export default function CodeEditor({
         minimap: { enabled: false },
         // Suggestions and hovers may overflow a narrow panel.
         fixedOverflowWidgets: true,
-        overflowWidgetsDomNode: overflowWidgets(),
+        overflowWidgetsDomNode: overflow,
+        // Suggestions come from Duckpad's providers only, and show by
+        // themselves in code. Enter always starts a new SQL line, since lines
+        // often end with an alias that a suggestion would replace: Tab accepts.
+        wordBasedSuggestions: "off",
         quickSuggestions: {
-          other: true,
+          other: language === "sql" || language === "python",
           comments: false,
           strings: language === "python",
         },
+        acceptSuggestionOnEnter: language === "sql" ? "off" : "on",
         fontSize: 13,
         lineHeight: 22,
         scrollBeyondLastLine: false,

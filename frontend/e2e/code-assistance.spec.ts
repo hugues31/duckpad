@@ -51,23 +51,29 @@ test("the code editor completes Duckpad SQL, explains references and fixes probl
   ]);
   await page.keyboard.type("test kept:");
   await expect(suggestions(page)).toHaveText(["error", "warning"]);
-  await page.keyboard.press("Enter");
+  // Tab inserts a suggestion; in SQL, Enter always starts a new line.
+  await page.keyboard.press("Tab");
   await page.keyboard.press("Enter");
   await page.keyboard.type("SELECT * FROM {{");
   await expect(suggestions(page)).toHaveText([/^kind/, /^result/, /^source/]);
   await page.keyboard.type("sou");
-  await page.keyboard.press("Enter");
+  await page.keyboard.press("Tab");
   // The columns of an aliased input, with their types.
   await page.keyboard.press("End");
   await page.keyboard.type(" s WHERE s.");
   await expect(suggestions(page)).toHaveText([/^amount/, /^input_only/]);
   await expect(suggestions(page).first()).toContainText("INTEGER");
   await page.keyboard.type("am");
-  await page.keyboard.press("Enter");
+  await page.keyboard.press("Tab");
+  // Functions match the start of a word, never a loose match of it.
+  await page.keyboard.type(" > 0 AND re");
+  await expect(suggestions(page).first()).toBeVisible();
+  await page.keyboard.type("gion");
+  await expect(suggestions(page)).toHaveCount(0);
   // DuckDB functions, with their parameters while typing the call.
-  await page.keyboard.type(" > 0 AND strfti");
+  await page.keyboard.type(" IS NULL AND strfti");
   await expect(suggestions(page).first()).toContainText("strftime");
-  await page.keyboard.press("Enter");
+  await page.keyboard.press("Tab");
   await expect(page.locator(".parameter-hints-widget")).toContainText(
     "Converts a date to a string",
   );
@@ -103,6 +109,25 @@ test("the code editor completes Duckpad SQL, explains references and fixes probl
   const saved = (await read()).files["nodes/filtered.sql"];
   expect(saved).toContain("-- @input customers\n");
   expect(saved).toContain(
-    "SELECT * FROM {{ source }} s WHERE s.amount > 0 AND strftime() OR s.amount IN (SELECT amount FROM {{ customers }})",
+    "SELECT * FROM {{ source }} s WHERE s.amount > 0 AND region IS NULL AND strftime() OR s.amount IN (SELECT amount FROM {{ customers }})",
   );
+
+  // Once closed, the editor's find box leaves page shortcuts working.
+  await editor.locator("textarea").focus();
+  await page.keyboard.press("ControlOrMeta+F");
+  await expect(editor.locator(".find-widget.visible")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(editor.locator(".find-widget.visible")).toHaveCount(0);
+  await page
+    .getByRole("navigation", { name: "Workspace", exact: true })
+    .getByRole("button", { name: "Search instance", exact: true })
+    .focus();
+  await page.keyboard.press("ControlOrMeta+K");
+  const search = page.getByRole("dialog", {
+    name: "Search instance",
+    exact: true,
+  });
+  await expect(search.getByRole("combobox")).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(search).toHaveCount(0);
 });

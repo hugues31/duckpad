@@ -129,6 +129,20 @@ SELECT * FROM {{ connection }}.{{ schema }}.{{ table }};`),
     ).toEqual([]);
   });
 
+  it("stays silent on line breaks that Python and browsers read differently", () => {
+    // Python splits lines at \x1f, so the server reads a valid output name.
+    expect(lintTemplate("-- @output a\x1f\nSELECT 1;")).toEqual([]);
+    expect(lintTemplate("-- @output a\vSELECT 1;")).toEqual([]);
+  });
+
+  it("does not take object keys for parameter types", () => {
+    expect(
+      lintTemplate("-- @param x: constructor\n-- @output a\nSELECT 1;").map(
+        (problem) => problem.code,
+      ),
+    ).toEqual(["unknownParameterType"]);
+  });
+
   it("warns about quoted references, which bind no value", () => {
     expect(
       lintTemplate(`-- @input source
