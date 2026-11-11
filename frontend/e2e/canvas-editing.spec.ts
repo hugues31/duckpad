@@ -139,7 +139,7 @@ test("Escape clears the selection and closes its inspector and results", async (
   await expect(results).toBeVisible();
 });
 
-test("Escape yields to a dialog and saves pending inspector edits when dismissing", async ({
+test("Escape yields to a dialog or a control that uses it, and saves pending inspector edits when dismissing", async ({
   page,
 }) => {
   const { read } = await prepare(page);
@@ -151,11 +151,40 @@ test("Escape yields to a dialog and saves pending inspector edits when dismissin
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
   const inspector = page.locator(".inspector");
+  const results = page.getByRole("region", { name: "Results", exact: true });
   await expect(inspector).toBeVisible();
-  await expect(
-    page.getByRole("region", { name: "Results", exact: true }),
-  ).toBeVisible();
+  await expect(results).toBeVisible();
   await expect(node(page, "filtered")).toHaveClass(/selected/);
+
+  // A list of search results, an inline edit and the code editor use Escape
+  // themselves: the panels stay open.
+  const search = page.getByRole("combobox", { name: "Find a node…" });
+  await search.fill("rows");
+  await expect(page.getByRole("listbox")).toBeVisible();
+  await search.press("Escape");
+  await expect(page.getByRole("listbox")).toHaveCount(0);
+  await expect(inspector).toBeVisible();
+  await search.fill("");
+  await results.getByRole("tab", { name: "Columns", exact: true }).click();
+  await results
+    .getByRole("button", { name: "Edit: Dataset documentation", exact: true })
+    .click();
+  const documentation = results.getByRole("textbox", {
+    name: "Dataset documentation",
+    exact: true,
+  });
+  await documentation.fill("Abandoned");
+  await documentation.press("Escape");
+  await expect(documentation).toHaveCount(0);
+  await expect(results).toBeVisible();
+  await select(page, "doubled");
+  const code = await openCode(page);
+  await code.locator(".monaco-editor textarea").first().focus();
+  await page.keyboard.press("Escape");
+  await expect(code).toBeVisible();
+  await expect(node(page, "doubled")).toHaveClass(/selected/);
+  await closeCode(page);
+  await select(page, "filtered");
 
   await autosaved(page, async () => {
     await inspector
