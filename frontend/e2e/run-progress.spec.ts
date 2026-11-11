@@ -93,6 +93,147 @@ test("a Job shows live progress in its details until it finishes", async ({
   ).toBeEnabled();
 });
 
+test("canvas nodes fill with their expected progress, and links follow the run", async ({
+  page,
+}) => {
+  await signIn(page);
+  const tree = await (
+    await page.request.post("/api/example", { data: {} })
+  ).json();
+  const ago = (seconds: number) =>
+    new Date(Date.now() - seconds * 1000).toISOString();
+  let active: Record<string, any> | null = {
+    id: "canvas-progress",
+    status: "running",
+    environment: "dev",
+    started: ago(30),
+    nodes: {
+      orders: { status: "success", started: ago(4), duration: 1 },
+      customers: { status: "success", started: ago(4), duration: 1 },
+      enriched: { status: "running", started: ago(2), estimated_duration: 20 },
+      period: { status: "running", started: ago(1) },
+      validated: { status: "pending", estimated_duration: 1 },
+      "report::summary::eligible": {
+        status: "success",
+        started: ago(3),
+        duration: 1,
+        estimated_duration: 1,
+      },
+      "report::summary::metrics": { status: "pending", estimated_duration: 3 },
+    },
+  };
+  await page.route(`**/api/worktrees/${tree.id}/status?*`, (route) =>
+    route.fulfill({ json: { nodes: {}, active } }),
+  );
+  await page.goto(`/worktrees/${tree.id}/flow`);
+  const node = (id: string) =>
+    page.locator(`.react-flow__node[data-id="${id}"] .pipeline-node`);
+  const edge = (id: string) =>
+    page.locator(`.react-flow__edge[data-id="${id}"]`);
+  const sweep = (id: string) =>
+    node(id)
+      .locator(".node-progress")
+      .evaluate(
+        (element) => getComputedStyle(element, "::after").animationName,
+      );
+
+  // A previous duration gives a fill that advances from left to right.
+  const estimated = node("enriched");
+  await expect(estimated.locator(".node-progress")).toHaveAttribute(
+    "data-state",
+    "estimated",
+  );
+  await expect(estimated).toHaveClass(/is-running/);
+  const status = estimated.locator(".node-status.running");
+  await expect(status).toContainText(en.running);
+  await expect(status.locator(".node-status-time")).toHaveText(/^\d+ s$/);
+  await expect(status).toHaveAttribute("title", /previous run: 20 s/);
+  const fill = () =>
+    estimated
+      .locator(".node-progress-fill")
+      .evaluate(
+        (element) => new DOMMatrix(getComputedStyle(element).transform).m41,
+      );
+  const start = await fill();
+  expect(start).toBeLessThan(0);
+  await expect.poll(fill).toBeGreaterThan(start);
+  // Without one, a sweep shows activity but no progress.
+  await expect(node("period").locator(".node-progress")).toHaveAttribute(
+    "data-state",
+    "working",
+  );
+  await expect.poll(() => sweep("period")).toBe("node-progress-sweep");
+  await expect(node("period").locator(".node-status")).toHaveAttribute(
+    "title",
+    new RegExp(en.noPreviousDuration),
+  );
+  // Waiting nodes say so; nodes outside the run keep their own state.
+  await expect(node("validated").locator(".node-status")).toHaveText(
+    en.pending,
+  );
+  await expect(node("reach").locator(".node-status")).toHaveCount(0);
+  // Between two of its nodes, a component keeps its progress and looks unfinished.
+  const component = node("report").locator(".node-progress");
+  await expect(node("report")).toHaveClass(/is-running/);
+  await expect(component).toHaveAttribute("data-state", "estimated");
+  await expect(component).not.toHaveAttribute("data-outcome");
+  expect(
+    await component
+      .locator(".node-progress-fill")
+      .evaluate((element) => element.getAnimations().length),
+  ).toBe(0);
+  // Data flows along links into executing nodes only.
+  await expect(edge("orders_result_enriched_left")).toHaveClass(/is-flowing/);
+  await expect(edge("orders_result_enriched_left")).toHaveClass(/animated/);
+  await expect(edge("enriched_result_validated_source")).not.toHaveClass(
+    /animated|highlighted/,
+  );
+
+  active = {
+    ...active,
+    nodes: {
+      ...active.nodes,
+      enriched: { status: "success", started: ago(3), duration: 3 },
+      validated: { status: "running", started: ago(30), estimated_duration: 1 },
+    },
+  };
+  // A success washes the shape, and the links it fed stay highlighted.
+  await expect(estimated.locator(".node-progress")).toHaveAttribute(
+    "data-outcome",
+    "success",
+  );
+  await expect(estimated).not.toHaveClass(/is-running/);
+  await expect(edge("orders_result_enriched_left")).toHaveClass(/highlighted/);
+  await expect(edge("orders_result_enriched_left")).not.toHaveClass(/animated/);
+  await expect(edge("enriched_result_validated_source")).toHaveClass(
+    /is-flowing/,
+  );
+  // Past its previous duration, a node keeps its fill and shows activity.
+  const late = node("validated");
+  await expect(late.locator(".node-progress")).toHaveAttribute(
+    "data-state",
+    "overrun",
+  );
+  await expect(late.locator(".node-status")).toHaveAttribute(
+    "title",
+    /longer than the previous run \(1\.0 s\)/,
+  );
+  await expect.poll(() => sweep("validated")).toBe("node-progress-sweep");
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect.poll(() => sweep("validated")).toBe("none");
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  active = { ...active, status: "canceling" };
+  await expect(late.locator(".node-progress")).toHaveAttribute(
+    "data-paused",
+    "true",
+  );
+  active = null;
+  await expect(page.locator(".pipeline-node.is-running")).toHaveCount(0);
+  await expect(page.locator(".node-status")).toHaveCount(0);
+  await expect(page.locator(".react-flow__edge.animated")).toHaveCount(0);
+});
+
 async function expectToolbarFits(page: Page, width: number) {
   await page.setViewportSize({ width, height: 900 });
   const tabs = page.locator(".main-tabs");
