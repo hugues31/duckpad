@@ -4,6 +4,7 @@ import {
   Code2,
   Copy,
   Link,
+  Link2,
   Trash2,
   Undo2,
   Unlink,
@@ -15,6 +16,7 @@ import type { Translate } from "./i18n";
 import { countLabel, isBuiltinTemplate } from "./i18n";
 import { nodeCopies, type CopiedNodes } from "./nodeClipboard";
 import { canMute, detachNode, nodeGraph, templateUsage } from "./nodeCode";
+import { searchShortcutLabel } from "./searchShortcuts";
 import { planNodeReconnection } from "./nodeRemoval";
 import type { useShell } from "./shell";
 import type { Bundle, FlowNode, Snapshot } from "./types";
@@ -161,13 +163,14 @@ export function nodeActions(
     selection.length > 1 ? selection : [target.id],
     parent,
   );
-  actions.push({
-    ...item("removeReconnect", Trash2, t("deleteNodeReconnect"), () =>
-      safe(() => removeNodes([target.id], [], "reconnect")),
-    ),
-    description: t(reconnection.reason || "reconnectHint"),
-    disabled: !canEdit || busy || !!reconnection.reason,
-    danger: true,
-  });
+  if (reconnection)
+    actions.push(
+      item(
+        "removeReconnect",
+        Link2,
+        `${t("deleteNodeReconnect")} (${searchShortcutLabel(t("deleteKey"))})`,
+        () => safe(() => removeNodes([target.id], [], "reconnect")),
+      ),
+    );
   return actions;
 }

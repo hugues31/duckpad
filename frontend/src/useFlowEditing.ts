@@ -200,12 +200,14 @@ export function useFlowEditing({
       const { change } =
         mode === "reconnect"
           ? await commit(async (base) => {
-              if (selection.length > 1)
-                throw new Error(t("reconnectSingleNode"));
               const shown = planNodeReconnection(snapshot, ids, parent);
               const plan = planNodeReconnection(base, ids, parent);
-              if (plan.reason) throw new Error(t(plan.reason));
-              if (shown.reason || shown.connections !== plan.connections)
+              if (
+                selection.length > 1 ||
+                !plan ||
+                !shown ||
+                shown.connections !== plan.connections
+              )
                 throw new Error(t("reconnectChanged"));
               const value = structuredClone(base.bundle!);
               canvas.current?.preserveViewport();
@@ -316,6 +318,10 @@ export function useFlowEditing({
     copy,
     paste,
     toggleMute,
+    reconnect: async (ids) => {
+      if (planNodeReconnection(snapshot, ids, parent))
+        await removeNodes(ids, [], "reconnect");
+    },
   });
   /** Insert a Filter node reading one output of the selected node, with a sample's condition. */
   async function addFilterNode(port: string, condition: string) {

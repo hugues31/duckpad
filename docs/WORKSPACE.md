@@ -33,13 +33,15 @@ SQL or Python node to edit its code; a linked node opens its shared template.
 **Edit code** at the top of the inspector does the same. The icons under it run
 the node with its ancestors, mute it, duplicate it, link it to a template or
 remove it; point at an icon for its name, or right-click the node for the same
-actions in a menu. The removal button opens a menu with **Remove node** and
-**Remove node and reconnect**. For `A -> B -> C`, removing B normally disconnects
-A and C; reconnecting makes A feed C directly. Delete and Backspace keep ordinary
-removal. Reconnection is available for a single transformation in the main flow
-with one input, one output and no declared external writes, one connected source
+actions in a menu. The removal button deletes the node in one click. Delete and
+Backspace also keep ordinary removal. When reconnection is possible, the context
+menu additionally offers **Remove and reconnect**, with **Ctrl/Cmd+Delete** as its
+shortcut. For `A -> B -> C`, removing B normally disconnects A and C; reconnecting
+makes A feed C directly. Reconnection is available for a single transformation in
+the main flow with one input, one output and no declared external writes, one connected source
 and at least one consumer. All consumers receive the upstream output; nodes stay
-at their current positions. Unavailable reconnection shows its reason in the menu.
+at their current positions. The action is hidden when unavailable, and its shortcut
+does nothing in that case.
 Check downstream column expectations after bypassing a step: links can be valid
 while the data no longer fits its consumers. Removing a node and reconnecting its
 links can be undone together with **Undo** in the

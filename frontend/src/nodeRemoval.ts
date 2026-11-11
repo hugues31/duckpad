@@ -2,27 +2,16 @@ import { nodeInterface } from "./graph";
 import { localDefinitions } from "./nodeCode";
 import type { FlowEdge, Snapshot } from "./types";
 
-type RemovalReason =
-  | "reconnectSingleNode"
-  | "reconnectRootTransform"
-  | "reconnectPorts"
-  | "reconnectConnections";
-
-type Reconnection =
-  | { reason: RemovalReason; edges?: never; connections?: never }
-  | { reason?: never; edges: FlowEdge[]; connections: string };
-
 /** Plan a bypass without guessing between ports or replacing another input's source. */
 export function planNodeReconnection(
   snapshot: Snapshot,
   ids: string[],
   parent?: string,
-): Reconnection {
-  if (ids.length !== 1) return { reason: "reconnectSingleNode" };
+): { edges: FlowEdge[]; connections: string } | null {
+  if (ids.length !== 1) return null;
   const bundle = snapshot.bundle;
   const node = bundle?.flow.nodes.find((item) => item.id === ids[0]);
-  if (parent || !bundle || !node || node.component)
-    return { reason: "reconnectRootTransform" };
+  if (parent || !bundle || !node || node.component) return null;
   const local = localDefinitions(snapshot);
   const signature = (id: string) => {
     const item = bundle.flow.nodes.find((item) => item.id === id);
@@ -39,18 +28,17 @@ export function planNodeReconnection(
     definition.inputs?.length !== 1 ||
     definition.outputs?.length !== 1
   )
-    return { reason: "reconnectPorts" };
+    return null;
   const incoming = bundle.flow.edges.filter((edge) => edge.target === node.id);
   const outgoing = bundle.flow.edges.filter((edge) => edge.source === node.id);
-  if (incoming.length !== 1 || !outgoing.length)
-    return { reason: "reconnectConnections" };
+  if (incoming.length !== 1 || !outgoing.length) return null;
   const input = incoming[0];
   if (
     input.source === node.id ||
     input.targetHandle !== definition.inputs[0] ||
     !signature(input.source)?.outputs.includes(input.sourceHandle)
   )
-    return { reason: "reconnectConnections" };
+    return null;
   const remaining = bundle.flow.edges.filter(
     (edge) => edge.source !== node.id && edge.target !== node.id,
   );
@@ -67,15 +55,14 @@ export function planNodeReconnection(
           other.targetHandle === edge.targetHandle,
       )
     )
-      return { reason: "reconnectConnections" };
+      return null;
     destinations.add(destination);
     // A path back to the upstream source would close a cycle (including a self-link).
     const seen = new Set<string>();
     const pending = [edge.target];
     while (pending.length) {
       const id = pending.pop()!;
-      if (id === input.source || id === node.id)
-        return { reason: "reconnectConnections" };
+      if (id === input.source || id === node.id) return null;
       if (seen.has(id)) continue;
       seen.add(id);
       pending.push(

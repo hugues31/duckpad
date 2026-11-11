@@ -265,9 +265,6 @@ test("deleting a node offers Undo, and Ctrl+Z / Ctrl+Shift+Z keep a concurrent e
     .locator(".inspector")
     .getByRole("button", { name: "Remove node", exact: true })
     .click();
-  await page
-    .getByRole("menuitem", { name: "Remove node", exact: true })
-    .click();
   const toast = page.locator(".toast");
   await expect(toast).toContainText("Node deleted");
   await expect(node(page, "filtered")).toHaveCount(0);
@@ -315,9 +312,6 @@ test("deleting a node offers Undo, and Ctrl+Z / Ctrl+Shift+Z keep a concurrent e
   await page
     .locator(".inspector")
     .getByRole("button", { name: "Remove node", exact: true })
-    .click();
-  await page
-    .getByRole("menuitem", { name: "Remove node", exact: true })
     .click();
   await expect.poll(ids).not.toContain("doubled");
   await toast.getByRole("button", { name: "Undo", exact: true }).click();
@@ -367,32 +361,18 @@ SELECT * FROM {{ source }} WHERE {{ condition }};`;
     .fill("Updated filter");
   // Even an untouched viewport must not refit when this step disappears.
   const viewport = page.locator(".react-flow__viewport");
-  const remove = page
-    .locator(".inspector")
-    .getByRole("button", { name: "Remove node", exact: true });
-  await remove.focus();
-  await remove.press("ArrowDown");
-  await expect(
-    page.getByRole("menuitem", { name: "Remove node", exact: true }),
-  ).toBeFocused();
-  await page.keyboard.press("Delete");
-  await expect(node(page, "filtered")).toBeVisible();
-  await page.keyboard.press("ArrowDown");
+  await node(page, "filtered").click({ button: "right" });
+  await page.keyboard.press("End");
   const reconnect = page.getByRole("menuitem", {
-    name: "Remove node and reconnect",
-    exact: true,
+    name: /^Remove and reconnect/,
   });
   await expect(reconnect).toBeFocused();
-  await expect(reconnect).toContainText(
-    "Check that their expected columns still exist",
-  );
+  await expect(reconnect).toContainText("Ctrl+DELETE");
   const transform = await viewport.evaluate((element) =>
     element.getAttribute("style"),
   );
   await reconnect.press("Enter");
-  await expect(page.locator(".toast")).toContainText(
-    "Node removed; 2 links reconnected",
-  );
+  await expect(page.locator(".toast")).toContainText("2 links reconnected");
   const removed = await read();
   expect(removed.files["nodes/filtered.sql"]).toBeUndefined();
   expect(removed.bundle!.flow.nodes).toEqual(
@@ -447,7 +427,7 @@ test("reconnecting refuses failed or stale saves without deleting the node", asy
   const reconnect = async () => {
     await node(page, "filtered").click({ button: "right" });
     await page
-      .getByRole("menuitem", { name: "Remove node and reconnect", exact: true })
+      .getByRole("menuitem", { name: /^Remove and reconnect/, exact: true })
       .click();
   };
   await page.route(`**${endpoint}`, (route) =>
@@ -487,41 +467,76 @@ test("reconnecting refuses failed or stale saves without deleting the node", asy
   expect((await read()).files["README.md"]).toBe("Concurrent edit");
 });
 
-test("unavailable reconnection explains why and ordinary keyboard deletion stays disconnected", async ({
+test("unavailable reconnection is hidden and ordinary deletion stays disconnected", async ({
   page,
 }) => {
   const { read } = await prepare(page);
-  await select(page, "rows");
-  await page
-    .locator(".inspector")
-    .getByRole("button", { name: "Remove node", exact: true })
-    .click();
-  await page.keyboard.press("ArrowDown");
   const reconnect = page.getByRole("menuitem", {
-    name: "Remove node and reconnect",
-    exact: true,
+    name: /^Remove and reconnect/,
   });
-  await expect(reconnect).toBeFocused();
-  await expect(reconnect).toBeDisabled();
-  await expect(reconnect).toContainText("Requires a valid transformation");
-  await page.keyboard.press("Enter");
-  await expect(node(page, "rows")).toBeVisible();
-  await page.keyboard.press("Escape");
-  await select(page, "filtered");
-  await select(page, "doubled", ["Shift"]);
-  await page
-    .locator(".inspector")
-    .getByRole("button", { name: "Remove node", exact: true })
-    .click();
-  await expect(reconnect).toBeDisabled();
-  await expect(reconnect).toContainText("Select a single node");
-  await page.keyboard.press("Escape");
-  await select(page, "rows");
+  for (const id of ["rows", "doubled", "boxed"]) {
+    await node(page, id).click({ button: "right" });
+    await expect(
+      page.getByRole("menu", { name: "Node actions", exact: true }),
+    ).toBeVisible();
+    await expect(reconnect).toHaveCount(0);
+    await page.keyboard.press("Escape");
+  }
   await select(page, "filtered");
   await page.keyboard.press("Delete");
   await expect(node(page, "filtered")).toHaveCount(0);
   expect((await read()).bundle!.flow.edges).toEqual([]);
+  // Sources also keep the one-click inspector action.
+  await select(page, "rows");
+  await page
+    .locator(".inspector")
+    .getByRole("button", { name: "Remove node", exact: true })
+    .click();
+  await expect(node(page, "rows")).toHaveCount(0);
+  await expect(page.getByRole("menu")).toHaveCount(0);
 });
+
+for (const modifier of ["Control", "Meta"]) {
+  test(`${modifier}+Delete reconnects only eligible selections and yields to typing`, async ({
+    page,
+  }) => {
+    const { read } = await prepare(page);
+    const before = await read();
+    const shortcut = `${modifier}+Delete`;
+    // Ineligible nodes and multiple selections must never fall back to deletion.
+    await select(page, "rows");
+    await page.keyboard.press(shortcut);
+    await expect(node(page, "rows")).toBeVisible();
+    await select(page, "filtered");
+    await select(page, "doubled", ["Shift"]);
+    await expect(page.locator(".react-flow__node.selected")).toHaveCount(2);
+    await page.keyboard.press(shortcut);
+    expect((await read()).bundle!.flow).toEqual(before.bundle!.flow);
+    await select(page, "rows");
+    await select(page, "filtered");
+    await page
+      .getByRole("textbox", { name: "Display name", exact: true })
+      .focus();
+    await page.keyboard.press(shortcut);
+    await expect(node(page, "filtered")).toBeVisible();
+    await select(page, "filtered");
+    await page.keyboard.press(shortcut);
+    await expect(node(page, "filtered")).toHaveCount(0);
+    const toast = page.locator(".toast");
+    await expect(toast).toContainText("1 link reconnected");
+    expect((await read()).bundle!.flow.edges).toEqual([
+      { ...before.bundle!.flow.edges[1], source: "rows" },
+    ]);
+    await toast.getByRole("button", { name: "Undo", exact: true }).click();
+    await expect(node(page, "filtered")).toBeVisible();
+    expect((await read()).bundle!.flow).toEqual(before.bundle!.flow);
+    // Releasing the modifier restores ordinary keyboard removal.
+    await select(page, "filtered");
+    await page.keyboard.press("Backspace");
+    await expect(node(page, "filtered")).toHaveCount(0);
+    expect((await read()).bundle!.flow.edges).toEqual([]);
+  });
+}
 
 test("a conflicting undo is reported once, and editors wait for undos", async ({
   page,

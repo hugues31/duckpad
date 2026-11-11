@@ -1,6 +1,5 @@
 import {
   useEffect,
-  useId,
   useLayoutEffect,
   useRef,
   useState,
@@ -16,8 +15,6 @@ export interface ActionItem {
   icon?: LucideIcon;
   disabled?: boolean;
   danger?: boolean;
-  /** Effect of an action, or why it is unavailable; readable even when disabled. */
-  description?: string;
 }
 
 /** Move focus between menu items with the arrow, Home and End keys. */
@@ -48,7 +45,6 @@ export function ActionMenu({
   onClose: () => void;
 }) {
   const menu = useRef<HTMLDivElement>(null);
-  const id = useId();
   const [point, setPoint] = useState(position);
   useLayoutEffect(() => {
     const bounds = menu.current!.getBoundingClientRect();
@@ -116,14 +112,7 @@ export function ActionMenu({
           key={item.id}
           role="menuitem"
           tabIndex={-1}
-          disabled={item.disabled && !item.description}
-          aria-disabled={item.disabled || undefined}
-          aria-labelledby={
-            item.description ? `${id}-${item.id}-label` : undefined
-          }
-          aria-describedby={
-            item.description ? `${id}-${item.id}-description` : undefined
-          }
+          disabled={item.disabled}
           className={item.danger ? "danger" : undefined}
           onClick={() => {
             if (item.disabled) return;
@@ -132,19 +121,7 @@ export function ActionMenu({
           }}
         >
           {item.icon && <item.icon size={14} aria-hidden="true" />}
-          {item.description ? (
-            <span>
-              <span id={`${id}-${item.id}-label`}>{item.label}</span>
-              <span
-                className="action-description"
-                id={`${id}-${item.id}-description`}
-              >
-                {item.description}
-              </span>
-            </span>
-          ) : (
-            item.label
-          )}
+          {item.label}
         </button>
       ))}
     </div>,

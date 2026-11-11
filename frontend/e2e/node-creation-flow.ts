@@ -104,7 +104,7 @@ export async function verifyNodeCreation(page: Page) {
   await page.keyboard.press("End");
   await expect(
     menu.getByRole("menuitem", {
-      name: "Remove node and reconnect",
+      name: "Remove node",
       exact: true,
     }),
   ).toBeFocused();
@@ -122,9 +122,6 @@ export async function verifyNodeCreation(page: Page) {
   );
   await inspector
     .getByRole("button", { name: "Remove node", exact: true })
-    .click();
-  await page
-    .getByRole("menuitem", { name: "Remove node", exact: true })
     .click();
   await expect(page.locator(".react-flow__node")).toHaveCount(2);
 

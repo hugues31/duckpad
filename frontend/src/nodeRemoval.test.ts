@@ -53,9 +53,9 @@ it.each(["sql", "python"])(
     base.parsed_nodes!["nodes/d.sql"].inputs!.push("other");
     const before = structuredClone(value);
     const plan = planNodeReconnection(base, ["b"]);
-    expect(plan.reason).toBeUndefined();
+    expect(plan).not.toBeNull();
     expect(value).toEqual(before);
-    removeFlowNodes(value, [], ["b"], [], plan.edges!);
+    removeFlowNodes(value, [], ["b"], [], plan!.edges);
     expect(value.flow.nodes).toEqual(
       before.flow.nodes.filter((node) => node.id !== "b"),
     );
@@ -75,7 +75,7 @@ it("preserves the upstream output and each consumer's input, without requiring m
   base.bundle!.flow.edges[0].sourceHandle = "orders";
   base.parsed_nodes!["nodes/d.sql"].inputs = ["rows"];
   base.bundle!.flow.edges[2].targetHandle = "rows";
-  expect(planNodeReconnection(base, ["b"]).edges).toEqual([
+  expect(planNodeReconnection(base, ["b"])?.edges).toEqual([
     { ...edge("b", "c"), source: "a", sourceHandle: "orders" },
     {
       ...edge("b", "d"),
@@ -176,15 +176,11 @@ it.each([
       break;
   }
   const before = structuredClone(base);
-  expect(planNodeReconnection(base, ["b"]).reason).toBeTruthy();
+  expect(planNodeReconnection(base, ["b"])).toBeNull();
   expect(base).toEqual(before);
 });
 
 it("does not reconnect component internals or multiple selected nodes", () => {
-  expect(planNodeReconnection(snapshot(), ["b"], "box").reason).toBe(
-    "reconnectRootTransform",
-  );
-  expect(planNodeReconnection(snapshot(), ["b", "c"]).reason).toBe(
-    "reconnectSingleNode",
-  );
+  expect(planNodeReconnection(snapshot(), ["b"], "box")).toBeNull();
+  expect(planNodeReconnection(snapshot(), ["b", "c"])).toBeNull();
 });
