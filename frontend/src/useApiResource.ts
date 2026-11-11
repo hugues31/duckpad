@@ -1,0 +1,109 @@
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { api } from "./api";
+import { usePolling, type PollingOptions } from "./usePolling";
+
+export interface ResourceOptions<T = unknown> extends PollingOptions {
+  /** Load again, keeping the current data meanwhile, whenever this value changes.
+   * Values compare by identity: pass a primitive or a stable object, never an inline one. */
+  refresh?: string | number | object;
+  /** Preserve the last successful value when a refresh fails. */
+  keepDataOnError?: boolean;
+  /** Delay after a successful response, or false to stop until a reload. */
+  nextInterval?: (data: T) => number | false;
+}
+
+interface Settled<T> {
+  key: string;
+  request: object;
+  data: T | null;
+  error: string;
+}
+
+/**
+ * Load a value identified by `key`, or nothing while it is null. Data and error
+ * belong to the key: they reset when it changes, and stay in place while the
+ * same key reloads, refreshes or polls. `load` must only depend on the key and
+ * on the `refresh` option.
+ */
+export function useResource<T>(
+  key: string | null,
+  load: (signal: AbortSignal) => Promise<T>,
+  {
+    refresh,
+    keepDataOnError = false,
+    enabled = true,
+    nextInterval,
+    ...polling
+  }: ResourceOptions<T> = {},
+) {
+  const [attempt, setAttempt] = useState(0);
+  const [settled, setSettled] = useState<Settled<T> | null>(null);
+  const request = useMemo(
+    () => (key === null ? null : { key, refresh, attempt }),
+    [key, refresh, attempt],
+  );
+  // The request identifies what to load; a new `load` alone does not reload.
+  const latestLoad = useRef(load);
+  const cadence = useRef(nextInterval);
+  useLayoutEffect(() => {
+    latestLoad.current = load;
+    cadence.current = nextInterval;
+  });
+  usePolling(
+    useCallback(
+      async (signal: AbortSignal) => {
+        const done = (data: T | null, error: string) => {
+          if (!signal.aborted)
+            setSettled((old) => ({
+              key: key!,
+              request: request!,
+              error,
+              data:
+                error && keepDataOnError && old?.key === key ? old.data : data,
+            }));
+        };
+        try {
+          const data = await latestLoad.current(signal);
+          done(data, "");
+          return cadence.current?.(data);
+        } catch (e) {
+          done(null, (e as Error).message);
+          throw e;
+        }
+      },
+      [key, request, keepDataOnError],
+    ),
+    { ...polling, enabled: enabled && request !== null },
+  );
+  const current = settled?.key === key ? settled : null;
+  return {
+    data: current?.data ?? null,
+    error: current?.error ?? "",
+    /** True until the first answer of the current key, reload or refresh. */
+    pending: enabled && request !== null && settled?.request !== request,
+    reload: useCallback(() => setAttempt((value) => value + 1), []),
+    /** Replace the loaded data locally, for instance with the answer of a save. */
+    setData: useCallback(
+      (change: T | null | ((current: T | null) => T | null)) =>
+        setSettled(
+          (old) =>
+            old && {
+              ...old,
+              data:
+                typeof change === "function"
+                  ? (change as (current: T | null) => T | null)(old.data)
+                  : change,
+            },
+        ),
+      [],
+    ),
+  };
+}
+
+/** Load an API path with `useResource`; a null path loads nothing. */
+export function useApiResource<T>(
+  path: string | null,
+  options?: ResourceOptions<T>,
+) {
+  return useResource<T>(path, (signal) => api<T>(path!, { signal }), options);
+}
