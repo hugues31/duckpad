@@ -18,6 +18,7 @@ import type { PreviewState } from "./draftPreview";
 import DraftPreviewView from "./DraftPreviewView";
 import ExecutionError from "./ExecutionError";
 import { WarningBadge, warningCount } from "./ExecutionMessages";
+import { ExportDownloadButton, useExportDownload } from "./ExportDownload";
 import { nodeInterface, outputSource, type NodeInterface } from "./graph";
 import { nodeLabel, useT } from "./i18n";
 import type { Cell } from "./lineageGraph";
@@ -106,7 +107,8 @@ export default function ResultsPanel({
   hidden: boolean;
   onTab: (tab: ResultsTab) => void;
   onClose: () => void;
-  onRun: () => void;
+  /** Run the node with its ancestors, or only the ancestors its inputs come from. */
+  onRun: (options?: { ancestors: true }) => void;
   onExplain: (cell: Cell) => void;
   onSave: SaveProject;
   onSaveDocumentation: (
@@ -215,6 +217,13 @@ export default function ResultsPanel({
   const collector =
     snapshot.partitions?.[environment]?.nodes[producer]?.collect.length;
   const baseResult = statuses.nodes[producer];
+  const downloadable =
+    signature.kind !== "component" && !!signature.definition?.download;
+  const exportDownload = useExportDownload(
+    snapshot.worktree.id,
+    environment,
+    downloadable ? producer : null,
+  );
   const sourceLocation =
     snapshot.bundle && nodeLocation(snapshot.bundle, producer);
   // A blocked collector waits for keys: retry those that failed rather than every key.
@@ -241,7 +250,7 @@ export default function ResultsPanel({
             retryFailed ? { partitions: { mode: "failed" } } : undefined,
           );
         }
-      : onRun;
+      : () => onRun();
   const partition = usePartitionQuery(target.node, target.port);
   const partitionPreview = useApiResource<PreviewPage>(
     partition.manifest
@@ -265,8 +274,9 @@ export default function ResultsPanel({
         }
       : baseResult;
   // The node's own last execution failed; blocked, canceled and per-key states keep their own views.
+  // A node without outputs shows its inputs, and still tells its own failure above them.
   const failure =
-    !target.input &&
+    (!target.input || !ports.length) &&
     !partition.manifest &&
     baseResult?.error &&
     baseResult.execution_status === "failed"
@@ -328,16 +338,21 @@ export default function ResultsPanel({
       onLog={() => onTab("log")}
     />
   );
+  // Rows missing from a node without outputs are those of its ancestors: running them writes nothing.
+  const ancestorsOnly = !ports.length && !!target.input && !collector;
   // How the Data and Chart tabs run the node and explain a missing result.
   const runState: RunState = {
     canEdit: !readOnly,
     active: !!statuses.active,
     starting: worktree?.starting,
-    onRun: runResult,
-    runLabel,
+    onRun: ancestorsOnly ? () => onRun({ ancestors: true }) : runResult,
+    runLabel: ancestorsOnly ? t("runAncestors") : runLabel,
+    hint: ancestorsOnly ? t("inputsNoResultHint") : undefined,
     reason: target.input ? undefined : blocked,
     failureShown: !!failure,
   };
+  // A single dataset needs no selector: name the input it comes from.
+  const onlyInput = !ports.length && inputs.length === 1 ? inputs[0] : null;
   // The tabs of the shown dataset start over on another output, environment or partition.
   const datasetKey = `${outputKey(target)}:${environment}:${JSON.stringify(partition)}`;
   return (
@@ -351,7 +366,7 @@ export default function ResultsPanel({
         <div className="results-identity">
           <Table2 size={15} aria-hidden="true" />
           <strong title={label}>{label}</strong>
-          {(ports.length > 1 || inputs.length > 0) && (
+          {ports.length + inputs.length > 1 && (
             <DatasetPicker
               target={target}
               ports={ports.map((port) => ({
@@ -368,6 +383,11 @@ export default function ResultsPanel({
           )}
           {ports.length === 1 && !inputs.length && (
             <span className="results-port">{ports[0]}</span>
+          )}
+          {onlyInput && (
+            <span className="results-port">
+              {onlyInput.input} ← {onlyInput.label} · {onlyInput.port}
+            </span>
           )}
           {running ? (
             <span className="badge running">
@@ -413,6 +433,12 @@ export default function ResultsPanel({
               {dataset.count.toLocaleString()} {t("rows")} · {columns.length}{" "}
               {t("columns")}
             </span>
+          )}
+          {exportNode && (
+            <ExportDownloadButton
+              state={exportDownload}
+              onFailure={() => onTab("log")}
+            />
           )}
           <button
             className="icon"
@@ -587,9 +613,7 @@ export default function ResultsPanel({
           environment={environment}
           fullNode={producer}
           exportNode={exportNode}
-          download={
-            signature.kind !== "component" && !!signature.definition?.download
-          }
+          download={downloadable ? exportDownload : null}
           readOnly={readOnly}
           result={result}
           inputs={inputs.map((input) => ({ ...input, ...stored(input) }))}

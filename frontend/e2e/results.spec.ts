@@ -360,8 +360,14 @@ test("the log keeps the export execution and download alongside its input data",
   await expect(panel.locator(".run-summary")).not.toContainText(
     "configuration",
   );
+  // The header offers the same download in every tab.
   await expect(
     panel.getByRole("button", { name: "Download exported data", exact: true }),
+  ).toHaveCount(2);
+  await expect(
+    panel
+      .locator(".log-export")
+      .getByRole("button", { name: "Download exported data", exact: true }),
   ).toBeEnabled();
 });
 

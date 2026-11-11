@@ -210,6 +210,7 @@
   "preview": "Aperçu des données",
   "noResult": "Prêt quand vous l’êtes",
   "noResultHint": "Exécutez ce nœud et ses ancêtres pour matérialiser un aperçu.",
+  "inputsNoResultHint": "Exécutez les ancêtres de ce nœud pour voir les lignes qu’il reçoit. Le nœud lui-même n’est pas exécuté.",
   "valid": "Valide",
   "stale": "Obsolète",
   "failed": "En échec",
