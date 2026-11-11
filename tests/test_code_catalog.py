@@ -84,3 +84,18 @@ def test_overloads_fold_into_distinct_parameter_lists():
             ],
         }
     ]
+
+
+def test_table_functions_split_positional_parameters_from_named_options():
+    functions = {f["name"]: f for f in code_catalog()["functions"]}
+
+    def names(function):
+        return [[p["name"] for p in s["parameters"]] for s in functions[function]["signatures"]]
+
+    # DuckDB's binder lists read_text(path, **options): allow_empty is named.
+    assert sorted(names("read_text")) == [["path"], ["paths"]]
+    assert [o["name"] for o in functions["read_text"]["options"]] == ["allow_empty"]
+    # Every parameter of range and parquet_bloom_probe is positional.
+    assert ["start", "stop", "step"] in names("range")
+    assert "options" not in functions["range"]
+    assert ["path", "column_name", "value"] in names("parquet_bloom_probe")

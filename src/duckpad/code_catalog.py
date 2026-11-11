@@ -12,6 +12,7 @@ import inspect
 import json
 import re
 from functools import cache
+from itertools import takewhile
 
 import duckdb
 
@@ -20,8 +21,13 @@ from .types import Record
 # Function names a user can type; operators and internal helpers are left out.
 FUNCTION_NAME = re.compile(r"[a-z][a-z0-9_]*")
 FUNCTION_KINDS = ("scalar", "aggregate", "window", "macro", "table", "table_macro")
-# A table function with more parameters than this lists named options after its first one.
+# Without a known positional count, a table function with more parameters than
+# this lists named options after its first one.
 POSITIONAL_LIMIT = 4
+# A call with more arguments than any table function takes: it never binds, and
+# DuckDB answers with each overload's positional parameters, then `**"options"`.
+UNMATCHED_ARGUMENTS = ", ".join(["NULL"] * 64)
+CANDIDATE = re.compile(r'^\t"?(\w+)"?\((.*)\)\s*$', re.MULTILINE)
 SIGNATURES_PER_FUNCTION = 6
 KEYWORD_CATEGORIES = ("reserved", "unreserved", "type_function", "column_name")
 # Module functions that build expressions for relations, as nodes use them.
@@ -63,9 +69,15 @@ def code_catalog() -> Record:
             ORDER BY name
             """
         ).fetchall()
+        tables = {
+            name
+            for name, kind, *_, parameters, _types, varargs, _returns in functions
+            if kind == "table" and len(parameters or []) > 1 and not varargs
+        }
+        positional = {name: positional_count(db, name) for name in sorted(tables)}
     return {
         "duckdb_version": duckdb.__version__,
-        "functions": sql_functions(functions),
+        "functions": sql_functions(functions, positional),
         "keywords": [
             {"name": name.upper(), "category": category}
             for name, category in keywords
@@ -92,8 +104,44 @@ def compressed_catalog() -> bytes:
     return gzip.compress(json.dumps(code_catalog(), separators=(",", ":")).encode())
 
 
-def sql_functions(rows) -> list[Record]:
-    """One entry per function name, its overloads folded into distinct parameter lists."""
+def positional_count(db, name: str) -> int | None:
+    """How many positional parameters a table function takes at most, from its candidates."""
+    if not FUNCTION_NAME.fullmatch(name):
+        return None
+    try:
+        db.execute(f'SELECT * FROM "{name}"({UNMATCHED_ARGUMENTS}) LIMIT 0')
+    except duckdb.Error as error:
+        counts = [
+            len(list(takewhile(lambda p: p != "/" and not p.startswith("**"), top_level(arguments))))
+            for candidate, arguments in CANDIDATE.findall(str(error))
+            if candidate == name
+        ]
+        return max(counts, default=None)
+    return None
+
+
+def top_level(arguments: str) -> list[str]:
+    """`a INTEGER, b STRUCT(x INTEGER, y INTEGER)` -> its two arguments."""
+    parts, depth, current = [], 0, ""
+    for char in arguments:
+        if char in "(<[":
+            depth += 1
+        elif char in ")>]":
+            depth -= 1
+        if char == "," and depth == 0:
+            parts.append(current.strip())
+            current = ""
+        else:
+            current += char
+    return [*parts, current.strip()] if current.strip() else parts
+
+
+def sql_functions(rows, positional: dict[str, int | None] | None = None) -> list[Record]:
+    """One entry per function name, its overloads folded into distinct parameter lists.
+
+    `positional` gives the positional parameter count of table functions, whose
+    other parameters are named options.
+    """
     found: dict[str, Record] = {}
     for name, kind, description, examples, parameters, types, varargs, returns in rows:
         if not FUNCTION_NAME.fullmatch(name):
@@ -105,11 +153,14 @@ def sql_functions(rows) -> list[Record]:
         entry["examples"] = entry["examples"] or list(examples or [])[:2]
         parameters = list(parameters or [])
         types = (list(types or []) + [""] * len(parameters))[: len(parameters)]
-        if kind == "table" and len(parameters) > POSITIONAL_LIMIT:
+        count = (positional or {}).get(name)
+        if kind == "table" and count is None and len(parameters) > POSITIONAL_LIMIT:
+            count = 1
+        if kind == "table" and count is not None and len(parameters) > count:
             options = entry.setdefault("options", {})
-            for option, option_type in zip(parameters[1:], types[1:], strict=True):
+            for option, option_type in zip(parameters[count:], types[count:], strict=True):
                 options.setdefault(option, option_type)
-            parameters, types = parameters[:1], types[:1]
+            parameters, types = parameters[:count], types[:count]
         signature = next(
             (s for s in entry["signatures"] if [p["name"] for p in s["parameters"]] == parameters),
             None,
