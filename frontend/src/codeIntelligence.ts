@@ -565,7 +565,11 @@ async function sqlCompletions(
   const before = lineText.slice(0, position.column - 1);
   const after = lineText.slice(position.column - 1);
   const word = model.getWordUntilPosition(position);
-  const range = lineRange(position, word.startColumn, word.endColumn);
+  const range = lineRange(
+    position,
+    word.startColumn,
+    model.getWordAtPosition(position)?.endColumn ?? word.endColumn,
+  );
   const cursor = sqlCursor(before);
   const outline = context.template ? outlineTemplate(model.getValue()) : null;
   const declarations = outline?.declarations || [];
@@ -658,8 +662,22 @@ async function sqlCompletions(
       };
     }
     case "parameterDefault": {
+      // Values are strings, not words: a connection ID or choice can include
+      // spaces, hyphens and escaped quotes. Replace the whole value, including
+      // its suffix when completing in the middle of an existing default.
+      const suffix = cursor.quoted
+        ? /^(?:\\.|[^"\\])*/.exec(after)![0]
+        : after.trimEnd();
+      const valueRange = lineRange(
+        position,
+        position.column - cursor.prefix.length,
+        position.column + suffix.length,
+      );
       const quote = (value: string) =>
-        cursor.quoted ? value : JSON.stringify(value);
+        cursor.quoted
+          ? JSON.stringify(value).slice(1, -1) +
+            (after[suffix.length] === '"' ? "" : '"')
+          : JSON.stringify(value);
       const base = baseOf(cursor.type);
       const options =
         base === "connection"
@@ -668,7 +686,7 @@ async function sqlCompletions(
               detail: c.name,
               kind: Kind.Value,
               insertText: quote(c.id),
-              range,
+              range: valueRange,
             }))
           : base === "choice" || base === "keyword"
             ? (/\((.*)\)/.exec(cursor.type)?.[1] || "")
@@ -678,7 +696,7 @@ async function sqlCompletions(
                   label: option.trim(),
                   kind: Kind.EnumMember,
                   insertText: quote(option.trim()),
-                  range,
+                  range: valueRange,
                 }))
             : base === "boolean" && !cursor.quoted
               ? named(["true", "false"], Kind.Value)
@@ -689,7 +707,7 @@ async function sqlCompletions(
           detail: t("projectFiles"),
           kind: Kind.Value,
           insertText: '""',
-          range,
+          range: valueRange,
         });
       return { suggestions: options };
     }
@@ -703,8 +721,9 @@ async function sqlCompletions(
       const available = outline
         ? referencesAt(outline, position.lineNumber)
         : [];
-      const closing = /^\s*}}/.test(after)
-        ? after.startsWith(" ")
+      const remaining = lineText.slice(range.endColumn - 1);
+      const closing = /^\s*}}/.test(remaining)
+        ? remaining.startsWith(" ")
           ? ""
           : " "
         : " }}";
@@ -782,7 +801,10 @@ async function sqlCompletions(
             range,
           });
       suggestions.push(...columnItems(context, read, range, quoteIdentifier));
-      const calling = after.trimStart().startsWith("(");
+      const calling = lineText
+        .slice(range.endColumn - 1)
+        .trimStart()
+        .startsWith("(");
       // Functions and keywords match the start of the word only: among a
       // thousand names, loose matches would turn most words into a function.
       const typed = cursor.prefix.toLowerCase();
@@ -1126,7 +1148,11 @@ async function pythonCompletions(
     .getLineContent(position.lineNumber)
     .slice(0, position.column - 1);
   const word = model.getWordUntilPosition(position);
-  const range = lineRange(position, word.startColumn, word.endColumn);
+  const range = lineRange(
+    position,
+    word.startColumn,
+    model.getWordAtPosition(position)?.endColumn ?? word.endColumn,
+  );
   const outline = outlinePython(model.getValue());
   const cursor = pythonCursor(before);
   const named = (names: string[], kind = Kind.Variable): Item[] =>
@@ -1226,6 +1252,19 @@ async function pythonCompletions(
       return {
         suggestions: columnItems(context, new Set(), stringRange, (n) => n),
       };
+    if (purpose === "expression") {
+      const sql = sqlCursor(cursor.prefix);
+      if (sql.kind === "string" || sql.kind === "comment")
+        return { suggestions: [] };
+      const quote = before[before.length - cursor.prefix.length - 1];
+      return {
+        suggestions: columnItems(context, new Set(), range, (name) =>
+          quoteIdentifier(name)
+            .replaceAll("\\", "\\\\")
+            .replaceAll(quote, "\\" + quote),
+        ),
+      };
+    }
   }
   return { suggestions: [] };
 }

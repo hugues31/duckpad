@@ -182,7 +182,14 @@ export function stringPurpose(
   context: string,
   sdk: string | null,
 ):
-  "input" | "connection" | "schema" | "level" | "severity" | "name" | "column" {
+  | "input"
+  | "connection"
+  | "schema"
+  | "level"
+  | "severity"
+  | "name"
+  | "column"
+  | "expression" {
   if (/\binput\s*=\s*$/.test(context)) return "input";
   if (/\bconnection\s*=\s*$/.test(context)) return "connection";
   if (/\bschema\s*=\s*$/.test(context)) return "schema";
@@ -195,5 +202,11 @@ export function stringPurpose(
     (sdk && new RegExp(String.raw`\b${sdk}\.param\(\s*$`).test(context))
   )
     return "name";
+  // These DuckDB methods accept SQL inside Python strings. Complete the
+  // current identifier without replacing the expression before it.
+  if (
+    /\.(?:filter|project|select|order|aggregate|sql|query)\(\s*$/.test(context)
+  )
+    return "expression";
   return "column";
 }

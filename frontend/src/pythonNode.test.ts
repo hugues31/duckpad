@@ -103,6 +103,8 @@ describe("pythonCursor", () => {
     ).toBe("input");
     expect(stringPurpose("self.message(", "dp")).toBe("level");
     expect(stringPurpose("orders.filter(col(", "dp")).toBe("column");
+    expect(stringPurpose("orders.filter(", "dp")).toBe("expression");
+    expect(stringPurpose("self.db.sql(", "dp")).toBe("expression");
     expect(stringPurpose("dp.param(", "dp")).toBe("name");
     expect(pythonCursor("    # self.")).toEqual({ kind: "comment" });
   });
