@@ -40,6 +40,10 @@ view. **Auto-arrange nodes** places dependencies in columns, orders each column 
 avoid crossing links, and lines up linked sockets. Drag a port onto empty space to
 add a compatible connected node.
 
+Press **Escape** to clear the selection and close its inspector and results.
+Selecting a node opens both panels again. If a dialog is open, Escape dismisses
+that dialog first.
+
 Select one or more nodes and press **M**, or choose **Mute node (M)** among a
 node's actions, to bypass their code; repeat to restore it. A muted node is faded, with a
 dashed outline and its links drawn through it, and its inspector offers **Unmute

@@ -19,6 +19,7 @@ import { Maximize, Sparkles, Workflow } from "lucide-react";
 import {
   useCallback,
   useEffect,
+  useEffectEvent,
   useImperativeHandle,
   useMemo,
   useRef,
@@ -204,6 +205,30 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
   const lanes = useMemo(() => orthogonalLanes(endpoints), [endpoints]);
   const [hovered, setHovered] = useState<string | null>(null);
   const [selectedEdges, setSelectedEdges] = useState(new Set<string>());
+  const dismissSelection = useEffectEvent((event: KeyboardEvent) => {
+    if (
+      event.key !== "Escape" ||
+      event.defaultPrevented ||
+      event.isComposing ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.shiftKey ||
+      blockingDialogShown()
+    )
+      return;
+    event.preventDefault();
+    setFocus(null);
+    setNodes((current) =>
+      current.map((node) => ({ ...node, selected: false })),
+    );
+    setSelectedEdges(new Set());
+    props.onSelect(null);
+  });
+  useEffect(() => {
+    document.addEventListener("keydown", dismissSelection);
+    return () => document.removeEventListener("keydown", dismissSelection);
+  }, []);
   const edges = useMemo(() => {
     const selected = new Set(
       nodes.filter((node) => node.selected).map((node) => node.id),

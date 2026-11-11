@@ -99,6 +99,77 @@ const node = (page: Page, id: string) =>
 const select = (page: Page, id: string, modifiers: "Shift"[] = []) =>
   node(page, id).locator(".node-shape").click({ modifiers });
 
+test("Escape clears the selection and closes its inspector and results", async ({
+  page,
+}) => {
+  const { read } = await prepare(page);
+  const before = await read();
+  const inspector = page.locator(".inspector");
+  const results = page.getByRole("region", { name: "Results", exact: true });
+  const selected = page.locator(".react-flow__node.selected");
+
+  for (const focus of ["canvas", "inspector", "results"]) {
+    await select(page, "filtered");
+    await expect(inspector).toBeVisible();
+    await expect(results).toBeVisible();
+    await expect(selected).toHaveCount(1);
+    if (focus === "inspector")
+      await inspector.getByRole("textbox", { name: "Display name" }).focus();
+    else if (focus === "results")
+      await results.getByRole("tab", { name: "Data", exact: true }).focus();
+    else await node(page, "filtered").focus();
+    await page.keyboard.press("Escape");
+    await expect(inspector).toBeHidden();
+    await expect(results).toBeHidden();
+    await expect(selected).toHaveCount(0);
+  }
+
+  await select(page, "filtered");
+  await select(page, "rows", ["Shift"]);
+  await expect(selected).toHaveCount(2);
+  await page.keyboard.press("Escape");
+  await expect(selected).toHaveCount(0);
+  await expect(inspector).toBeHidden();
+  await expect(results).toBeHidden();
+  await expect(page.locator(".group-button")).toBeHidden();
+  await page.keyboard.press("Escape");
+  expect((await read()).commit).toBe(before.commit);
+  await select(page, "filtered");
+  await expect(inspector).toBeVisible();
+  await expect(results).toBeVisible();
+});
+
+test("Escape yields to a dialog and saves pending inspector edits when dismissing", async ({
+  page,
+}) => {
+  const { read } = await prepare(page);
+  await select(page, "filtered");
+  await page
+    .getByRole("button", { name: "About Duckpad", exact: true })
+    .click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  const inspector = page.locator(".inspector");
+  await expect(inspector).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Results", exact: true }),
+  ).toBeVisible();
+  await expect(node(page, "filtered")).toHaveClass(/selected/);
+
+  await autosaved(page, async () => {
+    await inspector
+      .getByRole("textbox", { name: "Display name" })
+      .fill("Renamed filter");
+    await page.keyboard.press("Escape");
+  });
+  await expect(inspector).toBeHidden();
+  expect(
+    (await read()).bundle!.flow.nodes.find((item) => item.id === "filtered")
+      ?.label,
+  ).toBe("Renamed filter");
+});
+
 test("mute shortcuts and menu preserve the graph and bypass execution", async ({
   page,
 }) => {

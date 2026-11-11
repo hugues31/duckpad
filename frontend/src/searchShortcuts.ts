@@ -7,7 +7,7 @@ export const searchShortcutLabel = (key: string) =>
 export const blockingDialogShown = () =>
   Array.from(
     document.querySelectorAll(
-      '[role="dialog"]:not([aria-modal="false"]), [role="alertdialog"]',
+      'dialog[open], [role="dialog"]:not([aria-modal="false"]), [role="alertdialog"]',
     ),
   ).some((dialog) => dialog.getClientRects().length > 0);
 
