@@ -103,6 +103,16 @@ details, show its environment, completed nodes (or partitions, failed ones
 counted separately) and an approximate time remaining. The estimate uses previous
 successful node durations in the same worktree and environment.
 
+On the canvas, nodes waiting in the run show **Pending**, and running nodes show
+their elapsed time. A node with a previous successful duration fills from left to
+right with its expected progress, keeping the last part of the fill for the
+actual result; a component combines the nodes inside it. Without a previous
+duration, or once a node runs longer than before, a sweep shows activity instead
+of progress, and the status tooltip compares both durations. Links into running
+nodes animate, and links between nodes this run finished stay highlighted. With
+reduced motion, the sweep and the pulse around running nodes are replaced by a
+steady tint.
+
 Successful canvas nodes show the primary output's row count; stale, failed and
 warning indicators remain visible. Results belong to a branch and environment;
 see [result lifetime](RESULTS.md#result-lifetime) and

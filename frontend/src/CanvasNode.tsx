@@ -16,6 +16,7 @@ import {
   FileOutput,
   Filter,
   GitMerge,
+  Hourglass,
   Link,
   Loader2,
   Sigma,
@@ -25,8 +26,11 @@ import {
 import { memo, useEffect, type ComponentProps } from "react";
 import { PythonIcon } from "./AddIcon";
 import { WarningBadge } from "./ExecutionMessages";
-import { useT } from "./i18n";
+import { useT, type Translate } from "./i18n";
+import { NodeProgressFill, useNow } from "./NodeProgressFill";
 import type { PartitionNode } from "./partitions";
+import { seconds } from "./results";
+import { elapsedDuration, overran, type NodeProgress } from "./runEstimate";
 import type { TemplateKind } from "./types";
 
 /** The icon of a template, from its ID, or of any component. */
@@ -82,6 +86,8 @@ type PipelineData = {
   linked?: string;
   warnings: number;
   partition?: PartitionNode;
+  /** What the active run does with the node, if it is in its scope. */
+  progress?: NodeProgress;
 };
 
 export type PipelineNode = Node<PipelineData, "pipeline">;
@@ -119,6 +125,10 @@ export function PipelineNodeView({
   const Port = preview ? PreviewHandle : Handle;
   const square = data.kind === "source" || data.kind === "export";
   const StatusTag = data.status === "failed" ? "button" : "span";
+  const progress = data.progress;
+  const running = progress?.phase === "running";
+  const queued = progress?.phase === "queued";
+  const now = useNow(running);
   const portPosition = (index: number, count: number) => {
     const spacing = Math.min(24, 72 / Math.max(1, count - 1));
     const top = 48 + (index - (count - 1) / 2) * spacing;
@@ -127,7 +137,7 @@ export function PipelineNodeView({
   };
   return (
     <div
-      className={`pipeline-node ${square ? "square-node" : "round-node"} ${data.kind} ${selected ? "is-selected" : ""} ${data.muted ? "is-muted" : ""}`}
+      className={`pipeline-node ${square ? "square-node" : "round-node"} ${data.kind} ${selected ? "is-selected" : ""} ${data.muted ? "is-muted" : ""} ${running ? "is-running" : ""} ${queued ? "is-queued" : ""}`}
     >
       {data.muted && data.inputs.length > 0 && (
         <svg
@@ -152,6 +162,13 @@ export function PipelineNodeView({
         </svg>
       )}
       <div className="node-shape">
+        {!preview && (
+          <NodeProgressFill
+            progress={progress}
+            status={data.status}
+            now={now}
+          />
+        )}
         <NodeIcon kind={data.icon} size={27} strokeWidth={1.6} />
       </div>
       <div className="node-title" title={data.label}>
@@ -185,29 +202,49 @@ export function PipelineNodeView({
           </span>
         )}
         <WarningBadge count={data.warnings} />
-        {(data.status === "valid" || data.status === "success") &&
-          data.count != null && (
-            <span className="node-row-count">
-              {data.count.toLocaleString()}{" "}
-              {t(data.count === 1 ? "row" : "rows")}
+        {queued ? (
+          <span className="node-status pending" title={t("pendingNodeHint")}>
+            <Hourglass size={13} aria-hidden="true" />
+            <span>{t("pending")}</span>
+          </span>
+        ) : running && progress.started !== undefined ? (
+          <span
+            className="node-status running"
+            title={runningHint(progress, now, t)}
+          >
+            <Loader2 size={13} className="spin" aria-hidden="true" />
+            <span>{t("running")}</span>
+            <span className="node-status-time">
+              {elapsedDuration((now - progress.started) / 1000)}
             </span>
-          )}
-        {data.status &&
-          data.status !== "valid" &&
-          data.status !== "success" && (
-            <StatusTag
-              className={`node-status ${data.status}`}
-              title={t(data.status)}
-            >
-              <StatusIcon
-                status={data.status}
-                size={13}
-                className={data.status === "running" ? "spin" : ""}
-                aria-hidden="true"
-              />
-              <span>{t(data.status)}</span>
-            </StatusTag>
-          )}
+          </span>
+        ) : (
+          <>
+            {(data.status === "valid" || data.status === "success") &&
+              data.count != null && (
+                <span className="node-row-count">
+                  {data.count.toLocaleString()}{" "}
+                  {t(data.count === 1 ? "row" : "rows")}
+                </span>
+              )}
+            {data.status &&
+              data.status !== "valid" &&
+              data.status !== "success" && (
+                <StatusTag
+                  className={`node-status ${data.status}`}
+                  title={t(data.status)}
+                >
+                  <StatusIcon
+                    status={data.status}
+                    size={13}
+                    className={data.status === "running" ? "spin" : ""}
+                    aria-hidden="true"
+                  />
+                  <span>{t(data.status)}</span>
+                </StatusTag>
+              )}
+          </>
+        )}
       </div>
       {data.inputs.map((port: string, i: number) => (
         <Port
@@ -254,6 +291,20 @@ export function PipelineNodeView({
       ))}
     </div>
   );
+}
+
+/** How long a node runs, compared with its previous duration when known. */
+function runningHint(progress: NodeProgress, now: number, t: Translate) {
+  const elapsed = t("runningFor").replace(
+    "{duration}",
+    elapsedDuration((now - progress.started!) / 1000),
+  );
+  const total = progress.total;
+  if (!total) return `${elapsed} · ${t("noPreviousDuration")}`;
+  const previous = total < 60 ? seconds(total) : elapsedDuration(total);
+  return `${elapsed} · ${t(
+    overran(progress, now) ? "longerThanPreviousRun" : "previousRunDuration",
+  ).replace("{duration}", previous)}`;
 }
 
 /** Drag images have decorative ports, without registering live connections. */

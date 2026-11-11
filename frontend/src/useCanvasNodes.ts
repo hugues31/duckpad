@@ -6,6 +6,7 @@ import { warningCount } from "./ExecutionMessages";
 import { nodeInterface } from "./graph";
 import { nodeLabel, templateLabel, useT } from "./i18n";
 import { displayNodeName } from "./nodeNames";
+import { nodeProgress } from "./runEstimate";
 import { useOptionalWorktree } from "./worktree";
 
 export function useCanvasNodes(props: CanvasProps) {
@@ -78,6 +79,10 @@ export function useCanvasNodes(props: CanvasProps) {
               connectedOutputs.has(`${node.id}\0${port}`),
             ),
             status,
+            progress: nodeProgress(
+              props.statuses.active,
+              props.prefix + node.id,
+            ),
             count: primaryOutputCount(
               node,
               props.prefix + node.id,
