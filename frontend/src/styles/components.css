@@ -43,6 +43,39 @@
 [data-theme="dark"] .button.primary {
   color: #081a33;
 }
+/* The logo tile wears the primary button's gradient and glides the same way. */
+.duck-mark {
+  border-radius: 25%;
+  background-color: var(--brand);
+  background-image: var(--brand-gradient);
+  background-size: 180% 180%;
+  background-position:
+    0% 0%,
+    100% 100%;
+  transition: background-position 600ms ease;
+  /* The duck is white: its tile must survive printing and forced colors. */
+  print-color-adjust: exact;
+  forced-color-adjust: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .duck-mark:hover,
+  a:is(:hover, :focus-visible) > .duck-mark {
+    background-position:
+      100% 100%,
+      0% 0%;
+  }
+  /* The sign-in pages have nothing to hover: their logo drifts by itself. */
+  .login-brand .duck-mark {
+    animation: duck-mark-drift 6s ease-in-out infinite alternate;
+  }
+}
+@keyframes duck-mark-drift {
+  to {
+    background-position:
+      100% 100%,
+      0% 0%;
+  }
+}
 .button.secondary {
   border: 1px solid var(--border);
   background: var(--surface);
