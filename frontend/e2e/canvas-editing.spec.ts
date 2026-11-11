@@ -421,6 +421,214 @@ test("deleting a node offers Undo, and Ctrl+Z / Ctrl+Shift+Z keep a concurrent e
   );
 });
 
+test("removal reconnects every consumer in one undoable save", async ({
+  page,
+}) => {
+  const { endpoint, read } = await prepare(page);
+  const original = await read();
+  const bundle = original.bundle!;
+  delete bundle.flow.nodes.find((item) => item.id === "filtered")!.template;
+  bundle.node_sql!["nodes/filtered.sql"] = `-- @input source
+-- @param condition: expression(source)
+-- @output result
+SELECT * FROM {{ source }} WHERE {{ condition }};`;
+  bundle.flow.nodes.push({
+    id: "extra",
+    template: "filter",
+    params: { condition: "amount < 5" },
+    position: { x: 700, y: 300 },
+  });
+  bundle.flow.edges.push({
+    id: "filtered_extra",
+    source: "filtered",
+    sourceHandle: "result",
+    target: "extra",
+    targetHandle: "source",
+  });
+  expect(
+    (
+      await page.request.put(endpoint, {
+        data: { revision: original.revision, bundle },
+      })
+    ).ok(),
+  ).toBe(true);
+  await page.reload();
+  await expect(page.locator(".react-flow__node")).toHaveCount(5);
+  const before = await read();
+  await select(page, "filtered");
+  await page
+    .getByRole("textbox", { name: "Display name", exact: true })
+    .fill("Updated filter");
+  await node(page, "filtered").click({ button: "right" });
+  await page.keyboard.press("End");
+  const reconnect = page.getByRole("menuitem", {
+    name: "Remove and reconnect (Ctrl+Delete)",
+    exact: true,
+  });
+  await expect(reconnect).toBeFocused();
+  await reconnect.press("Enter");
+  await expect(page.locator(".toast")).toContainText("2 links reconnected");
+  const removed = await read();
+  expect(removed.files["nodes/filtered.sql"]).toBeUndefined();
+  expect(removed.bundle!.flow.nodes).toEqual(
+    before.bundle!.flow.nodes.filter((item) => item.id !== "filtered"),
+  );
+  expect(removed.bundle!.flow.edges).toEqual(
+    before
+      .bundle!.flow.edges.filter((edge) => edge.source === "filtered")
+      .map((edge) => ({ ...edge, source: "rows" })),
+  );
+  removed.bundle!.flow.nodes.find((item) => item.id === "rows")!.label =
+    "Remote rows";
+  expect(
+    (
+      await page.request.put(endpoint, {
+        data: { revision: removed.revision, bundle: removed.bundle },
+      })
+    ).ok(),
+  ).toBe(true);
+  await page
+    .locator(".toast")
+    .getByRole("button", { name: "Undo", exact: true })
+    .click();
+  await expect(node(page, "filtered")).toBeVisible();
+  const restored = await read();
+  expect(restored.files["nodes/filtered.sql"]).toBe(
+    before.files["nodes/filtered.sql"],
+  );
+  expect(restored.bundle!.flow.edges).toEqual(before.bundle!.flow.edges);
+  expect(
+    restored.bundle!.flow.nodes.find((item) => item.id === "filtered")!.label,
+  ).toBe("Updated filter");
+  expect(
+    restored.bundle!.flow.nodes.find((item) => item.id === "rows")!.label,
+  ).toBe("Remote rows");
+  await page.keyboard.press("ControlOrMeta+Shift+Z");
+  await expect(page.locator(".toast")).toContainText("Change redone");
+  await expect(node(page, "filtered")).toHaveCount(0);
+  await page.reload();
+  await expect(page.locator(".react-flow__edge")).toHaveCount(2);
+  expect((await read()).bundle!.flow.edges).toEqual(removed.bundle!.flow.edges);
+});
+
+test("reconnecting keeps the node when the save fails or its links changed meanwhile", async ({
+  page,
+}) => {
+  const { endpoint, read } = await prepare(page);
+  const before = await read();
+  const reconnect = async () => {
+    await node(page, "filtered").click({ button: "right" });
+    await page.getByRole("menuitem", { name: /^Remove and reconnect/ }).click();
+  };
+  await page.route(`**${endpoint}`, (route) =>
+    route.request().method() === "PUT"
+      ? route.fulfill({ status: 503, json: { error: "Save unavailable" } })
+      : route.continue(),
+  );
+  await reconnect();
+  await expect(page.locator(".toast")).toContainText("Save unavailable");
+  expect((await read()).bundle).toEqual(before.bundle);
+  await expect(node(page, "filtered")).toBeVisible();
+  await page.unroute(`**${endpoint}`);
+  // Another editor disconnects the consumer while this page still offers the action.
+  const menu = page.getByRole("menu", { name: "Node actions", exact: true });
+  await page.route(`**${endpoint}`, async (route) =>
+    route.request().method() === "GET" && (await menu.count())
+      ? route.fulfill({ json: before })
+      : route.continue(),
+  );
+  await node(page, "filtered").click({ button: "right" });
+  const remote = structuredClone(before.bundle!);
+  remote.flow.edges = remote.flow.edges.filter(
+    (edge) => edge.source !== "filtered",
+  );
+  expect(
+    (
+      await page.request.put(endpoint, {
+        data: { revision: before.revision, bundle: remote },
+      })
+    ).ok(),
+  ).toBe(true);
+  await menu.getByRole("menuitem", { name: /^Remove and reconnect/ }).click();
+  await expect(page.locator(".toast")).toContainText(
+    "The project changed. Review the connections and try again.",
+  );
+  await expect(node(page, "filtered")).toBeVisible();
+  expect((await read()).bundle!.flow).toEqual(remote.flow);
+});
+
+test("unavailable reconnection is hidden and ordinary deletion stays disconnected", async ({
+  page,
+}) => {
+  const { read } = await prepare(page);
+  const reconnect = page.getByRole("menuitem", {
+    name: /^Remove and reconnect/,
+  });
+  for (const id of ["rows", "doubled", "boxed"]) {
+    await node(page, id).click({ button: "right" });
+    await expect(
+      page.getByRole("menu", { name: "Node actions", exact: true }),
+    ).toBeVisible();
+    await expect(reconnect).toHaveCount(0);
+    await page.keyboard.press("Escape");
+  }
+  await select(page, "filtered");
+  await page.keyboard.press("Delete");
+  await expect(node(page, "filtered")).toHaveCount(0);
+  expect((await read()).bundle!.flow.edges).toEqual([]);
+  // Sources also keep the one-click inspector action.
+  await select(page, "rows");
+  await page
+    .locator(".inspector")
+    .getByRole("button", { name: "Remove node", exact: true })
+    .click();
+  await expect(node(page, "rows")).toHaveCount(0);
+  await expect(page.getByRole("menu")).toHaveCount(0);
+});
+
+test("Ctrl/Cmd with a removal key reconnects only an eligible node and yields to typing", async ({
+  page,
+}) => {
+  const { read } = await prepare(page);
+  const before = await read();
+  // Ineligible nodes and multiple selections must never fall back to deletion.
+  await select(page, "rows");
+  await page.keyboard.press("Control+Delete");
+  await expect(node(page, "rows")).toBeVisible();
+  await select(page, "filtered");
+  await select(page, "doubled", ["Shift"]);
+  await expect(page.locator(".react-flow__node.selected")).toHaveCount(2);
+  await page.keyboard.press("Control+Delete");
+  expect((await read()).bundle!.flow).toEqual(before.bundle!.flow);
+  await select(page, "rows");
+  await select(page, "filtered");
+  await page
+    .getByRole("textbox", { name: "Display name", exact: true })
+    .focus();
+  await page.keyboard.press("Control+Delete");
+  await expect(node(page, "filtered")).toBeVisible();
+  const toast = page.locator(".toast");
+  // Mac laptops have no Delete key: theirs sends Backspace.
+  for (const shortcut of ["Control+Delete", "Meta+Backspace"]) {
+    await select(page, "filtered");
+    await page.keyboard.press(shortcut);
+    await expect(node(page, "filtered")).toHaveCount(0);
+    await expect(toast).toContainText("1 link reconnected");
+    expect((await read()).bundle!.flow.edges).toEqual([
+      { ...before.bundle!.flow.edges[1], source: "rows" },
+    ]);
+    await toast.getByRole("button", { name: "Undo", exact: true }).click();
+    await expect(toast).toContainText("Change undone");
+    await expect(node(page, "filtered")).toBeVisible();
+    expect((await read()).bundle!.flow).toEqual(before.bundle!.flow);
+  }
+  // Releasing the modifier restores ordinary keyboard removal.
+  await select(page, "filtered");
+  await page.keyboard.press("Backspace");
+  await expect(node(page, "filtered")).toHaveCount(0);
+  expect((await read()).bundle!.flow.edges).toEqual([]);
+});
+
 test("a conflicting undo is reported once, and editors wait for undos", async ({
   page,
 }) => {

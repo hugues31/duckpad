@@ -57,6 +57,15 @@ cannot be muted. Muting or unmuting makes downstream results stale until the nex
 run, and downstream code must accept the passthrough columns. The code editor's
 preview still computes the node's own code.
 
+To remove a step for good without redrawing its links, right-click it and choose
+**Remove and reconnect**, or select it and press Ctrl/Cmd+Delete (or Backspace):
+for `A -> B -> C`, removing B this way links A to C, where an ordinary removal
+leaves them disconnected. The action appears only for a transformation of the main
+flow with one input and one output, a connected source and at least one consumer.
+Every consumer then reads the upstream output, and one **Undo** restores the node,
+its code and its links. As with muting, downstream code must accept the upstream
+columns.
+
 Node names come from **Display name**, then the SQL `-- @label` directive or
 template name. Diagnostics, lineage, variable usage, conflict titles and new
 Git commits use the same names. References inside a component include its parent

@@ -4,6 +4,7 @@ import {
   Code2,
   Copy,
   Link,
+  Link2,
   Trash2,
   Undo2,
   Unlink,
@@ -14,6 +15,8 @@ import type { Translate } from "./i18n";
 import { countLabel, isBuiltinTemplate } from "./i18n";
 import { nodeCopies, type CopiedNodes } from "./nodeClipboard";
 import { canMute, detachNode, nodeGraph, templateUsage } from "./nodeCode";
+import { planNodeReconnection } from "./nodeRemoval";
+import { searchShortcutLabel } from "./searchShortcuts";
 import type { useShell } from "./shell";
 import type { Bundle, FlowNode, Snapshot } from "./types";
 import type { useLoadedWorktree } from "./worktree";
@@ -22,6 +25,8 @@ export type NodeAction = ActionItem & {
   icon: LucideIcon;
   /** A toggle that is currently on. */
   active?: boolean;
+  /** A secondary command that the inspector leaves to the canvas menu. */
+  menuOnly?: boolean;
 };
 
 export function nodeActions(
@@ -40,6 +45,7 @@ export function nodeActions(
     openModal,
     worktree,
     removeNodes,
+    reconnectNode,
     toggleMute,
   }: {
     t: Translate;
@@ -55,6 +61,7 @@ export function nodeActions(
     openModal: ReturnType<typeof useShell>["openModal"];
     worktree: string;
     removeNodes: (ids: string[]) => Promise<void>;
+    reconnectNode: (id: string) => Promise<void>;
     toggleMute: (ids: string[]) => Promise<void>;
   },
 ): NodeAction[] {
@@ -148,5 +155,16 @@ export function nodeActions(
     ),
     danger: true,
   });
+  // Offered only where the bypass is unambiguous.
+  if (planNodeReconnection(snapshot, target.id, parent))
+    actions.push({
+      ...item(
+        "removeReconnect",
+        Link2,
+        `${t("deleteNodeReconnect")} (${searchShortcutLabel(t("deleteKey"))})`,
+        () => safe(() => reconnectNode(target.id)),
+      ),
+      menuOnly: true,
+    });
   return actions;
 }

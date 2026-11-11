@@ -466,6 +466,7 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
           !props.readOnly &&
           !pendingConnection &&
           !context &&
+          !document.activeElement?.closest('[role="menu"]') &&
           !blockingDialogShown() &&
           !typingTarget(document.activeElement)
         }

@@ -15,6 +15,7 @@ export function useFlowShortcuts({
   copy,
   paste,
   toggleMute,
+  reconnect,
 }: {
   canEdit: boolean;
   addingNode: boolean;
@@ -28,6 +29,7 @@ export function useFlowShortcuts({
   copy: (ids: string[]) => Promise<void>;
   paste: (copied: CopiedNodes) => Promise<void>;
   toggleMute: (ids: string[]) => Promise<void>;
+  reconnect: (id: string) => Promise<void>;
 }) {
   const shortcut = useEffectEvent((event: KeyboardEvent) => {
     if (
@@ -75,8 +77,40 @@ export function useFlowShortcuts({
       if (!event.repeat) safe(() => paste(copied));
     }
   });
+  const reconnectShortcut = useEffectEvent((event: KeyboardEvent) => {
+    if (
+      // Either removal key: Mac laptops only have the one that sends Backspace.
+      (event.key !== "Delete" && event.key !== "Backspace") ||
+      !(event.ctrlKey || event.metaKey) ||
+      event.defaultPrevented ||
+      event.isComposing ||
+      typingTarget(event.target) ||
+      blockingDialogShown() ||
+      (event.target instanceof Element && event.target.closest('[role="menu"]'))
+    )
+      return;
+    // Never fall back to ordinary removal, even when React Flow lost track of the modifier.
+    event.preventDefault();
+    event.stopPropagation();
+    if (
+      event.altKey ||
+      event.shiftKey ||
+      event.repeat ||
+      !canEdit ||
+      busy ||
+      addingNode ||
+      !bundle
+    )
+      return;
+    const ids = selection.length ? selection : selected ? [selected] : [];
+    if (ids.length === 1) safe(() => reconnect(ids[0]));
+  });
   useEffect(() => {
     document.addEventListener("keydown", shortcut);
-    return () => document.removeEventListener("keydown", shortcut);
+    document.addEventListener("keydown", reconnectShortcut, true);
+    return () => {
+      document.removeEventListener("keydown", shortcut);
+      document.removeEventListener("keydown", reconnectShortcut, true);
+    };
   }, []);
 }

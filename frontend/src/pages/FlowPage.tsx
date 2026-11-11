@@ -215,6 +215,7 @@ export default function FlowPage() {
     addNode,
     dropFiles,
     removeNodes,
+    reconnectNode,
     paste,
     addFilterNode,
     toggleMute,
@@ -313,6 +314,7 @@ export default function FlowPage() {
       openModal,
       worktree,
       removeNodes,
+      reconnectNode,
       toggleMute,
     });
   return (

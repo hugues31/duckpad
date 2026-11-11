@@ -5,7 +5,7 @@ import {
   type RefObject,
   type SetStateAction,
 } from "react";
-import { api, uploadSourceFile } from "./api";
+import { api, send, uploadSourceFile } from "./api";
 import type { CanvasHandle, FocusRequest } from "./canvasTypes";
 import {
   addFlowFilter,
@@ -21,8 +21,9 @@ import {
   type PathPart,
 } from "./graph";
 import { findNodePosition } from "./graphLayout";
-import { useT } from "./i18n";
+import { countLabel, useT } from "./i18n";
 import { canMute } from "./nodeCode";
+import { planNodeReconnection } from "./nodeRemoval";
 import {
   copyNodes,
   pastableNodes,
@@ -63,6 +64,7 @@ export function useFlowEditing({
     saving,
     settle,
     save,
+    commit,
     undo,
     redo,
   } = useLoadedWorktree();
@@ -73,7 +75,10 @@ export function useFlowEditing({
   const additionPending = useRef(false);
   // Undos and redos in flight; editors stay inert so no edit races them.
   const [reverting, setReverting] = useState(0);
-  const busy = addingNode || reverting > 0;
+  // A reconnection in flight; a second one would plan on the graph it replaces.
+  const [removing, setRemoving] = useState(false);
+  const removalPending = useRef(false);
+  const busy = addingNode || reverting > 0 || removing;
   async function updateGraph(change: (graph: Graph) => void) {
     if (!canEdit) return;
     await save(snapshot, (value) => change(graphAt(value, path)));
@@ -196,6 +201,37 @@ export function useFlowEditing({
         { label: t("undo"), run: () => revert("undo", change) },
       );
   }
+  /** Remove a node and link its source to its consumers, as one change. */
+  async function reconnectNode(id: string) {
+    if (!canEdit || busy || removalPending.current) return;
+    removalPending.current = true;
+    setRemoving(true);
+    try {
+      let links = 0;
+      // Plan on the saved graph: a pending draft may have changed the node's ports.
+      const { change } = await commit((base) => {
+        const reconnected = planNodeReconnection(base, id, parent);
+        if (!reconnected) throw new Error(t("reconnectChanged"));
+        links = reconnected.length;
+        const bundle = structuredClone(base.bundle!);
+        removeFlowNodes(bundle, path, [id], [], reconnected);
+        return api<Snapshot>(
+          `/worktrees/${worktree}`,
+          send({ revision: base.revision, bundle }, "PUT"),
+        );
+      });
+      if (selected === id) select(null);
+      if (change)
+        notify(
+          countLabel(t, links, "nodeReconnectedOne", "nodeReconnectedMany"),
+          false,
+          { label: t("undo"), run: () => revert("undo", change) },
+        );
+    } finally {
+      removalPending.current = false;
+      setRemoving(false);
+    }
+  }
   /** Undo or redo a change, from a shortcut or a toast, and report it. */
   function revert(direction: "undo" | "redo", change?: string) {
     setReverting((count) => count + 1);
@@ -261,6 +297,9 @@ export function useFlowEditing({
     copy,
     paste,
     toggleMute,
+    reconnect: async (id) => {
+      if (planNodeReconnection(snapshot, id, parent)) await reconnectNode(id);
+    },
   });
   /** Insert a Filter node reading one output of the selected node, with a sample's condition. */
   async function addFilterNode(port: string, condition: string) {
@@ -288,6 +327,7 @@ export function useFlowEditing({
     addNode,
     dropFiles,
     removeNodes,
+    reconnectNode,
     paste,
     addFilterNode,
     toggleMute,

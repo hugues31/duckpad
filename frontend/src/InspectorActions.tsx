@@ -47,20 +47,22 @@ export default function InspectorActions({
             <Play size={15} aria-hidden="true" />
           )}
         </button>
-        {others.map((action) => (
-          <button
-            key={action.id}
-            className={
-              action.danger ? "danger" : action.active ? "active" : undefined
-            }
-            aria-label={action.label}
-            data-tooltip={action.label}
-            disabled={action.disabled}
-            onClick={action.run}
-          >
-            <action.icon size={15} aria-hidden="true" />
-          </button>
-        ))}
+        {others
+          .filter((action) => !action.menuOnly)
+          .map((action) => (
+            <button
+              key={action.id}
+              className={
+                action.danger ? "danger" : action.active ? "active" : undefined
+              }
+              aria-label={action.label}
+              data-tooltip={action.label}
+              disabled={action.disabled}
+              onClick={action.run}
+            >
+              <action.icon size={15} aria-hidden="true" />
+            </button>
+          ))}
       </div>
     </div>
   );

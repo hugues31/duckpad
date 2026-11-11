@@ -11,7 +11,7 @@ import {
   nodeCodePath,
   setNodeCode,
 } from "./nodeCode";
-import type { Bundle, FlowNode, Json, ParsedTemplate } from "./types";
+import type { Bundle, FlowEdge, FlowNode, Json, ParsedTemplate } from "./types";
 
 /** A Filter node's code when the project has no `filter` template to copy. */
 const FILTER_SQL =
@@ -91,6 +91,7 @@ export function removeFlowNodes(
   path: PathPart[],
   ids: string[],
   edges: string[] = [],
+  reconnected: FlowEdge[] = [],
 ) {
   const parent = path.at(-1)?.definition;
   const g = graphAt(value, path);
@@ -107,6 +108,7 @@ export function removeFlowNodes(
       !ids.includes(e.source) &&
       !ids.includes(e.target),
   );
+  g.edges.push(...reconnected);
 }
 
 export function addFlowFilter(

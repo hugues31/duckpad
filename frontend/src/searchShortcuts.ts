@@ -1,7 +1,8 @@
 import { useEffect } from "react";
 
+/** A Ctrl/Cmd shortcut as shown to the user; named keys keep their case. */
 export const searchShortcutLabel = (key: string) =>
-  `${/Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl+"}${key.toUpperCase()}`;
+  `${/Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl+"}${key.length === 1 ? key.toUpperCase() : key}`;
 
 /**
  * The shown dialogs matching a selector, in document order. A code editor's
