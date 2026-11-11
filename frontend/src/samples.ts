@@ -108,7 +108,7 @@ export function sampleSql(port: string, sample: Sample) {
 
 // DuckDB keywords that a column reference must quote: duckdb_keywords() of the
 // "reserved" and "type_function" categories.
-const KEYWORDS = new Set(
+export const RESERVED_KEYWORDS = new Set(
   (
     "all analyse analyze and anti any array as asc asof asymmetric at " +
     "authorization binary both by case cast check collate collation column " +
@@ -126,7 +126,7 @@ const KEYWORDS = new Set(
 /** A DuckDB identifier, quoted only when it needs to be. */
 export function quoteIdentifier(name: string) {
   return /^[A-Za-z_][A-Za-z0-9_]*$/.test(name) &&
-    !KEYWORDS.has(name.toLowerCase())
+    !RESERVED_KEYWORDS.has(name.toLowerCase())
     ? name
     : `"${name.replaceAll('"', '""')}"`;
 }

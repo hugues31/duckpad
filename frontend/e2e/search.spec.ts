@@ -474,12 +474,17 @@ test("search shortcuts preserve editor, form and dialog keyboard behavior", asyn
   await expect(editor).toBeVisible();
   await editor.focus();
   await page.keyboard.press("Control+f");
-  await expect(editor).toBeFocused();
+  // The editor's own find box answers, not the page's search.
+  const find = page.locator(".monaco-editor .find-widget.visible");
+  await expect(
+    find.getByRole("textbox", { name: "Find", exact: true }),
+  ).toBeFocused();
   await expect(
     page.getByRole("dialog", { name: "Search instance", exact: true }),
   ).toHaveCount(0);
   await page.keyboard.press("Escape");
-  await editor.focus();
+  await expect(find).toHaveCount(0);
+  await expect(editor).toBeFocused();
   await page.keyboard.press("Control+k");
   await expect(
     page.getByRole("dialog", { name: "Search instance", exact: true }),

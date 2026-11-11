@@ -240,3 +240,11 @@
     flex-wrap: wrap;
   }
 }
+
+/* Suggestions, hovers and hints of the code editors, above panels and dialogs. */
+.monaco-editor.code-editor-overflow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 250;
+}

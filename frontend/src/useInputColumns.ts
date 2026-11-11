@@ -68,11 +68,14 @@ export function useInputColumns(
     statuses.active?.id,
     statuses.nodes,
   ]);
+  // A template opened outside any node has no inputs to describe.
   const resource = useApiResource<InputColumns>(
-    withQuery(
-      `/worktrees/${snapshot.worktree.id}/input-columns/${encodeURIComponent(fullNode)}`,
-      { environment, ...partition },
-    ),
+    fullNode
+      ? withQuery(
+          `/worktrees/${snapshot.worktree.id}/input-columns/${encodeURIComponent(fullNode)}`,
+          { environment, ...partition },
+        )
+      : null,
     { refresh },
   );
   const columns = useMemo(
