@@ -119,7 +119,7 @@ async function example(page: Page) {
   return worktree;
 }
 
-async function run(page: Page) {
+async function run(page: Page, timeout = 30000) {
   const response = page.waitForResponse(
     (r) => r.url().endsWith("/runs") && r.request().method() === "POST",
   );
@@ -132,9 +132,26 @@ async function run(page: Page) {
       async () =>
         (await (await page.request.get(`/api/runs/${execution.id}`)).json())
           .status,
-      { timeout: 30000 },
+      { timeout },
     )
     .toBe("success");
+}
+
+/** Fit the graph in the canvas and wait until the viewport stops moving. */
+async function fitted(page: Page) {
+  await page.getByRole("button", { name: "Fit view", exact: true }).click();
+  const viewport = page.locator(".react-flow__viewport");
+  let previous = "";
+  await expect
+    .poll(async () => {
+      const current = await viewport.evaluate(
+        (element) => getComputedStyle(element).transform,
+      );
+      const stable = current === previous;
+      previous = current;
+      return stable;
+    })
+    .toBe(true);
 }
 
 test("capture project creation, results, lineage and SQL", async ({ page }) => {
@@ -1127,6 +1144,154 @@ test("capture SSO configuration and the enabled sign-in choice", async ({
       (await page.request.put("/api/sso", { data: { enabled: false } })).ok(),
     ).toBeTruthy();
   }
+});
+
+// The README shows the application at GitHub's content width: a smaller
+// viewport at double density keeps its text legible there.
+test.describe("README", () => {
+  test.use({ viewport: { width: 1280, height: 960 }, deviceScaleFactor: 2 });
+
+  test("capture the README workspace in both themes", async ({ page }) => {
+    await example(page);
+    await run(page);
+    await page.evaluate(() =>
+      localStorage.setItem(
+        "duckpad-panel-sizes",
+        JSON.stringify({ preview: 320 }),
+      ),
+    );
+    for (const theme of ["light", "dark"] as const) {
+      // Added after the suite's light theme, so this one applies on reload.
+      await page.addInitScript(
+        (value) => localStorage.setItem("duckpad-theme", value),
+        theme,
+      );
+      await page.emulateMedia({ colorScheme: theme });
+      await page.reload();
+      await node(page, "Paid orders").click();
+      await expect(page.locator(".preview-header .badge")).toHaveText("Valid");
+      // The canvas takes the inspector's room and fits the whole example.
+      await page
+        .getByRole("button", { name: "Toggle inspector", exact: true })
+        .click();
+      await expect(page.locator(".inspector")).toBeHidden();
+      await fitted(page);
+      await capture(
+        page,
+        theme === "light" ? "readme-workspace" : "readme-workspace-dark",
+      );
+    }
+  });
+
+  test("capture custom nodes using the code printed in the README", async ({
+    page,
+  }) => {
+    // The first Python run also prepares the project's environment.
+    test.setTimeout(240000);
+    await page.setViewportSize({ width: 1280, height: 860 });
+    const readme = readFileSync(resolve("../README.md"), "utf8");
+    const printed = (language: string) => {
+      const blocks = [
+        ...readme.matchAll(
+          new RegExp("```" + language + "\\n([\\s\\S]*?)```", "g"),
+        ),
+      ];
+      expect(blocks).toHaveLength(1);
+      return blocks[0][1];
+    };
+    const tree = await (
+      await page.request.post("/api/projects", {
+        data: { name: "Custom nodes" },
+      })
+    ).json();
+    expect(
+      (
+        await page.request.put(`/api/projects/${tree.project}/python`, {
+          data: { enabled: true, allow_builds: false },
+        })
+      ).ok(),
+    ).toBeTruthy();
+    const url = `/api/worktrees/${tree.id}`;
+    const snapshot = await (await page.request.get(url)).json();
+    const flow = JSON.parse(snapshot.files["flow.json"]);
+    flow.nodes = [
+      { id: "orders", params: {}, position: { x: 40, y: 120 } },
+      {
+        id: "split",
+        template: "split_orders.py",
+        language: "python",
+        params: {},
+        position: { x: 330, y: 120 },
+      },
+      {
+        id: "revenue",
+        template: "revenue_breakdown",
+        params: {},
+        position: { x: 620, y: 60 },
+      },
+    ];
+    flow.edges = [
+      {
+        id: "orders_split",
+        source: "orders",
+        sourceHandle: "result",
+        target: "split",
+        targetHandle: "orders",
+      },
+      {
+        id: "split_revenue",
+        source: "split",
+        sourceHandle: "accepted",
+        target: "revenue",
+        targetHandle: "orders",
+      },
+    ];
+    const saved = await page.request.put(url, {
+      data: {
+        revision: snapshot.revision,
+        files: {
+          ...snapshot.files,
+          "flow.json": JSON.stringify(flow),
+          "nodes/orders.sql": `-- @label Orders
+-- @output result
+SELECT i AS order_id,
+  ['Juniper Studio', 'Atlas Bikes', 'Cedar & Co', 'Harbor Foods'][1 + i % 4] AS customer_name,
+  ['North', 'South', 'East', 'West'][1 + (i // 4) % 4] AS region,
+  60 + (i * 37) % 440 AS amount
+FROM range(1, 121) t(i);
+`,
+          "templates/revenue_breakdown.sql": printed("sql"),
+          "templates/split_orders.py": printed("python"),
+        },
+      },
+    });
+    expect(saved.ok(), await saved.text()).toBeTruthy();
+    await page.evaluate(() =>
+      localStorage.setItem(
+        "duckpad-panel-sizes",
+        JSON.stringify({ preview: 300 }),
+      ),
+    );
+    await page.goto(`/worktrees/${tree.id}/flow`);
+    await expect(page.locator(".react-flow__node")).toHaveCount(3);
+    await run(page, 180000);
+    // Reloading leaves the environment preparation notice behind.
+    await page.reload();
+    await node(page, "Split orders").click();
+    await expect(page.locator(".preview-header .badge")).toHaveText("Valid");
+    // The form comes from the class attributes; the palette lists both nodes.
+    const inspector = page.locator(".inspector");
+    await expect(
+      inspector.getByRole("textbox", { name: /minimum/ }),
+    ).toHaveValue("300");
+    const palette = page.locator(".palette-list");
+    await palette.evaluate((list) => list.scrollTo(0, list.scrollHeight));
+    for (const name of ["Revenue breakdown", "Split orders"])
+      await expect(
+        palette.getByRole("button", { name, exact: true }),
+      ).toBeInViewport();
+    await capture(page, "readme-custom-nodes");
+  });
 });
 
 test("assistant settings and contextual chat", async ({ page }) => {
