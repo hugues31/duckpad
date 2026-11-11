@@ -114,6 +114,7 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
     () => setPendingConnection(null),
     [],
   );
+  const reconnecting = useRef(false);
   const flow = useRef<HTMLDivElement>(null);
   useDoubleClickGuard(flow, props.onOpen);
   const displayNodes = useCanvasNodes(props);
@@ -428,9 +429,36 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
                 props.onConnect(connection as Omit<FlowEdge, "id">)
         }
         onConnectStart={closeConnectionPalette}
+        onReconnectStart={() => {
+          reconnecting.current = true;
+        }}
+        onReconnect={(edge, connection) => {
+          if (!props.readOnly)
+            props.onReconnect(edge.id, connection as Omit<FlowEdge, "id">);
+        }}
+        onReconnectEnd={(event, edge, _, connection) => {
+          reconnecting.current = false;
+          // Invalid handles can be transparent to pointer hit testing while dragging.
+          if (props.readOnly || connection.isValid || connection.toHandle)
+            return;
+          const pointer =
+            "changedTouches" in event ? event.changedTouches[0] : event;
+          if (!pointer) return;
+          // Only dropping on empty canvas disconnects a link. Invalid ports,
+          // node bodies and controls keep the saved connection intact.
+          const target = document.elementFromPoint(
+            pointer.clientX,
+            pointer.clientY,
+          );
+          if (!target?.classList.contains("react-flow__pane")) return;
+          void props.onDelete([], [edge.id]).catch(() => {
+            // The workspace reports the error; edges still use the saved graph.
+          });
+        }}
         onConnectEnd={(event, connection) => {
           if (
             props.readOnly ||
+            reconnecting.current ||
             connection.isValid ||
             !connection.fromNode ||
             !connection.fromHandle?.id
@@ -520,6 +548,7 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
         minZoom={0.1}
         maxZoom={1.8}
         connectionRadius={28}
+        reconnectRadius={16}
         deleteKeyCode={DELETE_KEYS}
         selectionKeyCode="Shift"
         multiSelectionKeyCode="Shift"

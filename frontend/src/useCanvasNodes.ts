@@ -55,6 +55,8 @@ export function useCanvasNodes(props: CanvasProps) {
           type: "pipeline" as const,
           position: node.position || { x: 0, y: 0 },
           selected: node.id === props.selected,
+          // Transparent padding must let the link's reconnect handles receive drags.
+          style: { pointerEvents: "none" },
           data: {
             muted: node.muted,
             fullNode: props.prefix + node.id,

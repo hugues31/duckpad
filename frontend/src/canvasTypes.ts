@@ -44,6 +44,7 @@ export interface CanvasProps {
   onSelect: (id: string | null) => void;
   onMove: (nodes: FlowNode[]) => Promise<void>;
   onConnect: (edge: Omit<FlowEdge, "id">) => void;
+  onReconnect: (id: string, edge: Omit<FlowEdge, "id">) => void;
   /** Resolve once the deletion is saved; reject if it failed. */
   onDelete: (nodes: string[], edges: string[]) => Promise<void>;
   onAdd: (

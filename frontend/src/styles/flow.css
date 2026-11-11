@@ -554,6 +554,12 @@ fieldset.palette-bottom {
   align-items: center;
   color: var(--text);
 }
+/* Only visible node content catches pointers; ports keep React Flow's own rules. */
+.react-flow__node-pipeline
+  .pipeline-node
+  > :not(.node-passthrough, .react-flow__handle) {
+  pointer-events: auto;
+}
 /* Palette drags: the origin follows the pointer, where the shape center drops. */
 .node-drag-preview {
   position: fixed;

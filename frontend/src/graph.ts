@@ -238,3 +238,20 @@ export function connectInput(graph: Graph, edge: Omit<FlowEdge, "id">) {
   );
   graph.edges.push({ ...edge, id: identifier("edge") });
 }
+
+/** Move a link without changing its identity, replacing an occupied input. */
+export function reconnectInput(
+  graph: Graph,
+  id: string,
+  connection: Omit<FlowEdge, "id">,
+) {
+  if (!graph.edges.some((edge) => edge.id === id)) return;
+  graph.edges = graph.edges
+    .filter(
+      (edge) =>
+        edge.id === id ||
+        edge.target !== connection.target ||
+        edge.targetHandle !== connection.targetHandle,
+    )
+    .map((edge) => (edge.id === id ? { ...edge, ...connection } : edge));
+}
