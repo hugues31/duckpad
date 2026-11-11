@@ -14,7 +14,7 @@ import { Link } from "react-router";
 import { withQuery } from "./api";
 import AskAssistant from "./AskAssistant";
 import { messageOrigin, WarningBadge } from "./ExecutionMessages";
-import ExportDownload from "./ExportDownload";
+import ExportDownload, { type ExportDownloadState } from "./ExportDownload";
 import { countLabel, useT } from "./i18n";
 import { worktreeUrl } from "./navigation";
 import { partitionMessage } from "./partitions";
@@ -73,7 +73,8 @@ export default function ResultsLog({
   environment: string;
   fullNode: string;
   exportNode: boolean;
-  download: boolean;
+  /** The download the node offers, if any; the panel header shares its state. */
+  download: ExportDownloadState | null;
   readOnly: boolean;
   result?: NodeResult;
   /** Whether the panel already shows this run's error above the log. */
@@ -120,12 +121,7 @@ export default function ResultsLog({
         <div>
           <strong>{t("notRunHere")}</strong>
           {exportNode && download ? (
-            <ExportDownload
-              key={`${worktree}:${environment}:${fullNode}`}
-              worktree={worktree}
-              environment={environment}
-              node={fullNode}
-            />
+            <ExportDownload state={download} />
           ) : (
             <p className="muted small">
               {t(
@@ -394,14 +390,7 @@ export default function ResultsLog({
             {state.external_outcome && (
               <p className="small">{t(OUTCOMES[state.external_outcome])}</p>
             )}
-            {download && (
-              <ExportDownload
-                key={`${worktree}:${environment}:${fullNode}:${run.id}`}
-                worktree={worktree}
-                environment={environment}
-                node={fullNode}
-              />
-            )}
+            {download && <ExportDownload state={download} />}
           </section>
         )}
         {statements.length > 0 && (

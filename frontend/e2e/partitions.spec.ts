@@ -287,6 +287,8 @@ test("partition controls preserve selection and explain failed keys", async ({
   await expect(page.locator(".partition-menu")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.locator(".partition-menu")).toHaveCount(0);
+  // Escape closed the menu only: the selected node keeps its results.
+  await expect(panel).toBeVisible();
   await page
     .getByRole("button", { name: "Partition: batch-012", exact: true })
     .click();

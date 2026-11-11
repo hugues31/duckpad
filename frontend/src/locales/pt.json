@@ -210,6 +210,7 @@
   "preview": "Pré-visualização dos dados",
   "noResult": "Pronto quando você estiver",
   "noResultHint": "Execute este nó e seus ancestrais para materializar uma pré-visualização.",
+  "inputsNoResultHint": "Execute os ancestrais deste nó para ver as linhas que ele recebe. O próprio nó não é executado.",
   "valid": "Válido",
   "stale": "Desatualizado",
   "failed": "Com falha",

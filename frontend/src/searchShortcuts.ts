@@ -17,7 +17,7 @@ export const shownDialogs = (selector: string) =>
 /** Whether a blocking dialog is shown; page shortcuts yield to it. */
 export const blockingDialogShown = () =>
   shownDialogs(
-    '[role="dialog"]:not([aria-modal="false"]), [role="alertdialog"]',
+    'dialog[open], [role="dialog"]:not([aria-modal="false"]), [role="alertdialog"]',
   ).length > 0;
 
 /** The field or editor receiving the text typed at an event target, if any. */

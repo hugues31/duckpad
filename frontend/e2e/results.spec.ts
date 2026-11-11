@@ -327,7 +327,7 @@ test("columns show types and descriptions at once, statistics on request", async
   );
 });
 
-test("the log tells the run behind the result, and exports open on it", async ({
+test("the log keeps the export execution and download alongside its input data", async ({
   page,
 }) => {
   const { panel } = await openPaidOrders(page);
@@ -345,7 +345,10 @@ test("the log tells the run behind the result, and exports open on it", async ({
   await panel.locator(".executed-sql summary").click();
   await expect(panel.locator(".executed-sql .monaco-editor")).toBeVisible();
   await page.locator('.react-flow__node[data-id="export"] .node-shape').click();
-  await expect(panel.getByRole("tab")).toHaveText(["Tests", "Log"]);
+  await expect(panel.getByRole("tab")).toHaveCount(5);
+  await expect(
+    panel.getByRole("tab", { name: "Data", exact: true }),
+  ).toBeVisible();
   await expect(panel.getByRole("tab", { name: /^Log/ })).toHaveAttribute(
     "aria-selected",
     "true",
@@ -357,8 +360,14 @@ test("the log tells the run behind the result, and exports open on it", async ({
   await expect(panel.locator(".run-summary")).not.toContainText(
     "configuration",
   );
+  // The header offers the same download in every tab.
   await expect(
     panel.getByRole("button", { name: "Download exported data", exact: true }),
+  ).toHaveCount(2);
+  await expect(
+    panel
+      .locator(".log-export")
+      .getByRole("button", { name: "Download exported data", exact: true }),
   ).toBeEnabled();
 });
 

@@ -210,6 +210,7 @@
   "preview": "Data preview",
   "noResult": "Ready when you are",
   "noResultHint": "Run this node and its ancestors to materialize a preview.",
+  "inputsNoResultHint": "Run the ancestors of this node to see the rows it receives. The node itself does not run.",
   "valid": "Valid",
   "stale": "Stale",
   "failed": "Failed",

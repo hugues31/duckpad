@@ -19,6 +19,7 @@ import DraftPreviewView from "./DraftPreviewView";
 import ExecutionError from "./ExecutionError";
 import { executionFailures, wasBlocked } from "./executionFailures";
 import { WarningBadge, warningCount } from "./ExecutionMessages";
+import { ExportDownloadButton, useExportDownload } from "./ExportDownload";
 import { nodeInterface, outputSource, type NodeInterface } from "./graph";
 import { nodeLabel, useT } from "./i18n";
 import type { Cell } from "./lineageGraph";
@@ -107,7 +108,8 @@ export default function ResultsPanel({
   hidden: boolean;
   onTab: (tab: ResultsTab) => void;
   onClose: () => void;
-  onRun: () => void;
+  /** Run the node with its ancestors, or only the ancestors its inputs come from. */
+  onRun: (options?: { ancestors: true }) => void;
   onExplain: (cell: Cell) => void;
   onSave: SaveProject;
   onSaveDocumentation: (
@@ -122,10 +124,38 @@ export default function ResultsPanel({
   const t = useT();
   const ports = signature.outputs;
   const exportNode = signature.kind === "export";
+  const local = localDefinitions(snapshot, parent);
+  const inputs = graphEdges
+    .filter((edge) => edge.target === node.id)
+    .map((edge) => {
+      const source = graphNodes.find((n) => n.id === edge.source);
+      return {
+        node: prefix + edge.source,
+        port: edge.sourceHandle,
+        input: edge.targetHandle,
+        // The name shown on the canvas, as in the Inspector's input choices.
+        label: source
+          ? nodeLabel(
+              source,
+              nodeInterface(
+                source,
+                snapshot.parsed_templates,
+                snapshot.bundle?.components,
+                local,
+              ),
+              t,
+            )
+          : edge.source,
+      };
+    });
   const tabs: ResultsTab[] = [
     ...(preview ? (["preview"] as const) : []),
     ...RESULT_TABS.filter(
-      (key) => ports.length > 0 || key === "tests" || key === "log",
+      (key) =>
+        ports.length > 0 ||
+        inputs.length > 0 ||
+        key === "tests" ||
+        key === "log",
     ),
   ];
   const shown = tabs.includes(tab)
@@ -133,20 +163,40 @@ export default function ResultsPanel({
     : tab === "preview" && tabs.includes("data")
       ? "data"
       : tabs[tabs.length - 1];
-  const [target, setTarget] = useState<ResultsTarget>({
-    node: fullNode,
-    port: ports[0] || "result",
-  });
+  const defaultTarget: ResultsTarget =
+    ports.length || !inputs.length
+      ? { node: fullNode, port: ports[0] || "result" }
+      : inputs[0];
+  const [target, setTarget] = useState<ResultsTarget>(defaultTarget);
+  // Follow a reconnected input, or fall back when its connection is removed.
+  const connected = inputs.find((input) => input.input === target.input);
+  if (
+    target.input &&
+    (!connected ||
+      connected.node !== target.node ||
+      connected.port !== target.port)
+  )
+    setTarget(connected || defaultTarget);
+  else if (!ports.length && inputs.length && !target.input)
+    setTarget(defaultTarget);
   const [failing, setFailing] = useState<FailingRows | null>(null);
   const storage = (next: ResultsTarget) =>
     sampleKey(user, snapshot.worktree.project, next.node, next.port);
   // The sample travels between outputs and inputs, to compare the same rows before and after.
   const [shownSample, setShownSample] = useState(() => ({
     environment,
+    target: outputKey(target),
     ...loadSample(storage(target)),
   }));
-  // The environment selected in the top bar keeps the sample but forgets failing rows.
-  if (shownSample.environment !== environment) {
+  // A reconnected input restores its own sample instead of retaining the old schema's filter.
+  if (shownSample.target !== outputKey(target)) {
+    setShownSample({
+      environment,
+      target: outputKey(target),
+      ...loadSample(storage(target)),
+    });
+    setFailing(null);
+  } else if (shownSample.environment !== environment) {
     setShownSample({ ...shownSample, environment });
     setFailing(null);
   }
@@ -168,6 +218,13 @@ export default function ResultsPanel({
   const collector =
     snapshot.partitions?.[environment]?.nodes[producer]?.collect.length;
   const baseResult = statuses.nodes[producer];
+  const downloadable =
+    signature.kind !== "component" && !!signature.definition?.download;
+  const exportDownload = useExportDownload(
+    snapshot.worktree.id,
+    environment,
+    downloadable ? producer : null,
+  );
   // A blocked collector waits for keys: retry those that failed rather than every key.
   const blocked = collector ? baseResult?.error || undefined : undefined;
   const failedKeys = useApiResource<PartitionPage>(
@@ -192,7 +249,7 @@ export default function ResultsPanel({
             retryFailed ? { partitions: { mode: "failed" } } : undefined,
           );
         }
-      : onRun;
+      : () => onRun();
   const partition = usePartitionQuery(target.node, target.port);
   const partitionPreview = useApiResource<PreviewPage>(
     partition.manifest
@@ -206,18 +263,20 @@ export default function ResultsPanel({
   const dataset = partition.manifest
     ? partitionPreview.data || undefined
     : datasetOf(target);
-  const result = partition.manifest
-    ? {
-        outputs: dataset ? { [target.port]: dataset } : {},
-        results: partitionPreview.data?.results || [],
-        error: partitionPreview.data?.error || null,
-        result_run: dataset?.run,
-      }
-    : baseResult;
+  const result =
+    partition.manifest && !target.input
+      ? {
+          outputs: dataset ? { [target.port]: dataset } : {},
+          results: partitionPreview.data?.results || [],
+          error: partitionPreview.data?.error || null,
+          result_run: dataset?.run,
+        }
+      : baseResult;
   // Include nested failures even when the component's first output succeeded.
   // Per-key failures and blocked collectors retain their partition-specific views.
+  // A node without outputs shows its inputs, and still tells its own failure above them.
   const failures =
-    !target.input && !partition.manifest && !collector
+    (!target.input || !ports.length) && !partition.manifest && !collector
       ? executionFailures(statuses, fullNode)
       : [];
   const [logNode, setLogNode] = useState<string | null>(null);
@@ -244,30 +303,6 @@ export default function ResultsPanel({
   );
   const run = generation.data?.id === dataset?.run ? generation.data : null;
   const state = run?.nodes?.[stored(target).node];
-  const local = localDefinitions(snapshot, parent);
-  const inputs = graphEdges
-    .filter((edge) => edge.target === node.id)
-    .map((edge) => {
-      const source = graphNodes.find((n) => n.id === edge.source);
-      return {
-        node: prefix + edge.source,
-        port: edge.sourceHandle,
-        input: edge.targetHandle,
-        // The name shown on the canvas, as in the Inspector's input choices.
-        label: source
-          ? nodeLabel(
-              source,
-              nodeInterface(
-                source,
-                snapshot.parsed_templates,
-                snapshot.bundle?.components,
-                local,
-              ),
-              t,
-            )
-          : edge.source,
-      };
-    });
   const tests = declaredTests(signature, result?.results);
   const testResults = (result?.results || []).filter(
     (item) => item.origin.kind === "test",
@@ -289,7 +324,12 @@ export default function ResultsPanel({
         dataset?.columns.map((c) => c.name),
       )
     )
-      setShownSample({ environment, ...loadSample(storage(next)) });
+      setShownSample({
+        environment,
+        target: outputKey(next),
+        ...loadSample(storage(next)),
+      });
+    else setShownSample({ ...shownSample, target: outputKey(next) });
   };
   const blockedNode = wasBlocked(statuses, fullNode);
   const failureCards = failures.map(({ node: failedNode, result: failure }) => {
@@ -328,16 +368,21 @@ export default function ResultsPanel({
       />
     );
   });
+  // Rows missing from a node without outputs are those of its ancestors: running them writes nothing.
+  const ancestorsOnly = !ports.length && !!target.input && !collector;
   // How the Data and Chart tabs run the node and explain a missing result.
   const runState: RunState = {
     canEdit: !readOnly,
     active: !!statuses.active,
     starting: worktree?.starting,
-    onRun: runResult,
-    runLabel,
+    onRun: ancestorsOnly ? () => onRun({ ancestors: true }) : runResult,
+    runLabel: ancestorsOnly ? t("runAncestors") : runLabel,
+    hint: ancestorsOnly ? t("inputsNoResultHint") : undefined,
     reason: target.input ? undefined : blocked,
     failureShown: failures.length > 0,
   };
+  // A single dataset needs no selector: name the input it comes from.
+  const onlyInput = !ports.length && inputs.length === 1 ? inputs[0] : null;
   // The tabs of the shown dataset start over on another output, environment or partition.
   const datasetKey = `${outputKey(target)}:${environment}:${JSON.stringify(partition)}`;
   return (
@@ -351,7 +396,7 @@ export default function ResultsPanel({
         <div className="results-identity">
           <Table2 size={15} aria-hidden="true" />
           <strong title={label}>{label}</strong>
-          {ports.length > 0 && (ports.length > 1 || inputs.length > 0) && (
+          {ports.length + inputs.length > 1 && (
             <DatasetPicker
               target={target}
               ports={ports.map((port) => ({
@@ -368,6 +413,11 @@ export default function ResultsPanel({
           )}
           {ports.length === 1 && !inputs.length && (
             <span className="results-port">{ports[0]}</span>
+          )}
+          {onlyInput && (
+            <span className="results-port">
+              {onlyInput.input} ← {onlyInput.label} · {onlyInput.port}
+            </span>
           )}
           {running ? (
             <span className="badge running">
@@ -413,6 +463,12 @@ export default function ResultsPanel({
               {dataset.count.toLocaleString()} {t("rows")} · {columns.length}{" "}
               {t("columns")}
             </span>
+          )}
+          {exportNode && (
+            <ExportDownloadButton
+              state={exportDownload}
+              onFailure={() => onTab("log")}
+            />
           )}
           <button
             className="icon"
@@ -502,7 +558,12 @@ export default function ResultsPanel({
               failing={failing}
               tests={tests}
               onSample={(sample, view) => {
-                setShownSample({ environment, sample, view });
+                setShownSample({
+                  environment,
+                  target: outputKey(target),
+                  sample,
+                  view,
+                });
                 storeSample(storage(target), sample, view);
               }}
               onFailing={setFailing}
@@ -584,8 +645,9 @@ export default function ResultsPanel({
           fullNode={logFailure?.node || producer}
           exportNode={logSignature.kind === "export"}
           download={
-            logSignature.kind !== "component" &&
-            !!logSignature.definition?.download
+            downloadable && (logFailure?.node || producer) === producer
+              ? exportDownload
+              : null
           }
           readOnly={readOnly}
           result={logFailure?.result || result}
