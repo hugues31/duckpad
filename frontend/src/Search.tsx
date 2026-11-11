@@ -110,6 +110,8 @@ export function SearchField({
           }}
           onKeyDown={(event) => {
             if (event.key === "Escape") {
+              // Closing the list consumes the key: page shortcuts yield to it.
+              if (expanded && !inline) event.preventDefault();
               setOpen(false);
               return;
             }
