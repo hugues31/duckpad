@@ -17,6 +17,7 @@ import { DatasetPicker } from "./DatasetPicker";
 import type { PreviewState } from "./draftPreview";
 import DraftPreviewView from "./DraftPreviewView";
 import ExecutionError from "./ExecutionError";
+import { executionFailures, wasBlocked } from "./executionFailures";
 import { WarningBadge, warningCount } from "./ExecutionMessages";
 import { ExportDownloadButton, useExportDownload } from "./ExportDownload";
 import { nodeInterface, outputSource, type NodeInterface } from "./graph";
@@ -224,8 +225,6 @@ export default function ResultsPanel({
     environment,
     downloadable ? producer : null,
   );
-  const sourceLocation =
-    snapshot.bundle && nodeLocation(snapshot.bundle, producer);
   // A blocked collector waits for keys: retry those that failed rather than every key.
   const blocked = collector ? baseResult?.error || undefined : undefined;
   const failedKeys = useApiResource<PartitionPage>(
@@ -273,15 +272,28 @@ export default function ResultsPanel({
           result_run: dataset?.run,
         }
       : baseResult;
-  // The node's own last execution failed; blocked, canceled and per-key states keep their own views.
+  // Include nested failures even when the component's first output succeeded.
+  // Per-key failures and blocked collectors retain their partition-specific views.
   // A node without outputs shows its inputs, and still tells its own failure above them.
-  const failure =
-    (!target.input || !ports.length) &&
-    !partition.manifest &&
-    baseResult?.error &&
-    baseResult.execution_status === "failed"
-      ? baseResult
+  const failures =
+    (!target.input || !ports.length) && !partition.manifest && !collector
+      ? executionFailures(statuses, fullNode)
+      : [];
+  const [logNode, setLogNode] = useState<string | null>(null);
+  const logFailure =
+    failures.find((failure) => failure.node === logNode) || failures[0];
+  const logLocation =
+    snapshot.bundle && logFailure
+      ? nodeLocation(snapshot.bundle, logFailure.node)
       : null;
+  const logSignature = logLocation
+    ? nodeInterface(
+        logLocation.node,
+        snapshot.parsed_templates,
+        snapshot.bundle?.components,
+        localDefinitions(snapshot, logLocation.parent),
+      )
+    : signature;
   // A preview lacking some partitions is incomplete, as the banner below details.
   const datasetStatus = dataset?.incomplete ? "incomplete" : dataset?.status;
   const running = computing(statuses, fullNode);
@@ -319,25 +331,43 @@ export default function ResultsPanel({
       });
     else setShownSample({ ...shownSample, target: outputKey(next) });
   };
-  // The node's last run error, above the rows or the chart.
-  const failureCard = failure && (
-    <ExecutionError
-      failure={failure}
-      node={producer}
-      environment={environment}
-      currentSource={
-        snapshot.bundle && sourceLocation
-          ? nodeCode(
-              snapshot.bundle,
-              sourceLocation.node,
-              sourceLocation.parent,
-            )
-          : ""
-      }
-      onEditCode={(line) => onEditCode(line, producer)}
-      onLog={() => onTab("log")}
-    />
-  );
+  const blockedNode = wasBlocked(statuses, fullNode);
+  const failureCards = failures.map(({ node: failedNode, result: failure }) => {
+    const sourceLocation =
+      snapshot.bundle && nodeLocation(snapshot.bundle, failedNode);
+    return (
+      <ExecutionError
+        key={`${failure.error_run}:${failedNode}`}
+        failure={failure}
+        node={failedNode}
+        blocked={blockedNode}
+        label={
+          failedNode !== fullNode
+            ? displayNodeName(snapshot.node_names?.[failedNode], failedNode, t)
+            : undefined
+        }
+        environment={environment}
+        currentSource={
+          snapshot.bundle && sourceLocation
+            ? nodeCode(
+                snapshot.bundle,
+                sourceLocation.node,
+                sourceLocation.parent,
+              )
+            : ""
+        }
+        onEditCode={(line) => onEditCode(line, failedNode)}
+        onLog={
+          shown === "log" && failedNode === logFailure?.node
+            ? undefined
+            : () => {
+                setLogNode(failedNode);
+                onTab("log");
+              }
+        }
+      />
+    );
+  });
   // Rows missing from a node without outputs are those of its ancestors: running them writes nothing.
   const ancestorsOnly = !ports.length && !!target.input && !collector;
   // How the Data and Chart tabs run the node and explain a missing result.
@@ -349,7 +379,7 @@ export default function ResultsPanel({
     runLabel: ancestorsOnly ? t("runAncestors") : runLabel,
     hint: ancestorsOnly ? t("inputsNoResultHint") : undefined,
     reason: target.input ? undefined : blocked,
-    failureShown: !!failure,
+    failureShown: failures.length > 0,
   };
   // A single dataset needs no selector: name the input it comes from.
   const onlyInput = !ports.length && inputs.length === 1 ? inputs[0] : null;
@@ -501,6 +531,9 @@ export default function ResultsPanel({
           );
         })}
       </div>
+      {shown !== "preview" && failures.length > 0 && (
+        <div className="execution-errors">{failureCards}</div>
+      )}
       {shown === "preview" && preview ? (
         <DraftPreviewView
           key={preview.result ? "computed" : "pending"}
@@ -512,8 +545,7 @@ export default function ResultsPanel({
         />
       ) : shown === "data" ? (
         <>
-          {failureCard}
-          {(!failure || dataset) && (
+          {(!failures.length || dataset) && (
             <ResultsData
               key={datasetKey}
               snapshot={snapshot}
@@ -545,8 +577,7 @@ export default function ResultsPanel({
         </>
       ) : shown === "chart" ? (
         <>
-          {failureCard}
-          {(!failure || dataset) && (
+          {(!failures.length || dataset) && (
             <ResultsChart
               key={datasetKey}
               snapshot={snapshot}
@@ -611,12 +642,21 @@ export default function ResultsPanel({
         <ResultsLog
           snapshot={snapshot}
           environment={environment}
-          fullNode={producer}
-          exportNode={exportNode}
-          download={downloadable ? exportDownload : null}
+          fullNode={logFailure?.node || producer}
+          exportNode={logSignature.kind === "export"}
+          download={
+            downloadable && (logFailure?.node || producer) === producer
+              ? exportDownload
+              : null
+          }
           readOnly={readOnly}
-          result={result}
-          inputs={inputs.map((input) => ({ ...input, ...stored(input) }))}
+          result={logFailure?.result || result}
+          errorShown={!!logFailure}
+          inputs={
+            logFailure && logFailure.node !== producer
+              ? []
+              : inputs.map((input) => ({ ...input, ...stored(input) }))
+          }
           statuses={statuses}
           onTests={() => onTab("tests")}
         />

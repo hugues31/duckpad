@@ -112,9 +112,11 @@ export async function verifyMessages(page: Page) {
   await summary
     .getByRole("button", { name: "Last run failed", exact: true })
     .click();
-  await expect(results.locator(".log-error p")).toHaveText(
+  // The card above the log tells the error once.
+  await expect(results.locator(".execution-error-message")).toHaveText(
     "Orders need review",
   );
+  await expect(results.locator(".log-error")).toHaveCount(0);
   // The stale preview still shows the messages from its successful generation.
   const retained = await (
     await page.request.get(

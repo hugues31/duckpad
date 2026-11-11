@@ -592,13 +592,20 @@
   z-index: 30;
 }
 
+/* Several failures scroll together, leaving room for the result or the log below them. */
+.execution-errors {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+.execution-errors:not(:last-child) {
+  max-height: 60%;
+}
 .execution-error {
   margin: 12px;
   padding: 14px;
   border: 1px solid light-dark(#b43b43, #ff9aa3);
   border-radius: 8px;
-  min-height: 0;
-  overflow: auto;
 }
 .execution-error-message {
   white-space: pre-wrap;

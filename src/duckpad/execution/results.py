@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import threading
 import time
+from collections import defaultdict
 from dataclasses import dataclass, field
 
 import duckdb
@@ -49,6 +50,24 @@ TEMPORAL_TYPES = re.compile(r"(DATE|TIMESTAMP.*)")
 NESTED_TYPE = re.compile(r"(STRUCT|MAP|UNION)\(.*|.*\[\d*\]")
 # SUMMARIZE estimates distinct values; counts at least this close to the row count are checked exactly.
 UNIQUE_ESTIMATE = 0.95
+
+
+def root_failures(states: Record, node: str, known: dict[str, list[str]]) -> list[str]:
+    """Return the nodes whose own errors blocked a node, resolving each node of the run once."""
+    pending = [(node, False)]
+    while pending:
+        key, expanded = pending.pop()
+        state = states.get(key, {})
+        sources = state.get("blocked_by") or []
+        if expanded:
+            known[key] = list(dict.fromkeys(root for source in sources for root in known[source]))
+        elif key not in known:
+            # A node that failed or was refused is its own cause; a node that did not run has none.
+            known[key] = [key] if state.get("error") and not sources else []
+            if sources:
+                pending.append((key, True))
+                pending.extend((source, False) for source in sources if source not in known)
+    return known[node]
 
 
 @dataclass
@@ -186,7 +205,7 @@ class Results:
                 active = self.active.get(worktree)
             return {"nodes": {}, "active": self.store.get("run", active["id"]) if active else None}
         with context.lock:
-            result = {
+            result: dict[str, Record] = {
                 node: {
                     "outputs": {port: dataset.public() for port, dataset in outputs.items()},
                     "error": context.errors.get(node),
@@ -209,14 +228,33 @@ class Results:
                 else run
                 for node, run in context.result_runs.items()
             }
-        error_runs = {
-            node: value.get("error_run") for node, value in result.items() if value.get("error_run")
-        }
+        error_runs = {node: run for node, value in result.items() if (run := value.get("error_run"))}
         runs = {
             run: self.store.get("run", run) for run in set(generations.values()) | set(error_runs.values())
         }
+        # Blocked nodes name the failures behind them in their own run, so that a later run
+        # of an ancestor leaves the explanation intact. Many nodes share each failure.
+        causes: dict[str, Record] = {}
+        resolved: defaultdict[str, dict[str, list[str]]] = defaultdict(dict)
         for node, run_id in error_runs.items():
-            result[node]["diagnostic"] = runs[run_id]["nodes"][node].get("diagnostic")
+            states = runs[run_id]["nodes"]
+            result[node]["diagnostic"] = states[node].get("diagnostic")
+            if not states[node].get("blocked_by"):
+                continue
+            roots = root_failures(states, node, resolved[run_id])
+            result[node]["error_causes"] = [f"{run_id}:{root}" for root in roots]
+            for root in roots:
+                causes.setdefault(
+                    f"{run_id}:{root}",
+                    {
+                        "node": root,
+                        "outputs": {},
+                        "error": states[root]["error"],
+                        "execution_status": states[root]["status"],
+                        "error_run": run_id,
+                        "diagnostic": states[root].get("diagnostic"),
+                    },
+                )
         for node, run_id in generations.items():
             state = runs[run_id]["nodes"][node]
             result.setdefault(node, {"outputs": {}, "error": None, "execution_status": state["status"]})
@@ -224,7 +262,11 @@ class Results:
             result[node]["result_run"] = run_id
         with self.lock:
             active = self.active.get(worktree)
-        return {"nodes": result, "active": self.store.get("run", active["id"]) if active else None}
+        return {
+            "nodes": result,
+            "causes": causes,
+            "active": self.store.get("run", active["id"]) if active else None,
+        }
 
     def generation_valid(self, worktree: str, environment: str, dataset_id: str) -> bool:
         """Whether a result generation is still current, so a lineage view may keep using it."""
