@@ -556,7 +556,7 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
             pannable
             zoomable
             nodeColor={(n) =>
-              n.data.kind === "source"
+              n.data.kind === "source" || n.data.kind === "export"
                 ? "#4a8aff"
                 : n.data.kind === "component"
                   ? "#9d91df"

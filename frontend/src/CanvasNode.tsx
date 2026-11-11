@@ -117,17 +117,17 @@ export function PipelineNodeView({
   const t = useT();
   const partition = data.partition;
   const Port = preview ? PreviewHandle : Handle;
-  const source = data.kind === "source";
+  const square = data.kind === "source" || data.kind === "export";
   const StatusTag = data.status === "failed" ? "button" : "span";
   const portPosition = (index: number, count: number) => {
     const spacing = Math.min(24, 72 / Math.max(1, count - 1));
     const top = 48 + (index - (count - 1) / 2) * spacing;
-    const inset = source ? 27 : 75 - Math.sqrt(48 ** 2 - (top - 48) ** 2);
+    const inset = square ? 27 : 75 - Math.sqrt(48 ** 2 - (top - 48) ** 2);
     return { top, inset };
   };
   return (
     <div
-      className={`pipeline-node ${source ? "source-node" : "round-node"} ${data.kind} ${selected ? "is-selected" : ""} ${data.muted ? "is-muted" : ""}`}
+      className={`pipeline-node ${square ? "square-node" : "round-node"} ${data.kind} ${selected ? "is-selected" : ""} ${data.muted ? "is-muted" : ""}`}
     >
       {data.muted && data.inputs.length > 0 && (
         <svg
