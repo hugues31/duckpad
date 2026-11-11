@@ -21,6 +21,12 @@ exposed outputs.
 The inspector's result summary links to Data, Log and Tests, showing validity,
 warnings and the latest failure for the selected environment.
 
+Selecting a failed or blocked node shows its error directly in Results, including
+failures inside nested components. Blocked dependencies show the original cause
+and the failing node's name, with actions to open its code and execution log.
+This also works without a previous result or when stale rows remain visible.
+Errors belong to the failed run and clear after a successful rerun.
+
 While you edit a node's code, **Preview** adds a **Preview** tab with the outputs
 computed from samples of its inputs. Nothing in it is saved or published; see
 [previews](SQL.md#preview-while-you-edit).

@@ -515,6 +515,8 @@ export interface Run {
 }
 /** The latest results of a node in an environment. */
 export interface NodeResult {
+  /** Original failures from this node's failed run, through any blocked dependencies. */
+  error_causes?: (NodeResult & { node: string })[];
   diagnostic?: SqlDiagnostic | null;
   results?: ExecutionResult[];
   result_run?: string;

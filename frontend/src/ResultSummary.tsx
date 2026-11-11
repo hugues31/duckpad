@@ -1,5 +1,7 @@
 import { AlertTriangle, ChevronRight, Clock, Loader2 } from "lucide-react";
 import { withQuery } from "./api";
+import { nodeStatus } from "./canvasResults";
+import { executionFailures } from "./executionFailures";
 import { warningCount } from "./ExecutionMessages";
 import { outputSource } from "./graph";
 import { countLabel, useT, type TranslationKey } from "./i18n";
@@ -58,14 +60,17 @@ export default function ResultSummary({
       });
   // As in the results panel, which opens on the first output.
   const result = statuses.nodes[sources[0]?.node ?? fullNode];
+  const failures = executionFailures(statuses, fullNode);
   const running = computing(statuses, fullNode);
-  const status = datasets.length
-    ? datasets.some((dataset) => dataset.incomplete)
-      ? "incomplete"
-      : datasets.every((dataset) => dataset.status === "valid")
-        ? "valid"
-        : "stale"
-    : result?.execution_status;
+  const status = failures.length
+    ? nodeStatus(statuses, fullNode)
+    : datasets.length
+      ? datasets.some((dataset) => dataset.incomplete)
+        ? "incomplete"
+        : datasets.every((dataset) => dataset.status === "valid")
+          ? "valid"
+          : "stale"
+      : result?.execution_status;
   const messages = warningCount(
     result?.results?.filter((item) => item.origin.kind !== "test"),
   );
@@ -112,7 +117,7 @@ export default function ResultSummary({
       {!status && !running && !result?.error && (
         <span className="muted">{t("noResultYet")}</span>
       )}
-      {result?.error && (
+      {(failures.length > 0 || result?.error) && (
         <button
           className="summary-link danger"
           title={tabTitle("log")}

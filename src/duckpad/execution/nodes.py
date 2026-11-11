@@ -76,7 +76,7 @@ class NodeExecutor:
                 self.run_node(execution, key)
 
     @staticmethod
-    def skip_reason(execution: Execution, key: str) -> dict[str, str] | None:
+    def skip_reason(execution: Execution, key: str) -> Record | None:
         """Return the state update for a node that must not start, if any."""
         if execution.canceled:
             return {"status": "canceled"}
@@ -89,7 +89,11 @@ class NodeExecutor:
             if e["target"] == key and execution.run["nodes"][e["source"]]["status"] != "success"
         ]
         if failed:
-            return {"status": "blocked", "error": "Blocked by " + ", ".join(failed)}
+            return {
+                "status": "blocked",
+                "error": "Blocked by " + ", ".join(failed),
+                "blocked_by": list(dict.fromkeys(failed)),
+            }
         return None
 
     def run_node(self, execution: Execution, key: str) -> None:

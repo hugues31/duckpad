@@ -15,6 +15,8 @@ export default function ExecutionError({
   node,
   environment,
   currentSource,
+  label,
+  blocked = false,
   onEditCode,
   onLog,
 }: {
@@ -22,6 +24,8 @@ export default function ExecutionError({
   node: string;
   environment: string;
   currentSource: string;
+  label?: string;
+  blocked?: boolean;
   onEditCode: (line?: number) => void;
   onLog: () => void;
 }) {
@@ -36,17 +40,18 @@ export default function ExecutionError({
     <section
       className="execution-error"
       role="alert"
-      aria-label={t("lastRunFailed")}
+      aria-label={t(blocked ? "blocked" : "lastRunFailed")}
     >
       <div className="row gap">
         <AlertCircle size={18} aria-hidden="true" />
-        <strong>{t("lastRunFailed")}</strong>
+        <strong>{t(blocked ? "blocked" : "lastRunFailed")}</strong>
         {diagnostic && (
           <span>
             {t("errorLine").replace("{line}", String(diagnostic.line))}
           </span>
         )}
       </div>
+      {label && <p>{label}</p>}
       <pre className="execution-error-message">
         {diagnostic?.message ||
           (failure.error === PYTHON_DISABLED

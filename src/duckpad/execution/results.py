@@ -51,6 +51,36 @@ NESTED_TYPE = re.compile(r"(STRUCT|MAP|UNION)\(.*|.*\[\d*\]")
 UNIQUE_ESTIMATE = 0.95
 
 
+def failure_causes(run: Record, node: str) -> list[Record]:
+    """Resolve blockers in the failed run, even if an upstream node has since rerun."""
+    causes: list[Record] = []
+    visited: set[str] = set()
+
+    def visit(key: str) -> None:
+        if key in visited:
+            return
+        visited.add(key)
+        state = run["nodes"].get(key, {})
+        if state.get("blocked_by"):
+            for source in state["blocked_by"]:
+                visit(source)
+        elif state.get("error"):
+            causes.append(
+                {
+                    "node": key,
+                    "outputs": {},
+                    "error": state["error"],
+                    "execution_status": state["status"],
+                    "error_run": run["id"],
+                    "diagnostic": state.get("diagnostic"),
+                }
+            )
+
+    for source in run["nodes"][node].get("blocked_by", []):
+        visit(source)
+    return causes
+
+
 @dataclass
 class Computation:
     """A column statistics computation in progress, which a request can cancel."""
@@ -186,7 +216,7 @@ class Results:
                 active = self.active.get(worktree)
             return {"nodes": {}, "active": self.store.get("run", active["id"]) if active else None}
         with context.lock:
-            result = {
+            result: dict[str, Record] = {
                 node: {
                     "outputs": {port: dataset.public() for port, dataset in outputs.items()},
                     "error": context.errors.get(node),
@@ -217,6 +247,7 @@ class Results:
         }
         for node, run_id in error_runs.items():
             result[node]["diagnostic"] = runs[run_id]["nodes"][node].get("diagnostic")
+            result[node]["error_causes"] = failure_causes(runs[run_id], node)
         for node, run_id in generations.items():
             state = runs[run_id]["nodes"][node]
             result.setdefault(node, {"outputs": {}, "error": None, "execution_status": state["status"]})
