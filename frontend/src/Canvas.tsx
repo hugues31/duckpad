@@ -189,7 +189,6 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
       onSelection(nodes.map((n) => n.id)),
     [onSelection],
   );
-  const running = !!props.statuses.active;
   const edgeStyle = props.edgeStyle ?? "curved";
   // Right-angled links get separate vertical lanes from the measured socket positions.
   const endpoints = useStore(
@@ -233,21 +232,32 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
     const selected = new Set(
       nodes.filter((node) => node.selected).map((node) => node.id),
     );
+    const phases = new Map(
+      nodes.map((node) => [node.id, node.data.progress?.phase]),
+    );
     return props.edges.map((e): PipelineEdge => {
       const connected = selected.has(e.source) || selected.has(e.target);
       const pointed = hovered === e.source || hovered === e.target;
       const edgeSelected = selectedEdges.has(e.id);
-      const highlighted = edgeSelected || connected || pointed || running;
+      // During a run, data flows into executing nodes along the links already done.
+      const target = phases.get(e.target);
+      const flowing = target === "running";
+      const travelled =
+        phases.get(e.source) === "done" &&
+        (target === "done" || target === "running");
+      const highlighted =
+        edgeSelected || connected || pointed || flowing || travelled;
       return {
         ...e,
         selected: edgeSelected,
         type: "pipeline",
         data: { style: edgeStyle, lane: lanes.get(e.id) },
-        animated: connected || running,
+        animated: connected || flowing,
         className:
           [
             connected && "node-connected",
             pointed && "node-hovered",
+            flowing && "is-flowing",
             highlighted && "highlighted",
           ]
             .filter(Boolean)
@@ -262,7 +272,7 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
           : undefined,
       };
     });
-  }, [props.edges, nodes, running, hovered, edgeStyle, lanes, selectedEdges]);
+  }, [props.edges, nodes, hovered, edgeStyle, lanes, selectedEdges]);
   const changes = (changes: NodeChange<PipelineNode>[]) =>
     setNodes((current) => applyNodeChanges(changes, current));
   const persistPositions = async (moved: FlowNode[]) => {

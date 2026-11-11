@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { remainingDuration, remainingSeconds } from "./runEstimate";
+import {
+  elapsedDuration,
+  nodeProgress,
+  overran,
+  progressTimeline,
+  remainingDuration,
+  remainingSeconds,
+} from "./runEstimate";
 import type { NodeRun, Run } from "./types";
 
 const now = Date.parse("2026-01-01T00:01:00Z");
@@ -185,5 +192,214 @@ it("formats approximate durations compactly without false precision", () => {
     "2 min",
     "1 h",
     "1 h 1 min",
+  ]);
+});
+
+describe("nodeProgress", () => {
+  it("follows a node through the active run only", () => {
+    const current = run({
+      waiting: node({ estimated_duration: 5 }),
+      active: node({
+        status: "running",
+        started: ago(4),
+        estimated_duration: 10,
+      }),
+      finished: node({ status: "success", duration: 2 }),
+      failed: node({ status: "failed" }),
+    });
+    expect(nodeProgress(current, "waiting")).toMatchObject({
+      phase: "queued",
+      total: 5,
+      started: undefined,
+    });
+    expect(nodeProgress(current, "active")).toEqual({
+      phase: "running",
+      started: now - 4000,
+      total: 10,
+      done: 0,
+      running: [{ started: now - 4000, estimate: 10 }],
+    });
+    expect(nodeProgress(current, "finished")?.phase).toBe("done");
+    // Failures keep their own status; nodes outside the scope have no progress.
+    expect(nodeProgress(current, "failed")).toBeUndefined();
+    expect(nodeProgress(current, "elsewhere")).toBeUndefined();
+    expect(nodeProgress({ ...current, status: "success" }, "active")).toBe(
+      undefined,
+    );
+    expect(nodeProgress(null, "active")).toBeUndefined();
+    expect(
+      nodeProgress({ ...current, status: "canceling" }, "active")?.paused,
+    ).toBe(true);
+  });
+
+  it("combines the nodes of a component and stays unknown without every estimate", () => {
+    const nested = {
+      box: node({ status: "pending" }),
+      "box::a": node({ status: "success", started: ago(8), duration: 6 }),
+      "box::b": node({
+        status: "running",
+        started: ago(2),
+        estimated_duration: 4,
+      }),
+      "box::c": node({ estimated_duration: 10 }),
+      boxed: node({ status: "running", started: ago(1) }),
+    };
+    // The instance itself has no previous duration, so the total is unknown.
+    expect(nodeProgress(run(nested), "box")).toMatchObject({
+      phase: "running",
+      started: now - 8000,
+      total: undefined,
+      running: [],
+    });
+    const { box: _, ...children } = nested;
+    expect(nodeProgress(run(children), "box")).toEqual({
+      phase: "running",
+      started: now - 8000,
+      total: 20,
+      done: 6,
+      running: [{ started: now - 2000, estimate: 4 }],
+    });
+    // Between two of its nodes, the component keeps the progress it reached.
+    const waiting = nodeProgress(
+      run({
+        ...children,
+        "box::b": node({ status: "success", started: ago(2), duration: 1 }),
+      }),
+      "box",
+    )!;
+    expect(waiting).toEqual({
+      phase: "running",
+      started: now - 8000,
+      total: 17,
+      done: 7,
+      running: [],
+    });
+    expect(progressTimeline(waiting, now)).toEqual({
+      duration: 0,
+      frames: [{ offset: 0, share: 7 / 17 }],
+    });
+    expect(overran(waiting, now + 60_000)).toBe(false);
+    // A failed or blocked node shows through, whatever is left to run.
+    for (const status of ["failed", "blocked"] as const)
+      expect(
+        nodeProgress(run({ ...children, "box::a": node({ status }) }), "box"),
+      ).toBeUndefined();
+    expect(
+      nodeProgress(
+        run({
+          part: node({
+            status: "running",
+            started: ago(1),
+            partitioned: true,
+            estimated_duration: 3,
+          }),
+        }),
+        "part",
+      )?.total,
+    ).toBeUndefined();
+  });
+
+  it("shows partitioned nodes in progress while their keys execute", () => {
+    const partitioned = (partitions: Partial<NonNullable<Run["partitions"]>>) =>
+      nodeProgress(
+        {
+          ...run({
+            zone: node({ partitioned: true, estimated_duration: 3 }),
+          }),
+          partitions: {
+            total: 4,
+            selected: 4,
+            completed: 0,
+            failed: 0,
+            not_started: 4,
+            phase: "consumers",
+            started: ago(9),
+            execution: { parallelism: 1, on_error: "continue" },
+            ...partitions,
+          },
+        },
+        "zone",
+      );
+    // Its own state stays pending until the run ends.
+    expect(partitioned({})?.phase).toBe("queued");
+    expect(partitioned({ active: ["first"] })).toEqual({
+      phase: "running",
+      started: now - 9000,
+      total: undefined,
+      done: 0,
+      running: [],
+    });
+    // Between two keys, and until the last one settles.
+    expect(partitioned({ completed: 1, active: [] })?.phase).toBe("running");
+    expect(partitioned({ completed: 4 })?.phase).toBe("done");
+    expect(partitioned({ completed: 3, failed: 1 })).toBeUndefined();
+  });
+});
+
+describe("progressTimeline", () => {
+  it("animates the expected share until every running node reaches its estimate", () => {
+    const progress = nodeProgress(
+      run({
+        "c::done": node({ status: "success", duration: 2 }),
+        "c::short": node({
+          status: "running",
+          started: ago(1),
+          estimated_duration: 3,
+        }),
+        "c::long": node({
+          status: "running",
+          started: ago(2),
+          estimated_duration: 6,
+        }),
+        "c::next": node({ estimated_duration: 4 }),
+      }),
+      "c",
+    )!;
+    // 2 s done + 1 s + 2 s elapsed, of 15 s expected.
+    expect(progressTimeline(progress, now)).toEqual({
+      duration: 4000,
+      frames: [
+        { offset: 0, share: 5 / 15 },
+        { offset: 0.5, share: 9 / 15 },
+        { offset: 1, share: 11 / 15 },
+      ],
+    });
+    expect(overran(progress, now)).toBe(false);
+    expect(overran(progress, now + 3000)).toBe(false);
+    expect(overran(progress, now + 4000)).toBe(true);
+    // Past every estimate, the fill holds and only the activity sweep moves.
+    expect(progressTimeline(progress, now + 9000)).toEqual({
+      duration: 0,
+      frames: [{ offset: 0, share: 11 / 15 }],
+    });
+  });
+
+  it("has no timeline without an estimate or outside execution", () => {
+    const unknown = nodeProgress(
+      run({ a: node({ status: "running", started: ago(1) }) }),
+      "a",
+    )!;
+    expect(progressTimeline(unknown, now)).toBeNull();
+    expect(overran(unknown, now + 60_000)).toBe(false);
+    const queued = nodeProgress(
+      run({ a: node({ estimated_duration: 2 }) }),
+      "a",
+    )!;
+    expect(progressTimeline(queued, now)).toBeNull();
+  });
+});
+
+it("formats ticking elapsed time in whole seconds", () => {
+  expect(
+    [-1, 0.9, 59.9, 60, 65, 3599, 3600, 3720].map(elapsedDuration),
+  ).toEqual([
+    "0 s",
+    "0 s",
+    "59 s",
+    "1 min",
+    "1 min 5 s",
+    "59 min 59 s",
+    "1 h",
+    "1 h 2 min",
   ]);
 });
