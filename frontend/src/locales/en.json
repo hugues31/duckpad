@@ -1440,6 +1440,7 @@
   "errorLine": "Line {line}",
   "openErrorLine": "Open code at line {line}",
   "viewErrorLog": "View log",
+  "blockedBy": "Blocked by {node}",
   "errorCompiledSql": "SQL before execution",
   "errorCodeChanged": "The code has changed since this failure. Run the node again to check this version.",
   "noJobsAdmin": "A Job runs a chosen version of this project from an external scheduler or the API.",

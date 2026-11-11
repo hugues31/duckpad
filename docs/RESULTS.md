@@ -29,6 +29,12 @@ available. A component instance shows its exposed outputs.
 The inspector's result summary links to Data, Log and Tests, showing validity,
 warnings and the latest failure for the selected environment.
 
+A failed node shows its error above its results, with actions to open the code
+at the failing line and the execution log. A blocked node, or a component with a
+failure inside, names the node that failed and shows its error, however many
+dependencies away, whether or not earlier rows remain. The error belongs to the
+failed run and clears after a successful one.
+
 While you edit a node's code, **Preview** adds a **Preview** tab with the outputs
 computed from samples of its inputs. Nothing in it is saved or published; see
 [previews](SQL.md#preview-while-you-edit).

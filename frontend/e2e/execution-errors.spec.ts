@@ -1,6 +1,91 @@
 import { expect, test } from "@playwright/test";
-import { closeCode, codePanel, codeSaved, signIn } from "./helpers";
+import {
+  autosaved,
+  closeCode,
+  closeEditor,
+  codePanel,
+  codeSaved,
+  signIn,
+} from "./helpers";
 import type { Run, Snapshot } from "../src/types";
+
+test("muting enrichment explains blocked components and downstream nodes directly", async ({
+  page,
+}) => {
+  test.setTimeout(120000);
+  await signIn(page);
+  const created = await page.request.post("/api/example", { data: {} });
+  expect(created.ok()).toBeTruthy();
+  const { id } = await created.json();
+  await page.goto(`/worktrees/${id}/flow`);
+  const node = (key: string) =>
+    page.locator(`.react-flow__node[data-id="${key}"]`);
+  const results = page.getByRole("region", { name: "Results", exact: true });
+  const run = async (expected: string) => {
+    const response = page.waitForResponse(
+      (r) =>
+        r.url().endsWith(`/worktrees/${id}/runs`) &&
+        r.request().method() === "POST",
+    );
+    await page.getByRole("button", { name: "Run all", exact: true }).click();
+    const started = await (await response).json();
+    await expect
+      .poll(
+        async () =>
+          (await (await page.request.get(`/api/runs/${started.id}`)).json())
+            .status,
+        { timeout: 90000 },
+      )
+      .toBe(expected);
+  };
+  const toggle = async () => {
+    await node("enriched").locator(".node-shape").click();
+    await autosaved(page, () => page.keyboard.press("m"));
+  };
+  await toggle();
+  await run("partial_failure");
+  // The default output succeeds; another nested node fails and blocks the report.
+  await node("report").locator(".node-shape").click();
+  const error = results.getByRole("alert", {
+    name: "Blocked by Regional revenue / Regional summary / Revenue by region",
+    exact: true,
+  });
+  await expect(error).toHaveCount(1);
+  await expect(error).toContainText('Referenced column "region" not found');
+  await page
+    .locator(".inspector .result-summary")
+    .getByRole("button", { name: "Last run failed", exact: true })
+    .click();
+  await expect(results.getByRole("tab", { name: /^Log/ })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  // The log is the failed node's, and the card above it tells the error once.
+  await expect(error).toBeVisible();
+  await expect(results.locator(".log-error")).toHaveCount(0);
+  await expect(results.locator(".run-summary .badge")).toHaveText("Failed");
+  await expect(error.getByRole("button", { name: "View log" })).toHaveCount(0);
+  await error.getByRole("button", { name: /Open code at line/ }).click();
+  const editor = page.getByRole("dialog");
+  await expect(editor.locator(".squiggly-error")).not.toHaveCount(0);
+  await closeEditor(editor);
+  // The export has no rows and is several dependencies away from the original failure.
+  await node("export").locator(".node-shape").click();
+  await expect(error).toContainText('Referenced column "region" not found');
+  await toggle();
+  await run("success");
+  await node("report").locator(".node-shape").click();
+  await expect(results.getByRole("alert")).toHaveCount(0);
+  // A later failure also stays visible when successful rows have been retained.
+  await toggle();
+  await run("partial_failure");
+  await node("report").locator(".node-shape").click();
+  await expect(error).toContainText('Referenced column "region" not found');
+  await page.getByLabel("Output", { exact: true }).selectOption("report");
+  await results.getByRole("tab", { name: "Data", exact: true }).click();
+  await expect(results.locator(".data-table")).toBeVisible();
+  await expect(error).toBeVisible();
+});
 
 test("execution errors open from the canvas, point into saved code and clear after a successful run", async ({
   page,

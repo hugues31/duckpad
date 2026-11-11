@@ -1440,6 +1440,7 @@
   "errorLine": "Linha {line}",
   "openErrorLine": "Abrir o código na linha {line}",
   "viewErrorLog": "Ver o log",
+  "blockedBy": "Bloqueado por {node}",
   "errorCompiledSql": "SQL antes da execução",
   "errorCodeChanged": "O código mudou desde esta falha. Execute o nó novamente para verificar esta versão.",
   "noJobsAdmin": "Um Job executa uma versão escolhida deste projeto a partir de um agendador externo ou da API.",
