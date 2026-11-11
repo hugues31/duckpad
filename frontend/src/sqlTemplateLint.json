@@ -22,135 +22,96 @@
   {
     "name": "forward reference",
     "sql": "-- @input source\n-- @output a\nSELECT * FROM {{ b }};\n-- @output b\nSELECT * FROM {{ source }};",
-    "errors": [
-      "undeclaredReference"
-    ]
+    "errors": ["undeclaredReference"]
   },
   {
     "name": "self reference",
     "sql": "-- @output a\nSELECT * FROM {{ a }};",
-    "errors": [
-      "undeclaredReference"
-    ]
+    "errors": ["undeclaredReference"]
   },
   {
     "name": "undeclared reference in a check",
     "sql": "-- @input source\n-- @output a\nSELECT * FROM {{ source }};\n-- @test t\nSELECT * FROM {{ missing }};",
-    "errors": [
-      "undeclaredReference"
-    ]
+    "errors": ["undeclaredReference"]
   },
   {
     "name": "unknown directive",
     "sql": "-- @inputs source\n-- @output a\nSELECT 1;",
-    "errors": [
-      "unknownDirective"
-    ]
+    "errors": ["unknownDirective"]
   },
   {
     "name": "parameter without a type",
     "sql": "-- @param limit number\n-- @output a\nSELECT 1;",
-    "errors": [
-      "invalidParameter"
-    ]
+    "errors": ["invalidParameter"]
   },
   {
     "name": "unknown parameter type",
     "sql": "-- @param amount: money = 3\n-- @output a\nSELECT 1;",
-    "errors": [
-      "unknownParameterType"
-    ]
+    "errors": ["unknownParameterType"]
   },
   {
     "name": "duplicate names",
     "sql": "-- @input source\n-- @param source: text\n-- @output a\nSELECT 1;",
-    "errors": [
-      "duplicateName",
-      "duplicateName"
-    ]
+    "errors": ["duplicateName", "duplicateName"]
   },
   {
     "name": "file bound to an undeclared connection",
     "sql": "-- @param path: file(location)\n-- @output a\nSELECT 1;",
-    "errors": [
-      "parameterArgument"
-    ]
+    "errors": ["parameterArgument"]
   },
   {
     "name": "secret without connection",
     "sql": "-- @param token: secret\n-- @output a\nSELECT 1;",
-    "errors": [
-      "parameterArgument"
-    ]
+    "errors": ["parameterArgument"]
   },
   {
     "name": "schema name without connection",
     "sql": "-- @param schema: schema_name\n-- @output a\nSELECT 1;",
-    "errors": [
-      "parameterArgument"
-    ]
+    "errors": ["parameterArgument"]
   },
   {
     "name": "table name bound to an input",
     "sql": "-- @input source\n-- @param table: table_name(source)\n-- @output a\nSELECT 1;",
-    "errors": [
-      "parameterArgument"
-    ]
+    "errors": ["parameterArgument"]
   },
   {
     "name": "column selection bound to an undeclared input",
     "sql": "-- @param columns: column_selection(source)\n-- @output a\nSELECT 1;",
-    "errors": [
-      "parameterArgument"
-    ]
+    "errors": ["parameterArgument"]
   },
   {
     "name": "output name starting with a digit",
     "sql": "-- @output 2nd\nSELECT 1;",
-    "errors": [
-      "invalidName"
-    ]
+    "errors": ["invalidName"]
   },
   {
     "name": "test name with a space",
     "sql": "-- @output a\nSELECT 1;\n-- @test bad name\nSELECT 1;",
-    "errors": [
-      "invalidTestName"
-    ]
+    "errors": ["invalidTestName"]
   },
   {
     "name": "duplicate test name",
     "sql": "-- @output a\nSELECT 1;\n-- @test t\nSELECT 1;\n-- @test t: warning\nSELECT 1;",
-    "errors": [
-      "duplicateTestName"
-    ]
+    "errors": ["duplicateTestName"]
   },
   {
     "name": "unknown test severity",
     "sql": "-- @output a\nSELECT 1;\n-- @test t: fatal\nSELECT 1;",
-    "errors": [
-      "invalidTestSeverity"
-    ]
+    "errors": ["invalidTestSeverity"]
   },
   {
     "name": "message with an argument",
     "sql": "-- @output a\nSELECT 1;\n-- @message now\nSELECT 'info' AS level, 'x' AS message;",
-    "errors": [
-      "messageArguments"
-    ]
+    "errors": ["messageArguments"]
   },
   {
     "name": "test without a query",
     "sql": "-- @output a\nSELECT 1;\n-- @test t",
-    "errors": [
-      "emptyCheck"
-    ]
+    "errors": ["emptyCheck"]
   },
   {
     "name": "message without a query before an output",
     "sql": "-- @message\n-- @output a\nSELECT 1;",
-    "errors": [
-      "emptyCheck"
-    ]
+    "errors": ["emptyCheck"]
   }
 ]

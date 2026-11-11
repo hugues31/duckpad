@@ -8,7 +8,7 @@ import {
   sqlCursor,
 } from "./sqlTemplate";
 // The server parses the same cases in tests/test_templates.py.
-import cases from "../../tests/fixtures/sql_template_lint.json";
+import cases from "./sqlTemplateLint.json";
 
 const TEMPLATE = `-- @label Paid orders
 -- @input source

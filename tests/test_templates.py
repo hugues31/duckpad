@@ -346,9 +346,11 @@ def test_schema_and_table_names_are_chosen_from_their_connection():
     assert insert["sql"] == 'INSERT INTO "conn_1"."public"."totals" BY NAME SELECT * FROM "input"'
 
 
-LINT_CASES = json.loads((Path(__file__).parent / "fixtures" / "sql_template_lint.json").read_text())
+LINT_CASES_FILE = Path(__file__).parents[1] / "frontend" / "src" / "sqlTemplateLint.json"
+LINT_CASES = json.loads(LINT_CASES_FILE.read_text()) if LINT_CASES_FILE.exists() else []
 
 
+@pytest.mark.skipif(not LINT_CASES_FILE.exists(), reason="The sdist has no frontend sources")
 @pytest.mark.parametrize("case", LINT_CASES, ids=[case["name"] for case in LINT_CASES])
 def test_editor_lint_errors_are_parse_errors(case):
     """The code editor flags these templates as it parses them (sqlTemplate.test.ts)."""
