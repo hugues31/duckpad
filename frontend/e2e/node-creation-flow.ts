@@ -103,10 +103,7 @@ export async function verifyNodeCreation(page: Page) {
   ).toHaveCount(0);
   await page.keyboard.press("End");
   await expect(
-    menu.getByRole("menuitem", {
-      name: "Remove node",
-      exact: true,
-    }),
+    menu.getByRole("menuitem", { name: "Remove node", exact: true }),
   ).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(menu).toHaveCount(0);

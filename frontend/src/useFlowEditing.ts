@@ -5,14 +5,13 @@ import {
   type RefObject,
   type SetStateAction,
 } from "react";
-import { api, errorDetail, send, uploadSourceFile } from "./api";
+import { api, send, uploadSourceFile } from "./api";
 import type { CanvasHandle, FocusRequest } from "./canvasTypes";
 import {
   addFlowFilter,
   addFlowNode,
   dropFlowFiles,
   removeFlowNodes,
-  type RemovalMode,
 } from "./flowEdits";
 import {
   graphAt,
@@ -76,6 +75,7 @@ export function useFlowEditing({
   const additionPending = useRef(false);
   // Undos and redos in flight; editors stay inert so no edit races them.
   const [reverting, setReverting] = useState(0);
+  // A reconnection in flight; a second one would plan on the graph it replaces.
   const [removing, setRemoving] = useState(false);
   const removalPending = useRef(false);
   const busy = addingNode || reverting > 0 || removing;
@@ -187,67 +187,46 @@ export function useFlowEditing({
       setAddingNode(false);
     }
   }
-  async function removeNodes(
-    ids: string[],
-    edges: string[] = [],
-    mode: RemovalMode = "disconnect",
-  ) {
+  async function removeNodes(ids: string[], edges: string[] = []) {
+    const { change } = await save(snapshot, (value) =>
+      removeFlowNodes(value, path, ids, edges),
+    );
+    if (selected && ids.includes(selected)) select(null);
+    if (change && ids.length)
+      notify(
+        ids.length === 1
+          ? t("nodeDeleted")
+          : t("nodesDeleted").replace("{count}", String(ids.length)),
+        false,
+        { label: t("undo"), run: () => revert("undo", change) },
+      );
+  }
+  /** Remove a node and link its source to its consumers, as one change. */
+  async function reconnectNode(id: string) {
     if (!canEdit || busy || removalPending.current) return;
     removalPending.current = true;
     setRemoving(true);
     try {
-      let reconnected = 0;
-      const { change } =
-        mode === "reconnect"
-          ? await commit(async (base) => {
-              const shown = planNodeReconnection(snapshot, ids, parent);
-              const plan = planNodeReconnection(base, ids, parent);
-              if (
-                selection.length > 1 ||
-                !plan ||
-                !shown ||
-                shown.connections !== plan.connections
-              )
-                throw new Error(t("reconnectChanged"));
-              const value = structuredClone(base.bundle!);
-              canvas.current?.preserveViewport();
-              removeFlowNodes(value, path, ids, edges, plan.edges);
-              reconnected = plan.edges.length;
-              return api<Snapshot>(
-                `/worktrees/${worktree}`,
-                send(
-                  {
-                    revision: base.revision,
-                    bundle: value,
-                    strict_revision: true,
-                  },
-                  "PUT",
-                ),
-              );
-            })
-          : await save(snapshot, (value) =>
-              removeFlowNodes(value, path, ids, edges),
-            );
-      if (selected && ids.includes(selected)) select(null);
-      if (change && ids.length)
+      let links = 0;
+      // Plan on the saved graph: a pending draft may have changed the node's ports.
+      const { change } = await commit((base) => {
+        const reconnected = planNodeReconnection(base, id, parent);
+        if (!reconnected) throw new Error(t("reconnectChanged"));
+        links = reconnected.length;
+        const bundle = structuredClone(base.bundle!);
+        removeFlowNodes(bundle, path, [id], [], reconnected);
+        return api<Snapshot>(
+          `/worktrees/${worktree}`,
+          send({ revision: base.revision, bundle }, "PUT"),
+        );
+      });
+      if (selected === id) select(null);
+      if (change)
         notify(
-          mode === "reconnect"
-            ? countLabel(
-                t,
-                reconnected,
-                "nodeReconnectedOne",
-                "nodeReconnectedMany",
-              )
-            : ids.length === 1
-              ? t("nodeDeleted")
-              : t("nodesDeleted").replace("{count}", String(ids.length)),
+          countLabel(t, links, "nodeReconnectedOne", "nodeReconnectedMany"),
           false,
           { label: t("undo"), run: () => revert("undo", change) },
         );
-    } catch (error) {
-      if (errorDetail(error).code === "stale_revision")
-        throw new Error(t("reconnectChanged"), { cause: error });
-      throw error;
     } finally {
       removalPending.current = false;
       setRemoving(false);
@@ -318,9 +297,8 @@ export function useFlowEditing({
     copy,
     paste,
     toggleMute,
-    reconnect: async (ids) => {
-      if (planNodeReconnection(snapshot, ids, parent))
-        await removeNodes(ids, [], "reconnect");
+    reconnect: async (id) => {
+      if (planNodeReconnection(snapshot, id, parent)) await reconnectNode(id);
     },
   });
   /** Insert a Filter node reading one output of the selected node, with a sample's condition. */
@@ -349,6 +327,7 @@ export function useFlowEditing({
     addNode,
     dropFiles,
     removeNodes,
+    reconnectNode,
     paste,
     addFilterNode,
     toggleMute,

@@ -42,44 +42,6 @@ def worktree(client):
     return client.post("/api/projects", json={"name": "API"}).json()["id"]
 
 
-def test_strict_save_rejects_stale_revision_without_merging_or_writing(client, worktree):
-    path = f"/api/worktrees/{worktree}"
-    base = client.get(path).json()
-    remote = client.put(
-        path,
-        json={
-            "revision": base["revision"],
-            "files": {**base["files"], "README.md": "Remote edit"},
-        },
-    ).json()
-    proposal = {**base["files"], "flow.json": base["files"]["flow.json"] + "\n"}
-    rejected = client.put(
-        path,
-        json={
-            "revision": base["revision"],
-            "files": proposal,
-            "strict_revision": True,
-        },
-    )
-    assert rejected.status_code == 409
-    assert rejected.json()["detail"]["code"] == "stale_revision"
-    after = client.get(path).json()
-    assert after["files"] == remote["files"]
-    assert after["commit"] == remote["commit"]
-    accepted = client.put(
-        path,
-        json={
-            "revision": after["revision"],
-            "files": {**after["files"], "README.md": "Current edit"},
-            "strict_revision": True,
-        },
-    )
-    assert accepted.status_code == 200
-    restored = client.post(path + "/revert", json={"commit": accepted.json()["change"]})
-    assert restored.status_code == 200
-    assert restored.json()["files"] == remote["files"]
-
-
 @pytest.mark.parametrize("name", ["experiment/", "", "feature//change", "two words", "branch.lock"])
 def test_invalid_branch_names_have_actionable_errors_without_creating_worktrees(app, client, worktree, name):
     before = client.get("/api/workspace").json()["worktrees"]

@@ -581,7 +581,6 @@ class Projects:
         validate: bool = False,
         assistant: str | None = None,
         relock: bool = True,
-        strict_revision: bool = False,
     ) -> Record:
         """Save a proposal; `relock=False` keeps its uv.lock for changes that leave dependencies alone."""
         # A rejected save writes nothing, not even part of the proposal.
@@ -595,12 +594,6 @@ class Projects:
         with self.locked(worktree_id) as worktree:
             self.writable(worktree)
             current = self.read_files(worktree)
-            if strict_revision and digest(current) != revision:
-                raise Problem(
-                    "The project changed. Review the connections and try again.",
-                    409,
-                    {"code": "stale_revision"},
-                )
             base = self.base(worktree, revision, current)
             if base is None:
                 raise Problem("The editing revision is unavailable. Reload before saving.", 409)

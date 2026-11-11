@@ -33,18 +33,7 @@ SQL or Python node to edit its code; a linked node opens its shared template.
 **Edit code** at the top of the inspector does the same. The icons under it run
 the node with its ancestors, mute it, duplicate it, link it to a template or
 remove it; point at an icon for its name, or right-click the node for the same
-actions in a menu. The removal button deletes the node in one click. Delete and
-Backspace also keep ordinary removal. When reconnection is possible, the context
-menu additionally offers **Remove and reconnect**, with **Ctrl/Cmd+Delete** as its
-shortcut. For `A -> B -> C`, removing B normally disconnects A and C; reconnecting
-makes A feed C directly. Reconnection is available for a single transformation in
-the main flow with one input, one output and no declared external writes, one connected source
-and at least one consumer. All consumers receive the upstream output; nodes stay
-at their current positions. The action is hidden when unavailable, and its shortcut
-does nothing in that case.
-Check downstream column expectations after bypassing a step: links can be valid
-while the data no longer fits its consumers. Removing a node and reconnecting its
-links can be undone together with **Undo** in the
+actions in a menu. Removing a node can be undone with **Undo** in the
 notification or Ctrl/Cmd+Z. Double-click a [component](COMPONENTS.md) to open
 its contents; use the breadcrumbs to return. **Fit view** brings the graph into
 view. **Auto-arrange nodes** places dependencies in columns, orders each column to
@@ -67,6 +56,15 @@ and a muted export writes nothing. Sources have no input to pass through, so the
 cannot be muted. Muting or unmuting makes downstream results stale until the next
 run, and downstream code must accept the passthrough columns. The code editor's
 preview still computes the node's own code.
+
+To remove a step for good without redrawing its links, right-click it and choose
+**Remove and reconnect**, or select it and press Ctrl/Cmd+Delete (or Backspace):
+for `A -> B -> C`, removing B this way links A to C, where an ordinary removal
+leaves them disconnected. The action appears only for a transformation of the main
+flow with one input and one output, a connected source and at least one consumer.
+Every consumer then reads the upstream output, and one **Undo** restores the node,
+its code and its links. As with muting, downstream code must accept the upstream
+columns.
 
 Node names come from **Display name**, then the SQL `-- @label` directive or
 template name. Diagnostics, lineage, variable usage, conflict titles and new

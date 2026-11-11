@@ -48,7 +48,7 @@ export default function InspectorActions({
           )}
         </button>
         {others
-          .filter((action) => action.id !== "removeReconnect")
+          .filter((action) => !action.menuOnly)
           .map((action) => (
             <button
               key={action.id}

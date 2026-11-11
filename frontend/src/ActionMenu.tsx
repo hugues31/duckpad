@@ -115,7 +115,6 @@ export function ActionMenu({
           disabled={item.disabled}
           className={item.danger ? "danger" : undefined}
           onClick={() => {
-            if (item.disabled) return;
             onClose();
             item.run();
           }}

@@ -29,7 +29,7 @@ export function useFlowShortcuts({
   copy: (ids: string[]) => Promise<void>;
   paste: (copied: CopiedNodes) => Promise<void>;
   toggleMute: (ids: string[]) => Promise<void>;
-  reconnect: (ids: string[]) => Promise<void>;
+  reconnect: (id: string) => Promise<void>;
 }) {
   const shortcut = useEffectEvent((event: KeyboardEvent) => {
     if (
@@ -79,7 +79,8 @@ export function useFlowShortcuts({
   });
   const reconnectShortcut = useEffectEvent((event: KeyboardEvent) => {
     if (
-      event.key !== "Delete" ||
+      // Either removal key: Mac laptops only have the one that sends Backspace.
+      (event.key !== "Delete" && event.key !== "Backspace") ||
       !(event.ctrlKey || event.metaKey) ||
       event.defaultPrevented ||
       event.isComposing ||
@@ -88,7 +89,7 @@ export function useFlowShortcuts({
       (event.target instanceof Element && event.target.closest('[role="menu"]'))
     )
       return;
-    // Consume this combination before React Flow sees Delete, even if unavailable.
+    // Never fall back to ordinary removal, even when React Flow lost track of the modifier.
     event.preventDefault();
     event.stopPropagation();
     if (
@@ -102,7 +103,7 @@ export function useFlowShortcuts({
     )
       return;
     const ids = selection.length ? selection : selected ? [selected] : [];
-    if (ids.length === 1) safe(() => reconnect(ids));
+    if (ids.length === 1) safe(() => reconnect(ids[0]));
   });
   useEffect(() => {
     document.addEventListener("keydown", shortcut);

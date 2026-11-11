@@ -64,15 +64,8 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
   const initialized = useNodesInitialized();
   const safeArea = useRef<HTMLDivElement>(null);
   const viewportTouched = useRef(false);
-  const [focus, setFocus] = useState<Omit<FocusRequest, "key"> | null>(
-    props.focusRequest ?? null,
-  );
   const dragPreview = useNodeDragPreview(props);
   useImperativeHandle(ref, () => ({
-    preserveViewport: () => {
-      viewportTouched.current = true;
-      setFocus(null);
-    },
     previewDrag: dragPreview.previewDrag,
     newNodePosition: (graphNodes) => {
       const rendered = new Map(getNodes().map((node) => [node.id, node]));
@@ -102,6 +95,9 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
   }));
   const lastFit = useRef("");
   const [query, setQuery] = useState("");
+  const [focus, setFocus] = useState<Omit<FocusRequest, "key"> | null>(
+    props.focusRequest ?? null,
+  );
   // Each new request from the page focuses its node once.
   const [handledRequest, setHandledRequest] = useState(props.focusRequest);
   if (props.focusRequest !== handledRequest) {

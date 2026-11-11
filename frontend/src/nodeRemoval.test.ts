@@ -52,10 +52,10 @@ it.each(["sql", "python"])(
     value.flow.edges.push({ ...edge("c", "d"), targetHandle: "other" });
     base.parsed_nodes!["nodes/d.sql"].inputs!.push("other");
     const before = structuredClone(value);
-    const plan = planNodeReconnection(base, ["b"]);
+    const plan = planNodeReconnection(base, "b");
     expect(plan).not.toBeNull();
     expect(value).toEqual(before);
-    removeFlowNodes(value, [], ["b"], [], plan!.edges);
+    removeFlowNodes(value, [], ["b"], [], plan!);
     expect(value.flow.nodes).toEqual(
       before.flow.nodes.filter((node) => node.id !== "b"),
     );
@@ -75,7 +75,7 @@ it("preserves the upstream output and each consumer's input, without requiring m
   base.bundle!.flow.edges[0].sourceHandle = "orders";
   base.parsed_nodes!["nodes/d.sql"].inputs = ["rows"];
   base.bundle!.flow.edges[2].targetHandle = "rows";
-  expect(planNodeReconnection(base, ["b"])?.edges).toEqual([
+  expect(planNodeReconnection(base, "b")).toEqual([
     { ...edge("b", "c"), source: "a", sourceHandle: "orders" },
     {
       ...edge("b", "d"),
@@ -110,7 +110,6 @@ it.each([
   "wrong consumer port",
   "occupied input",
   "duplicate edge",
-  "cycle",
   "self-link",
 ])("refuses %s without mutating the graph", (scenario) => {
   const base = snapshot();
@@ -168,19 +167,15 @@ it.each([
     case "duplicate edge":
       graph.edges.push({ ...edge("b", "c"), id: "duplicate" });
       break;
-    case "cycle":
-      graph.edges.push(edge("c", "a"));
-      break;
     case "self-link":
       graph.edges[1].target = "a";
       break;
   }
   const before = structuredClone(base);
-  expect(planNodeReconnection(base, ["b"])).toBeNull();
+  expect(planNodeReconnection(base, "b")).toBeNull();
   expect(base).toEqual(before);
 });
 
-it("does not reconnect component internals or multiple selected nodes", () => {
-  expect(planNodeReconnection(snapshot(), ["b"], "box")).toBeNull();
-  expect(planNodeReconnection(snapshot(), ["b", "c"])).toBeNull();
+it("does not reconnect component internals", () => {
+  expect(planNodeReconnection(snapshot(), "b", "box")).toBeNull();
 });

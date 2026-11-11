@@ -262,7 +262,6 @@ export default function Inspector({
         onClose={onClose}
       />
       <InspectorActions
-        key={node.id}
         actions={actions}
         starting={starting}
         runDisabled={readOnly || !!starting || !!statuses.active}

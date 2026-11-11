@@ -11,13 +11,12 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { ActionItem } from "./ActionMenu";
-import type { RemovalMode } from "./flowEdits";
 import type { Translate } from "./i18n";
 import { countLabel, isBuiltinTemplate } from "./i18n";
 import { nodeCopies, type CopiedNodes } from "./nodeClipboard";
 import { canMute, detachNode, nodeGraph, templateUsage } from "./nodeCode";
-import { searchShortcutLabel } from "./searchShortcuts";
 import { planNodeReconnection } from "./nodeRemoval";
+import { searchShortcutLabel } from "./searchShortcuts";
 import type { useShell } from "./shell";
 import type { Bundle, FlowNode, Snapshot } from "./types";
 import type { useLoadedWorktree } from "./worktree";
@@ -26,6 +25,8 @@ export type NodeAction = ActionItem & {
   icon: LucideIcon;
   /** A toggle that is currently on. */
   active?: boolean;
+  /** A secondary command that the inspector leaves to the canvas menu. */
+  menuOnly?: boolean;
 };
 
 export function nodeActions(
@@ -44,8 +45,8 @@ export function nodeActions(
     openModal,
     worktree,
     removeNodes,
+    reconnectNode,
     toggleMute,
-    selection,
   }: {
     t: Translate;
     canEdit: boolean;
@@ -59,13 +60,9 @@ export function nodeActions(
     snapshot: Snapshot;
     openModal: ReturnType<typeof useShell>["openModal"];
     worktree: string;
-    removeNodes: (
-      ids: string[],
-      edges?: string[],
-      mode?: RemovalMode,
-    ) => Promise<void>;
+    removeNodes: (ids: string[]) => Promise<void>;
+    reconnectNode: (id: string) => Promise<void>;
     toggleMute: (ids: string[]) => Promise<void>;
-    selection: string[];
   },
 ): NodeAction[] {
   const item = (
@@ -158,19 +155,16 @@ export function nodeActions(
     ),
     danger: true,
   });
-  const reconnection = planNodeReconnection(
-    snapshot,
-    selection.length > 1 ? selection : [target.id],
-    parent,
-  );
-  if (reconnection)
-    actions.push(
-      item(
+  // Offered only where the bypass is unambiguous.
+  if (planNodeReconnection(snapshot, target.id, parent))
+    actions.push({
+      ...item(
         "removeReconnect",
         Link2,
         `${t("deleteNodeReconnect")} (${searchShortcutLabel(t("deleteKey"))})`,
-        () => safe(() => removeNodes([target.id], [], "reconnect")),
+        () => safe(() => reconnectNode(target.id)),
       ),
-    );
+      menuOnly: true,
+    });
   return actions;
 }

@@ -212,8 +212,6 @@ class Save(BaseModel):
     """A UI save: raw files, or a bundle serialized to files, based on an editing revision."""
 
     revision: str
-    # Graph rewiring must not merge with connections changed since it was planned.
-    strict_revision: bool = False
     files: dict[str, str] | None = None
     bundle: dict[str, Any] | None = None
 
