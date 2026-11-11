@@ -14,9 +14,15 @@ node's outputs and, under **Inputs, to compare**, the datasets connected to its
 inputs: showing an input keeps the current sample when its columns allow it, to
 check an operation before and after. A sample filter is kept only when the other
 dataset has every column of the current one; otherwise that dataset's own sample
-is restored, as when opening failing rows from an input. An export node has no
-rows: its panel opens on **Log**, with **Tests**. A component instance shows its
-exposed outputs.
+is restored, as when opening failing rows from an input. An export node shows its
+connected input in **Data**, **Columns** and **Chart**. The **Inputs** selector
+names the upstream dataset and lets you choose when several inputs are connected.
+These are the retained input rows, not a readback of the destination file or
+database; inspecting them does not execute the export. Charts belong to the
+upstream dataset, so a chart added here is also available at its source node.
+**Log**, **Tests** and downloads still describe the export itself. Without a
+connected input, only **Log** and **Tests** are available. A component instance
+shows its exposed outputs.
 
 The inspector's result summary links to Data, Log and Tests, showing validity,
 warnings and the latest failure for the selected environment.
