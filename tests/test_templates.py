@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -343,3 +344,16 @@ def test_schema_and_table_names_are_chosen_from_their_connection():
         export, {"connection": "pg", "table": "totals"}, {"source": '"input"'}, {}, connections, PROJECT_FILES
     )
     assert insert["sql"] == 'INSERT INTO "conn_1"."public"."totals" BY NAME SELECT * FROM "input"'
+
+
+LINT_CASES = json.loads((Path(__file__).parent / "fixtures" / "sql_template_lint.json").read_text())
+
+
+@pytest.mark.parametrize("case", LINT_CASES, ids=[case["name"] for case in LINT_CASES])
+def test_editor_lint_errors_are_parse_errors(case):
+    """The code editor flags these templates as it parses them (sqlTemplate.test.ts)."""
+    if case["errors"]:
+        with pytest.raises(Problem):
+            parse_template(case["sql"])
+    else:
+        parse_template(case["sql"])
