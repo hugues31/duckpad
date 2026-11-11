@@ -1,8 +1,18 @@
 # Lineage coverage
 
-Lineage explains the materialized execution, not today's external resource. A result identifies its execution, dataset generation, column and stable storage row. Sorting or filtering the preview does not change those identities or restrict the provenance search.
+Lineage explains the materialized execution, not today's external resource. A result identifies its execution, dataset generation, column and stable storage row. Sorting, filtering or sampling the displayed rows does not change those identities or restrict the provenance search.
 
-The explorer separates contributing value cells from selection/evaluation context and shows the calculation expression and referenced tables. Every cell remains navigable, including identical values from different rows. Results are paged in groups of five with an exact total. Source cells terminate the traversal; nested components retain instance-qualified paths.
+Clicking a cell opens a dependency graph: source cells on the left, calculations on the right. All inputs on the current page are traced automatically; shared source cells appear once, connected to each calculation that uses them.
+
+Calculation cards show the expression, its captured operand values when they can be bound unambiguously, and the result. For example, `amount * 2` becomes `10 * 2 = 20`. Small sums and averages show their complete numeric equation. Larger aggregates show their formula, the full contribution count and an explicit range for the five displayed inputs; a page is never presented as the entire calculation. Distinct value groups open their original rows while preserving the selected count.
+
+An unchanged column passed through a projection, filter or join does not add a calculation node. This is determined from the parsed expression, not from equal values: `amount * 1` remains a calculation. Row-selection context from the collapsed steps stays available in source and calculation details. Coverage limits are explicit; source values, constants and unsupported steps terminate traversal.
+
+Automatic tracing has a request budget; an unexplored value offers **Trace earlier inputs** to continue. Recalculation interrupts all graph requests and navigation.
+
+![Five source amounts and the sum they contribute to, with pagination for all 27 values](images/lineage.png)
+
+An output whose query reads an external resource, or no flow data at all, is a lineage source: explanations stop at its rows and never reread the resource. To trace a calculation through external rows joined with an input, load them into an earlier output first.
 
 ## Validated baseline
 
@@ -25,7 +35,8 @@ The explorer separates contributing value cells from selection/evaluation contex
 | Ordered outputs and nested component compositions | Supported | Each step links to the actual earlier output from the same execution |
 | Nonrecursive CTEs and derived tables | Supported with the duplicate-occurrence limitation below | Deterministic intermediate steps are materialized on demand from retained data |
 
-The native-equivalence suite separately checks values, types and multiplicities for projections, decimal calculations, joins, grouping, windows, CTEs and set operations. The example combines the required baseline across reusable pipeline steps. The coverage target beyond that baseline remains incremental.
+Native-equivalence tests compare values, types and multiplicities with
+uninstrumented DuckDB. The matrix describes verified coverage, not all SQL.
 
 ## Explicit limitations
 
@@ -38,6 +49,7 @@ These constructs remain executable when they satisfy the template contract, but 
 - Window arguments that combine columns from multiple joined relations without an intermediate projection.
 - Expressions combining several extrema into one cell, and multi-expression distinct aggregates/windows.
 - Volatile expressions such as random values, UUIDs or current timestamps: replay must not invent an explanation from a new evaluation.
+- Projections that expand into several columns, such as `COLUMNS(...)`, `struct.*` or `UNNEST` of a struct: the step runs its native query without captured row witnesses, and lineage reports this limitation for its cells.
 - Indistinguishable duplicate occurrences in a composed CTE/derived projection when no original row witness was captured. Use separate pipeline nodes to capture each stage's witnesses.
 
 The response sets `complete: false` and identifies the unsupported step. The UI shows a coverage warning instead of presenting a partial search as complete. An unsupported construct does not modify the computed query values.
@@ -46,4 +58,4 @@ The response sets `complete: false` and identifies the unsupported step. The UI 
 
 A configuration edit or a manual recomputation invalidates the affected old generation. Pending lineage is interrupted, late responses are discarded, and further navigation is disabled. Recalculation does not automatically replay an explanation on the same row number. Select a cell explicitly after a valid replacement appears.
 
-Failed recomputation retains the previous preview as stale, with its original SQL and execution metadata. It has no lineage. External source-file changes alone leave an existing valid result and its explanation unchanged until the next manual run reloads that resource.
+Failed recomputation retains the previous preview as stale, with its original SQL and execution metadata. It has no lineage.
