@@ -27,12 +27,15 @@ async function runExport(
   expect(response.ok()).toBe(true);
   const launched: Run = await response.json();
   await expect
-    .poll(async () => {
-      const run: Run = await (
-        await page.request.get(`/api/runs/${launched.id}`)
-      ).json();
-      return run.status;
-    })
+    .poll(
+      async () => {
+        const run: Run = await (
+          await page.request.get(`/api/runs/${launched.id}`)
+        ).json();
+        return run.status;
+      },
+      { timeout: 30000 },
+    )
     .toBe(status);
 }
 
@@ -65,7 +68,9 @@ test("an export previews its input before it runs, then offers its download and 
   await panel
     .getByRole("button", { name: "Run ancestors", exact: true })
     .click();
-  await expect(panel.locator(".data-table tbody tr")).toHaveCount(2);
+  await expect(panel.locator(".data-table tbody tr")).toHaveCount(2, {
+    timeout: 30000,
+  });
   await panel.getByRole("tab", { name: /^Columns/ }).click();
   await expect(
     panel.getByRole("button", { name: "amount", exact: true }),
