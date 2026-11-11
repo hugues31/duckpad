@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import threading
 import time
+from collections import defaultdict
 from dataclasses import dataclass, field
 
 import duckdb
@@ -227,22 +228,20 @@ class Results:
                 else run
                 for node, run in context.result_runs.items()
             }
-        error_runs = {
-            node: value.get("error_run") for node, value in result.items() if value.get("error_run")
-        }
+        error_runs = {node: run for node, value in result.items() if (run := value.get("error_run"))}
         runs = {
             run: self.store.get("run", run) for run in set(generations.values()) | set(error_runs.values())
         }
         # Blocked nodes name the failures behind them in their own run, so that a later run
         # of an ancestor leaves the explanation intact. Many nodes share each failure.
         causes: dict[str, Record] = {}
-        resolved: dict[str, dict[str, list[str]]] = {}
+        resolved: defaultdict[str, dict[str, list[str]]] = defaultdict(dict)
         for node, run_id in error_runs.items():
             states = runs[run_id]["nodes"]
             result[node]["diagnostic"] = states[node].get("diagnostic")
             if not states[node].get("blocked_by"):
                 continue
-            roots = root_failures(states, node, resolved.setdefault(run_id, {}))
+            roots = root_failures(states, node, resolved[run_id])
             result[node]["error_causes"] = [f"{run_id}:{root}" for root in roots]
             for root in roots:
                 causes.setdefault(
