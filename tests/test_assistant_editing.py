@@ -16,17 +16,19 @@ from test_assistant import configure, conversation, dependencies, project, turn
 from test_assistant import instance as instance
 from test_project_save_atomicity import observe_after_quiet_period
 
-from duckpad.assistant.arguments import AddNode
+from duckpad.assistant.arguments import AddNode, RemoveNode, UpdateNode
 from duckpad.assistant.editing import WRITE_TOOLS, edit_flow
 from duckpad.assistant.runs import RUN_TOOLS
 from duckpad.bundle import bundle_to_files
 from duckpad.git.command import GitTimeout
 from duckpad.util import Problem
+from duckpad.validation import validate
 
 SQL = "-- @output result\nSELECT 1 AS value;\n"
 BAR = {"mark": "bar", "encoding": {"x": {"field": "value", "type": "quantitative"}}}
 CONSUMER = "-- @input input\n-- @output result\nSELECT * FROM {{ input }};"
 LINE = {"mark": "line", "encoding": {"y": {"field": "value", "type": "quantitative"}}}
+EXISTING_NODE_IDS = ["keep.rows", "kept rows / 日本語", "n" * 101]
 
 
 def seed(app, client):
@@ -411,6 +413,13 @@ def test_rejected_variable_arguments_save_nothing(instance, change, field):
 @pytest.mark.parametrize(
     ("args", "field"),
     [
+        *[
+            (flow({"operation": "add", "id": node_id, "template": "filter"}), "id")
+            for node_id in EXISTING_NODE_IDS
+        ],
+        (flow({"operation": "add", "id": ""}), "id"),
+        (flow({"operation": "update", "id": "", "label": "Renamed"}), "id"),
+        (flow({"operation": "remove", "id": ""}), "id"),
         (flow({"operation": "add", "id": "added", "sql": SQL, "template": "filter"}), "Choose one of"),
         (flow({"operation": "add", "id": "added", "remove_parameters": ["x"]}), "remove_parameters"),
         (flow({"operation": "update", "id": "first", "sql": SQL}), "sql"),
@@ -639,6 +648,128 @@ def test_edges_connect_existing_nodes_whatever_their_id(instance):
     assert result["tools"][0]["status"] == "complete", result
     edges = app.state.services.projects.snapshot(worktree["id"])["bundle"]["flow"]["edges"]
     assert [(e["source"], e["target"]) for e in edges] == [("first", "keep.rows")]
+
+
+def seed_existing_node(app, client, node_id, component):
+    """A linked node between a source and another instance of the same template."""
+    worktree, context = seed(app, client)
+
+    def add_graph(bundle):
+        bundle["templates"]["filter"] = (
+            "-- @param minimum: number = 0\n-- @param maximum: number = 100\n"
+            "-- @input input\n-- @output result\n"
+            "SELECT * FROM {{ input }} WHERE value BETWEEN {{ minimum }} AND {{ maximum }};"
+        )
+        graph = bundle["flow"]
+        if component:
+            bundle["templates"]["constant"] = SQL
+            graph = {"name": "Report", "nodes": [{"id": "first", "template": "constant"}], "edges": []}
+            bundle["components"][component] = graph
+            bundle["flow"]["nodes"].extend(
+                {"id": name, "component": component} for name in ("summary", "other_summary")
+            )
+        graph["nodes"].extend(
+            [
+                {"id": node_id, "template": "filter", "params": {"minimum": 1, "maximum": 10}},
+                {"id": "last", "template": "filter", "params": {}},
+            ]
+        )
+        graph["edges"] = [
+            {
+                "id": name,
+                "source": source,
+                "target": target,
+                "sourceHandle": "result",
+                "targetHandle": "input",
+            }
+            for name, source, target in (("incoming", "first", node_id), ("outgoing", node_id, "last"))
+        ]
+
+    change(app, worktree, add_graph)
+    return worktree, context
+
+
+@pytest.mark.parametrize("node_id", EXISTING_NODE_IDS)
+@pytest.mark.parametrize("component", ["", "report"])
+@pytest.mark.parametrize("operation", ["update", "remove"])
+def test_existing_node_edits_keep_shared_templates_and_support_undo(instance, node_id, component, operation):
+    app, client = instance
+    worktree, context = seed_existing_node(app, client, node_id, component)
+    projects = app.state.services.projects
+    before = projects.snapshot(worktree["id"])
+    assert validate(before["bundle"]) == []
+    edit = {"operation": operation, "id": node_id}
+    edges = []
+    if operation == "update":
+        edit.update(
+            label="Filtered rows",
+            position={"x": 20, "y": 40},
+            params={"minimum": 2},
+            remove_parameters=["maximum"],
+        )
+    else:
+        # Removing the middle node must clear both incident edges before reconnecting its consumer.
+        edges = [{"operation": "connect", "id": "bypass", "source": "first", "target": "last"}]
+    identity, result = write_turn(
+        app, client, context, [("edit_flow", {"component": component, "nodes": [edit], "edges": edges})]
+    )
+    card = result["tools"][0]
+    assert card["status"] == "complete", result
+    assert card["action"]["status"] == "applied"
+    assert card["action"]["before"] == before["commit"]
+    after = projects.snapshot(worktree["id"])
+    assert card["action"]["commit"] == after["commit"]
+    assert projects.git(worktree["path"], "rev-list", "--count", before["commit"] + "..HEAD") == "1"
+    bundle = after["bundle"]
+    assert validate(bundle) == []
+    assert bundle["templates"] == before["bundle"]["templates"]
+    assert bundle["node_sql"] == before["bundle"]["node_sql"]
+    graph = bundle["components"][component] if component else bundle["flow"]
+    if component:
+        assert bundle["flow"] == before["bundle"]["flow"]
+    if operation == "update":
+        assert next(n for n in graph["nodes"] if n["id"] == node_id) == {
+            "id": node_id,
+            "template": "filter",
+            "label": "Filtered rows",
+            "position": {"x": 20, "y": 40},
+            "params": {"minimum": 2},
+        }
+        assert [e["id"] for e in graph["edges"]] == ["incoming", "outgoing"]
+    else:
+        assert node_id not in {n["id"] for n in graph["nodes"]}
+        assert [(e["id"], e["source"], e["target"]) for e in graph["edges"]] == [("bypass", "first", "last")]
+    assert next(n for n in graph["nodes"] if n["id"] == "last")["template"] == "filter"
+    undone = undo(client, identity, result, context)
+    assert undone["tools"][0]["action"]["status"] == "undone"
+    assert projects.snapshot(worktree["id"])["files"] == before["files"]
+
+
+@pytest.mark.parametrize("component", ["", "report"])
+@pytest.mark.parametrize(
+    ("edit", "message"),
+    [
+        ({"operation": "update", "id": "missing.node", "label": "Missing"}, "Node not found"),
+        ({"operation": "remove", "id": "missing.node"}, "Node not found"),
+        (
+            {"operation": "update", "id": "keep.rows", "params": {"minimum": {"$var": "missing"}}},
+            "diagnostics",
+        ),
+        ({"operation": "remove", "id": "keep.rows"}, "missing_input"),
+    ],
+)
+def test_rejected_existing_node_edits_save_nothing(instance, component, edit, message):
+    app, client = instance
+    worktree, context = seed_existing_node(app, client, "keep.rows", component)
+    projects = app.state.services.projects
+    before = projects.snapshot(worktree["id"])
+    _, result = write_turn(app, client, context, [("edit_flow", {"component": component, "nodes": [edit]})])
+    card = result["tools"][0]
+    assert card["status"] == "error", result
+    assert message in card["summary"]
+    assert "action" not in card
+    after = projects.snapshot(worktree["id"])
+    assert (after["commit"], after["files"]) == (before["commit"], before["files"])
 
 
 CHART = {"operation", "node", "output", "name"}
@@ -1014,8 +1145,13 @@ def test_reader_has_no_write_tools_and_forced_write_or_undo_is_denied(instance):
             app.state.assistant.configuration.model_override.last_model_request_parameters.function_tools
         )
         assert {t.name for t in available}.isdisjoint(t.__name__ for t in WRITE_TOOLS)
-        with pytest.raises(Problem, match="role does not allow"):
-            edit_flow(dependencies(app, reader, context), [AddNode(operation="add", id="forbidden")])
+        for edit in (
+            AddNode(operation="add", id="forbidden"),
+            UpdateNode(operation="update", id="keep.rows", label="Forbidden"),
+            RemoveNode(operation="remove", id="keep.rows"),
+        ):
+            with pytest.raises(Problem, match="role does not allow"):
+                edit_flow(dependencies(app, reader, context), [edit])
         response = reader.post(
             f"/api/assistant/conversations/{identity}/undo", json={"turn": result["id"], "context": context}
         )
