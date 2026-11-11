@@ -43,16 +43,34 @@
 [data-theme="dark"] .button.primary {
   color: #081a33;
 }
-/* The logo tile wears the primary button's gradient and glides the same way. */
+/*
+ * The logo tile wears the primary button's gradient and glides the same way.
+ * Its drift and its hover move the gradient through separate typed properties,
+ * so hovering a drifting logo glides on from wherever the drift has taken it.
+ */
+@property --duck-drift {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+@property --duck-hover {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
 .duck-mark {
+  /* 0% at rest, 100% once hovered; the drift only covers what is left. */
+  --duck-glide: calc(
+    (1 - (1 - var(--duck-drift)) * (1 - var(--duck-hover))) * 100%
+  );
   border-radius: 25%;
   background-color: var(--brand);
   background-image: var(--brand-gradient);
   background-size: 180% 180%;
   background-position:
-    0% 0%,
-    100% 100%;
-  transition: background-position 600ms ease;
+    var(--duck-glide) var(--duck-glide),
+    calc(100% - var(--duck-glide)) calc(100% - var(--duck-glide));
+  transition: --duck-hover 600ms ease;
   /* The duck is white: its tile must survive printing and forced colors. */
   print-color-adjust: exact;
   forced-color-adjust: none;
@@ -60,9 +78,7 @@
 @media (prefers-reduced-motion: no-preference) {
   .duck-mark:hover,
   a:is(:hover, :focus-visible) > .duck-mark {
-    background-position:
-      100% 100%,
-      0% 0%;
+    --duck-hover: 1;
   }
   /* The sign-in pages have nothing to hover: their logo drifts by itself. */
   .login-brand .duck-mark {
@@ -70,10 +86,11 @@
   }
 }
 @keyframes duck-mark-drift {
+  from {
+    --duck-drift: 0;
+  }
   to {
-    background-position:
-      100% 100%,
-      0% 0%;
+    --duck-drift: 1;
   }
 }
 .button.secondary {
