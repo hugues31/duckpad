@@ -41,8 +41,8 @@ avoid crossing links, and lines up linked sockets. Drag a port onto empty space 
 add a compatible connected node.
 
 Press **Escape** to clear the selection and close its inspector and results.
-Selecting a node opens both panels again. If a dialog is open, Escape dismisses
-that dialog first.
+Selecting a node opens both panels again. An open dialog, menu or list of
+suggestions takes Escape first, and the code editor keeps it for itself.
 
 Select one or more nodes and press **M**, or choose **Mute node (M)** among a
 node's actions, to bypass their code; repeat to restore it. A muted node is faded, with a
