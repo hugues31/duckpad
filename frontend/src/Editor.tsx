@@ -251,13 +251,14 @@ export default function CodeEditor({
         // Suggestions come from Duckpad's providers only, and show by
         // themselves in code. Enter always starts a new SQL line, since lines
         // often end with an alias that a suggestion would replace: Tab accepts.
+        // Elsewhere, Enter starts a new line after a name typed in full.
         wordBasedSuggestions: "off",
         quickSuggestions: {
           other: language === "sql" || language === "python",
           comments: false,
           strings: language === "python",
         },
-        acceptSuggestionOnEnter: language === "sql" ? "off" : "on",
+        acceptSuggestionOnEnter: language === "sql" ? "off" : "smart",
         fontSize: 13,
         lineHeight: 22,
         scrollBeyondLastLine: false,

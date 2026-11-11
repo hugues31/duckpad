@@ -170,6 +170,21 @@ class Filter(dp.Node):
   await expect
     .poll(async () => (await read()).files["nodes/filtered.py"])
     .toContain(`return source.filter("amount > 0 AND input_only = 'input'")`);
+
+  // Enter starts a new line after a name typed in full, and inserts a
+  // suggestion that completes the typed text.
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.keyboard.type("        self.db");
+  await expect(suggestions(page).filter({ hasText: /^db/ })).toBeVisible();
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("self.par");
+  await expect(
+    suggestions(page).filter({ hasText: /^partition/ }),
+  ).toBeVisible();
+  await page.keyboard.press("Enter");
+  await expect
+    .poll(async () => (await read()).files["nodes/filtered.py"])
+    .toContain("        self.db\n        self.partition");
 });
 
 test("the code editor completes Duckpad SQL, explains references and fixes problems", async ({

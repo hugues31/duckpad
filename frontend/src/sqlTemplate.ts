@@ -352,10 +352,16 @@ export function lintTemplate(text: string): TemplateProblem[] {
   }
 
   // References, checked against what each block can read.
+  const readable = new Map<TemplateBlock, Set<string>>();
   lines.forEach((line, index) => {
     const number = index + 1;
-    if (readDirective(line)) return;
-    const allowed = new Set(referencesAt(outline, number).map((d) => d.name));
+    if (readDirective(line) || !line.includes("{{")) return;
+    const block = blockAt(outline, number);
+    let allowed = readable.get(block);
+    if (!allowed) {
+      allowed = new Set(referencesAt(outline, number).map((d) => d.name));
+      readable.set(block, allowed);
+    }
     for (const match of line.matchAll(REFERENCE)) {
       const column = match.index + 1;
       if (!allowed.has(match[1]))

@@ -166,11 +166,11 @@ const PARAM_KEYWORDS: Record<string, TranslationKey> = {
   schema: "pythonParamSchema",
 };
 
-/** Inline code, with backticks inside the text kept as they are. */
 /** An entry of a lookup table, never an inherited key such as `constructor`. */
 const own = <T>(table: Record<string, T>, key: string): T | undefined =>
   Object.hasOwn(table, key) ? table[key] : undefined;
 
+/** Inline code, with backticks inside the text kept as they are. */
 const code = (text: string) =>
   text.includes("`") ? "`` " + text + " ``" : "`" + text + "`";
 const markdown = (value: string): Markdown => ({ value });

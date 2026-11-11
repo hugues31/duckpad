@@ -15,8 +15,9 @@ The editor completes the SDK after `dp.`, the node's parameters and methods afte
 such as `orders.filter`, or after `self.db.`, with their descriptions. Inside a
 string it suggests the inputs for `input=`, the connection or schema parameters
 for `connection=` and `schema=`, message levels, and otherwise the input columns.
-Hover a name for its documentation. A saved problem, such as an unsupported
-annotation, is underlined on its line.
+Press **Tab** or **Enter** to insert a suggestion; **Enter** starts a new line
+once the name is typed in full. Hover a name for its documentation. A saved
+problem, such as an unsupported annotation, is underlined on its line.
 
 ## Author a node
 
