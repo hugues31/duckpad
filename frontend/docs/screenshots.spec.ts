@@ -434,6 +434,22 @@ test("capture the docked code editor and its preview", async ({ page }) => {
     page,
     ".draft-preview-time { visibility: hidden !important; }",
   );
+  // Column suggestions after an alias of an input.
+  const rest = " FROM {{ source }} s WHERE s.channel = 'Web';";
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.keyboard.insertText("\n-- @output recent_web\nSELECT " + rest);
+  for (let step = 0; step < rest.length; step++)
+    await page.keyboard.press("ArrowLeft");
+  await page.keyboard.type("s.");
+  const suggestions = page.locator(".suggest-widget.visible .monaco-list-row");
+  await expect(suggestions.first()).toBeVisible();
+  await expect(panel.locator(".monaco-editor")).toContainText("recent_web");
+  await capture(
+    page,
+    "code-completion",
+    page,
+    ".draft-preview-time { visibility: hidden !important; }",
+  );
 });
 
 test("capture project variables, a parameter binding and a run confirmation", async ({

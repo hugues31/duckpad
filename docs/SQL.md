@@ -18,6 +18,37 @@ columns: from the upstream node's last result or, when it has none but the branc
 already ran in this environment, described from the upstream code. Click a column
 or an input to insert its name at the cursor.
 
+## Completion, hovers and problems
+
+The editor suggests what fits where you type, or on **Ctrl+Space**:
+
+- after `-- @`, the directives; after `-- @param name:`, the parameter types,
+  with the declared connection parameters or inputs that a type needs; in a
+  `connection` default, the connections granted to the project;
+- inside `{{ }}`, the inputs, the parameters and the outputs that the block can
+  read: outputs declared earlier, or every output in a check;
+- the columns of the inputs, with their types, and after an alias such as
+  `o.` in `FROM {{ orders }} o`, the columns of that input only;
+- the functions, keywords and types of the server's DuckDB, the named options
+  of table functions such as `read_csv`, and the types after `::`.
+
+Typing a function's parenthesis shows its parameters. Hover a reference to see
+what it holds on this node: an input's upstream node and columns, or a
+parameter's type, default and value, including the variable it is bound to.
+Hover a function for its description and an example.
+
+Problems that the server would refuse are underlined as you type: unknown
+directives, invalid declarations, references to undeclared names or to outputs
+computed later, and quoted references, which bind no value. A saved problem the
+editor cannot locate is shown on the first line. Hover it, press **F8** for the
+next one, or **Ctrl+.** for quick fixes such as declaring a missing input or
+parameter. The usual editing commands are available: **Ctrl+F** to find,
+**Ctrl+H** to replace, **Ctrl+/** to comment lines, **Alt+↑/↓** to move them,
+**Ctrl+D** to select the next occurrence, and **F1** for every command (**⌘**
+instead of **Ctrl** on macOS).
+
+![Column suggestions after an input alias in the docked code editor](images/code-completion.png)
+
 ## Preview while you edit
 
 **Preview** (**Ctrl+Enter**, **⌘Enter** on macOS) computes the code you are

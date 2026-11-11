@@ -9,7 +9,10 @@ and code ownership.
 The **Code** tab displays the worktree's files beside an editor. Choose a file,
 edit it, then **Save changes**. Drafts survive switching files or workspace tabs.
 External editors are also supported. Every completed save is committed, including
-invalid content; fix the reported errors before running affected nodes.
+invalid content; fix the reported errors before running affected nodes. SQL and
+Python files get the [completion, hovers and checks](SQL.md#completion-hovers-and-problems)
+of the docked editor, and in `flow.json` a `"$var": "` reference suggests the
+project variables.
 
 **Download project ZIP** exports the saved declarative files below. Save or
 discard pending edits first. Readers can download; editing requires Editor access.
