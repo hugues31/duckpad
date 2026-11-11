@@ -30,23 +30,22 @@ export function PartitionSelector() {
     const outside = (event: PointerEvent) => {
       if (!root.current?.contains(event.target as Node)) setOpen(false);
     };
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOpen(false);
-        trigger.current?.focus();
-      }
-    };
     document.addEventListener("pointerdown", outside);
-    document.addEventListener("keydown", escape);
-    return () => {
-      document.removeEventListener("pointerdown", outside);
-      document.removeEventListener("keydown", escape);
-    };
+    return () => document.removeEventListener("pointerdown", outside);
   }, [open]);
   const description = worktree?.snapshot?.partitions?.[worktree.environment];
   if (!worktree?.snapshot || !description?.dimension) return null;
   return (
-    <div className="partition-selector" ref={root}>
+    <div
+      className="partition-selector"
+      ref={root}
+      onKeyDown={(event) => {
+        if (!open || event.key !== "Escape") return;
+        // Closing the menu consumes the key: page shortcuts yield to it.
+        event.preventDefault();
+        close();
+      }}
+    >
       <button
         ref={trigger}
         className="button secondary small partition-trigger"
