@@ -474,7 +474,7 @@ export default function FlowPage() {
             hidden={!panels.open.preview}
             onTab={setResultsTab}
             onClose={() => panels.set({ preview: false })}
-            onRun={() => run(fullNode)}
+            onRun={(options) => run(fullNode, options)}
             onExplain={(value) => view.change({ cell: value })}
             onSave={(change) => save(snapshot, change)}
             onSaveDocumentation={(change) =>

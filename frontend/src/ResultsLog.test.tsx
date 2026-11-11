@@ -2,6 +2,8 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
+import type { ComponentProps } from "react";
+import { useExportDownload } from "./ExportDownload";
 import ResultsLog from "./ResultsLog";
 import type { NodeResult, Snapshot, Statuses } from "./types";
 
@@ -12,6 +14,21 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
 });
+
+/** The Log as the results panel renders it: the panel holds the download state. */
+function Log({
+  download,
+  ...props
+}: Omit<ComponentProps<typeof ResultsLog>, "download"> & {
+  download: boolean;
+}) {
+  const state = useExportDownload(
+    props.snapshot.worktree.id,
+    props.environment,
+    download ? props.fullNode : null,
+  );
+  return <ResultsLog {...props} download={download ? state : null} />;
+}
 const json = (value: unknown) =>
   new Response(JSON.stringify(value), {
     headers: { "content-type": "application/json" },
@@ -55,7 +72,7 @@ it("shows historical Python logs without durations and offers their artifacts", 
   );
   render(
     <MemoryRouter>
-      <ResultsLog
+      <Log
         snapshot={{ worktree: { id: "tree" } } as Snapshot}
         environment="dev"
         fullNode="python"
@@ -92,14 +109,14 @@ it("offers a download before any run only for Python nodes without outputs", asy
   );
   const { rerender } = render(
     <MemoryRouter>
-      <ResultsLog {...logProps} exportNode={false} download />
+      <Log {...logProps} exportNode={false} download />
     </MemoryRouter>,
   );
   expect(screen.getByText("This node has not run in this environment"));
   expect(screen.queryByRole("button", { name: /Download/ })).toBeNull();
   rerender(
     <MemoryRouter>
-      <ResultsLog {...logProps} exportNode download />
+      <Log {...logProps} exportNode download />
     </MemoryRouter>,
   );
   expect(await screen.findByRole("button", { name: /Download/ })).toBeTruthy();
@@ -122,7 +139,7 @@ it("shows a Python traceback once, in a code block, and its summary in the timel
   );
   const { container } = render(
     <MemoryRouter>
-      <ResultsLog
+      <Log
         {...logProps}
         exportNode={false}
         download={false}
@@ -176,7 +193,7 @@ it("names Python messages and captured output instead of a message block", async
   );
   const { container } = render(
     <MemoryRouter>
-      <ResultsLog
+      <Log
         {...logProps}
         exportNode={false}
         download={false}
@@ -214,7 +231,7 @@ it("does not claim that a muted export wrote its destination", async () => {
   );
   const { container } = render(
     <MemoryRouter>
-      <ResultsLog
+      <Log
         {...logProps}
         exportNode
         download={false}

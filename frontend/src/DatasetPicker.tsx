@@ -29,8 +29,10 @@ export function DatasetPicker({
   return (
     <Select
       className="dataset-select"
-      aria-label={t("output")}
-      title={inputs.length ? t("inputsToCompareHint") : undefined}
+      aria-label={t(ports.length ? "output" : "inputs")}
+      title={
+        ports.length && inputs.length ? t("inputsToCompareHint") : undefined
+      }
       value={target.input ? `input:${target.input}` : target.port}
       onChange={(event) => {
         const value = event.target.value;
@@ -42,16 +44,18 @@ export function DatasetPicker({
         );
       }}
     >
-      <optgroup label={t("nodeOutputs")}>
-        {ports.map((item) => (
-          <option key={item.port} value={item.port}>
-            {item.port}
-            {count(item.count)}
-          </option>
-        ))}
-      </optgroup>
+      {ports.length > 0 && (
+        <optgroup label={t("nodeOutputs")}>
+          {ports.map((item) => (
+            <option key={item.port} value={item.port}>
+              {item.port}
+              {count(item.count)}
+            </option>
+          ))}
+        </optgroup>
+      )}
       {inputs.length > 0 && (
-        <optgroup label={t("inputsToCompare")}>
+        <optgroup label={t(ports.length ? "inputsToCompare" : "inputs")}>
           {inputs.map((item) => (
             <option key={item.input} value={`input:${item.input}`}>
               {item.input} ← {item.label} · {item.port}

@@ -62,6 +62,7 @@ test("download a full CSV export and keep project ZIP separate", async ({
     ).toBeTruthy();
     await page.goto(`/worktrees/${worktree.id}/flow`);
     await page.locator('.react-flow__node[data-id="export"]').click();
+    await page.getByRole("tab", { name: /^Log/ }).click();
     const panel = page.getByRole("region", {
       name: "Download exported data",
       exact: true,
