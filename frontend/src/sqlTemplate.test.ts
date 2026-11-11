@@ -185,6 +185,14 @@ describe("sqlCursor", () => {
       quoted: true,
       prefix: "pg",
     });
+    expect(
+      sqlCursor(String.raw`-- @param mode: choice(a"b|other) = "a\"`),
+    ).toEqual({
+      kind: "parameterDefault",
+      type: 'choice(a"b|other)',
+      quoted: true,
+      prefix: String.raw`a\"`,
+    });
     expect(sqlCursor("-- @test present: w")).toEqual({
       kind: "testSeverity",
       prefix: "w",

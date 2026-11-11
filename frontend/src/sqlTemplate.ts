@@ -417,7 +417,9 @@ export function sqlCursor(before: string): SqlCursor {
           return { kind: "parameterType", prefix: declared[1] };
         return { kind: "declaration" };
       }
-      const valued = /^\w+\s*:\s*([^=]+?)\s*=\s*("?)([^"]*)$/.exec(value);
+      const valued = /^\w+\s*:\s*([^=]+?)\s*=\s*("?)((?:\\.|[^"\\])*)$/.exec(
+        value,
+      );
       if (valued)
         return {
           kind: "parameterDefault",

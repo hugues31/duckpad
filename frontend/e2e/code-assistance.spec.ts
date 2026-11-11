@@ -1,8 +1,176 @@
 import { expect, test, type Page } from "@playwright/test";
-import { codePanel, createFilterProject, openCode } from "./helpers";
+import {
+  closeEditor,
+  codePanel,
+  createFilterProject,
+  openCode,
+} from "./helpers";
 
 const suggestions = (page: Page) =>
   page.locator(".suggest-widget.visible .monaco-list-row");
+
+test("template dialogs complete the connections granted to the project", async ({
+  page,
+}) => {
+  const { read } = await createFilterProject(page);
+  const snapshot = await read();
+  const connection = "editor-files";
+  try {
+    expect(
+      (
+        await page.request.put("/api/catalog/connection?create=true", {
+          data: {
+            id: connection,
+            name: "Editor files",
+            connector: "folder",
+            environments: { dev: { root: "" } },
+          },
+        })
+      ).ok(),
+    ).toBe(true);
+    expect(
+      (
+        await page.request.put(
+          `/api/projects/${snapshot.worktree.project}/connections`,
+          {
+            data: { connections: [connection] },
+          },
+        )
+      ).ok(),
+    ).toBe(true);
+    await page.reload();
+    await page
+      .getByRole("button", { name: "New SQL template", exact: true })
+      .click();
+    const dialog = page.getByRole("dialog", {
+      name: "New SQL template",
+      exact: true,
+    });
+    await dialog.locator(".monaco-editor textarea").focus();
+    await page.keyboard.press("ControlOrMeta+A");
+    await page.keyboard.insertText(
+      '-- @param location: connection = "editor-fi"\n-- @output result\nSELECT 1;',
+    );
+    await page.keyboard.press("ControlOrMeta+Home");
+    await page.keyboard.press("End");
+    await page.keyboard.press("ArrowLeft");
+    await page.keyboard.press("Control+Space");
+    await expect(
+      suggestions(page).filter({ hasText: connection }),
+    ).toBeVisible();
+    await page.keyboard.press("Tab");
+    await closeEditor(dialog);
+    expect(Object.values((await read()).files)).toContain(
+      '-- @param location: connection = "editor-files"\n-- @output result\nSELECT 1;',
+    );
+  } finally {
+    await page.request.delete(`/api/catalog/connection/${connection}`);
+  }
+});
+
+test("SQL completion replaces a whole default or reference at the cursor", async ({
+  page,
+}) => {
+  const { read } = await createFilterProject(page, (bundle) => {
+    bundle.flow.nodes[1] = {
+      id: "filtered",
+      params: {},
+      position: { x: 350, y: 0 },
+    };
+    bundle.node_sql = {
+      "nodes/filtered.sql":
+        '-- @input source\n-- @param mode: choice(left outer|inner) = "left outext"\n-- @output result\nSELECT * FROM {{ souce }};\n',
+    };
+  });
+  const panel = await openCode(page);
+  await panel.locator("textarea").focus();
+  await page.keyboard.press("ControlOrMeta+Home");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("End");
+  for (let step = 0; step < 5; step++) await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("Control+Space");
+  await expect(
+    suggestions(page).filter({ hasText: "left outer" }),
+  ).toBeVisible();
+  await page.keyboard.press("Tab");
+  await expect
+    .poll(async () => (await read()).files["nodes/filtered.sql"])
+    .toContain('-- @param mode: choice(left outer|inner) = "left outer"');
+
+  // Complete in the middle of an existing reference, keeping its closing braces.
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("End");
+  for (let step = 0; step < 6; step++) await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("Control+Space");
+  await expect(suggestions(page).filter({ hasText: /^source/ })).toBeVisible();
+  await page.keyboard.press("Tab");
+  await expect
+    .poll(async () => (await read()).files["nodes/filtered.sql"])
+    .toContain("SELECT * FROM {{ source }};");
+});
+
+test("Python column completion preserves the rest of a SQL expression", async ({
+  page,
+}) => {
+  const { id, endpoint, read } = await createFilterProject(page);
+  const snapshot = await read();
+  expect(
+    (
+      await page.request.put(
+        `/api/projects/${snapshot.worktree.project}/python`,
+        {
+          data: { enabled: true },
+        },
+      )
+    ).ok(),
+  ).toBe(true);
+  const bundle = snapshot.bundle!;
+  bundle.flow.nodes[1] = {
+    id: "filtered",
+    language: "python",
+    params: {},
+    position: { x: 350, y: 0 },
+  };
+  bundle.node_sql = {
+    "nodes/filtered.py": `import duckpad as dp
+class Filter(dp.Node):
+    def run(self, source: dp.Relation) -> dp.Relation:
+        return source.filter("amount > 0 AND inp = 'input'")
+`,
+  };
+  const saved = await page.request.put(endpoint, {
+    data: { revision: snapshot.revision, bundle },
+  });
+  expect(saved.ok(), await saved.text()).toBe(true);
+  const run = await page.request.post(`${endpoint}/runs`, {
+    data: { environment: "dev", node: "filtered", ancestors: true },
+  });
+  expect(run.ok()).toBe(true);
+  const { id: runId } = await run.json();
+  await expect
+    .poll(
+      async () =>
+        (await (await page.request.get(`/api/runs/${runId}`)).json()).status,
+    )
+    .toBe("success");
+  await page.goto(`/worktrees/${id}/flow?node=filtered`);
+  const panel = await openCode(page);
+  await expect(panel).toContainText("input_only");
+  await panel.locator("textarea").focus();
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("End");
+  for (let step = 0; step < 12; step++) await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("Control+Space");
+  await expect(
+    suggestions(page).filter({ hasText: /^input_only/ }),
+  ).toBeVisible();
+  await page.keyboard.press("Tab");
+  await expect
+    .poll(async () => (await read()).files["nodes/filtered.py"])
+    .toContain(`return source.filter("amount > 0 AND input_only = 'input'")`);
+});
 
 test("the code editor completes Duckpad SQL, explains references and fixes problems", async ({
   page,

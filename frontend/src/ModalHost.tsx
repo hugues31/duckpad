@@ -516,7 +516,14 @@ function RevisionEditor({
               t,
               statuses.nodes[fullNode!],
             )
-          : { template: true },
+          : {
+              template: true,
+              environment,
+              connections: snapshot.connections.map(({ id, name }) => ({
+                id,
+                name,
+              })),
+            },
     [code, located, snapshot, columns.data, environment, t, statuses, fullNode],
   );
   const problems = useMemo(
