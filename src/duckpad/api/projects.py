@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile as FormFile
 
 from .. import schemas
 from ..archive import MAX_ARCHIVE_BYTES, archive_bundle, import_warnings, read_archive
+from ..code_catalog import code_catalog, compressed_catalog
 from ..example import create_example
 from ..python_policy import save_policy
 from ..python_progress import environment_status
@@ -161,6 +162,17 @@ def router(ctx: Context) -> APIRouter:
             removed = projects.delete_records(project)
         projects.delete_files(project, *removed)
         return {"ok": True}
+
+    @api.get("/api/code-catalog", response_model=None, dependencies=[Depends(signed_in)])
+    def code_catalog_route(request: Request) -> Response | Record:
+        """The DuckDB functions, keywords, types and Python APIs the code editors suggest."""
+        if "gzip" not in request.headers.get("accept-encoding", ""):
+            return code_catalog()
+        return Response(
+            compressed_catalog(),
+            media_type="application/json",
+            headers={"Content-Encoding": "gzip", "Vary": "Accept-Encoding"},
+        )
 
     @api.get("/api/library", response_model=None, dependencies=[Depends(signed_in)])
     def library(request: Request) -> list[Record]:

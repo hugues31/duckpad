@@ -1,13 +1,16 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { Download, Loader2, Plus, Save } from "lucide-react";
 import { downloadProject } from "./api";
+import { codeVariables, nodeCodeContext, savedProblems } from "./codeContext";
+import type { CodeContext } from "./codeEditing";
 import { nodeLocation, nodeSourcePath } from "./nodeCode";
 import { useT } from "./i18n";
 import ProjectFileTree from "./ProjectFileTree";
 import ProjectFileIcon from "./ProjectFileIcon";
 import { CODE_FILE_PARAM } from "./navigation";
 import { initialProjectFile, projectFileLanguage } from "./projectFiles";
+import { useInputColumns } from "./useInputColumns";
 import { useRevisionDraft } from "./useRevisionDraft";
 import type { Snapshot } from "./types";
 import { useWorktree } from "./worktree";
@@ -35,7 +38,7 @@ export default function CodePanel({
   onSave: (files: Files, base: Snapshot) => Promise<Snapshot>;
 }) {
   const t = useT();
-  const { setAssistantFile, statuses } = useWorktree();
+  const { setAssistantFile, statuses, environment } = useWorktree();
   // The panel stays mounted across the worktree's tabs.
   const {
     draft: files,
@@ -77,6 +80,45 @@ export default function CodePanel({
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState("");
   const path = selected in files ? selected : Object.keys(files).sort()[0];
+
+  // A root node's own code knows its inputs and values, as in the flow.
+  const fileNode = /^nodes\/([^/]+)\.(?:sql|py)$/.exec(path || "")?.[1];
+  const node = snapshot.bundle?.flow.nodes.find((n) => n.id === fileNode);
+  const columns = useInputColumns(
+    snapshot,
+    !hidden && node ? node.id : "",
+    environment,
+    statuses,
+  );
+  const context = useMemo((): CodeContext | undefined => {
+    if (!path) return undefined;
+    if (node)
+      return nodeCodeContext(
+        snapshot,
+        node,
+        columns.data,
+        environment,
+        t,
+        statuses.nodes[node.id],
+      );
+    if (/^(?:templates|components\/[^/]+)\/[^/]+\.(?:sql|py)$/.test(path))
+      return {
+        template: true,
+        environment,
+        connections: snapshot.connections.map(({ id, name }) => ({ id, name })),
+      };
+    if (path === "flow.json")
+      return {
+        file: path,
+        environment,
+        variables: codeVariables(snapshot, environment),
+      };
+    return undefined;
+  }, [path, node, snapshot, columns.data, environment, t, statuses.nodes]);
+  const problems = useMemo(
+    () => (path ? savedProblems(snapshot, path, files[path]) : undefined),
+    [snapshot, path, files],
+  );
 
   // The failure reported in this saved file, if any.
   const diagnostic = Object.entries(statuses.nodes).flatMap(([id, result]) => {
@@ -308,6 +350,8 @@ export default function CodePanel({
                       language={projectFileLanguage(path)}
                       readOnly={readOnly || pending}
                       height="100%"
+                      context={context}
+                      problems={problems}
                     />
                   </Suspense>
                 )}

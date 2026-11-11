@@ -1,5 +1,5 @@
 import { Boxes } from "lucide-react";
-import { lazy, Suspense, useRef, useState } from "react";
+import { lazy, Suspense, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { api, errorDetail, importProjectArchive, send, withQuery } from "./api";
 import { CombinedResolutionDialog, ConflictDialog } from "./ConflictDialog";
@@ -11,7 +11,15 @@ import { ConfirmModal, EditorModal, FormModal, Modal } from "./modals";
 import { usePageRoute } from "./navigation";
 import NewBranchModal from "./NewBranchModal";
 import NewProjectModal from "./NewProjectModal";
-import { nodeCode, nodeGraph, setNodeCode } from "./nodeCode";
+import { nodeCodeContext, savedProblems } from "./codeContext";
+import { resolveNodePath } from "./graph";
+import {
+  nodeCode,
+  nodeGraph,
+  nodeSourcePath,
+  setNodeCode,
+  templateCodePath,
+} from "./nodeCode";
 import { partitionRunLabels, PartitionRunSummary } from "./PartitionRunMenu";
 import type { PartitionLaunchOptions } from "./partitions";
 import SaveState from "./SaveState";
@@ -26,6 +34,7 @@ import type {
 import { useApiResource } from "./useApiResource";
 import { useAsyncAction } from "./useAsyncAction";
 import { useAutosavedDraft } from "./useAutosavedDraft";
+import { useInputColumns } from "./useInputColumns";
 import { useSaveShortcut } from "./useSaveShortcut";
 import { ScopeVariables } from "./VariableFields";
 import { useWorktree } from "./worktree";
@@ -327,6 +336,7 @@ function WorktreeDialog({
         <RevisionEditor
           snapshot={snapshot}
           fullNode={modal.fullNode || modal.node}
+          path={nodeSourcePath(node, modal.parent)}
           revealLine={modal.line}
           title={t(node.template ? "viewNodeCode" : "editNodeCode")}
           language={node.language || "sql"}
@@ -346,6 +356,7 @@ function WorktreeDialog({
         <RevisionEditor
           snapshot={snapshot}
           fullNode={modal.fullNode}
+          path={templateCodePath(modal.template)}
           revealLine={modal.line}
           title={t(modal.create ? text.create : text.edit)}
           language={language}
@@ -431,6 +442,7 @@ function NewBranchDialog({
 function RevisionEditor({
   snapshot,
   fullNode,
+  path,
   read,
   write,
   title,
@@ -446,13 +458,15 @@ function RevisionEditor({
   language?: string;
   readOnly: boolean;
   fullNode?: string;
+  /** The project file holding the code, whose saved problems are shown. */
+  path?: string;
   revealLine?: number;
   read: (bundle: Bundle) => string;
   write: (bundle: Bundle, text: string) => void;
   onClose: () => void;
 }) {
   const t = useT();
-  const { save, statuses } = useWorktree();
+  const { save, statuses, environment } = useWorktree();
   const { notify } = useShell();
   const { draft, dirty, pending, update, saveNow, error } = useAutosavedDraft(
     read(snapshot.bundle!),
@@ -474,6 +488,48 @@ function RevisionEditor({
   const diagnostic = fullNode
     ? statuses.nodes[fullNode]?.diagnostic
     : undefined;
+  // Code opened from a node knows its inputs and values.
+  const code = path && language !== "json";
+  const columns = useInputColumns(
+    snapshot,
+    (code && fullNode) || "",
+    environment,
+    statuses,
+  );
+  const located = useMemo(
+    () =>
+      code && fullNode && snapshot.bundle
+        ? resolveNodePath(snapshot.bundle, fullNode)
+        : null,
+    [code, fullNode, snapshot.bundle],
+  );
+  const context = useMemo(
+    () =>
+      !code
+        ? undefined
+        : located
+          ? nodeCodeContext(
+              snapshot,
+              located.node,
+              columns.data,
+              environment,
+              t,
+              statuses.nodes[fullNode!],
+            )
+          : {
+              template: true,
+              environment,
+              connections: snapshot.connections.map(({ id, name }) => ({
+                id,
+                name,
+              })),
+            },
+    [code, located, snapshot, columns.data, environment, t, statuses, fullNode],
+  );
+  const problems = useMemo(
+    () => (path ? savedProblems(snapshot, path, draft) : undefined),
+    [snapshot, path, draft],
+  );
   return (
     <Modal title={title} onClose={close} wide>
       {description && <p className="modal-description">{description}</p>}
@@ -490,6 +546,8 @@ function RevisionEditor({
               : undefined
           }
           revealLine={revealLine}
+          context={context}
+          problems={problems}
         />
       </Suspense>
       {error && <div className="notice error">{error}</div>}

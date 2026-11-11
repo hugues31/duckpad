@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -343,3 +344,18 @@ def test_schema_and_table_names_are_chosen_from_their_connection():
         export, {"connection": "pg", "table": "totals"}, {"source": '"input"'}, {}, connections, PROJECT_FILES
     )
     assert insert["sql"] == 'INSERT INTO "conn_1"."public"."totals" BY NAME SELECT * FROM "input"'
+
+
+LINT_CASES_FILE = Path(__file__).parents[1] / "frontend" / "src" / "sqlTemplateLint.json"
+LINT_CASES = json.loads(LINT_CASES_FILE.read_text()) if LINT_CASES_FILE.exists() else []
+
+
+@pytest.mark.skipif(not LINT_CASES_FILE.exists(), reason="The sdist has no frontend sources")
+@pytest.mark.parametrize("case", LINT_CASES, ids=[case["name"] for case in LINT_CASES])
+def test_editor_lint_errors_are_parse_errors(case):
+    """The code editor flags these templates as it parses them (sqlTemplate.test.ts)."""
+    if case["errors"]:
+        with pytest.raises(Problem):
+            parse_template(case["sql"])
+    else:
+        parse_template(case["sql"])
