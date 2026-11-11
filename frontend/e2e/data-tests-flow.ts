@@ -94,7 +94,7 @@ export async function verifyDataTests(page: Page) {
     .getByRole("button", { name: "Last run failed", exact: true })
     .click();
   await expect(tab("Log")).toHaveAttribute("aria-selected", "true");
-  await expect(results.locator(".log-error")).toBeVisible();
+  await expect(results.locator(".execution-error")).toBeVisible();
   await tab("Tests").click();
   const retained = await (
     await page.request.get(

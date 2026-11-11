@@ -17,7 +17,9 @@ import { DatasetPicker } from "./DatasetPicker";
 import type { PreviewState } from "./draftPreview";
 import DraftPreviewView from "./DraftPreviewView";
 import ExecutionError from "./ExecutionError";
+import { executionFailures, wasBlocked } from "./executionFailures";
 import { WarningBadge, warningCount } from "./ExecutionMessages";
+import { ExportDownloadButton, useExportDownload } from "./ExportDownload";
 import { nodeInterface, outputSource, type NodeInterface } from "./graph";
 import { nodeLabel, useT } from "./i18n";
 import type { Cell } from "./lineageGraph";
@@ -106,7 +108,8 @@ export default function ResultsPanel({
   hidden: boolean;
   onTab: (tab: ResultsTab) => void;
   onClose: () => void;
-  onRun: () => void;
+  /** Run the node with its ancestors, or only the ancestors its inputs come from. */
+  onRun: (options?: { ancestors: true }) => void;
   onExplain: (cell: Cell) => void;
   onSave: SaveProject;
   onSaveDocumentation: (
@@ -121,117 +124,6 @@ export default function ResultsPanel({
   const t = useT();
   const ports = signature.outputs;
   const exportNode = signature.kind === "export";
-  const tabs: ResultsTab[] = [
-    ...(preview ? (["preview"] as const) : []),
-    ...RESULT_TABS.filter(
-      (key) => ports.length > 0 || key === "tests" || key === "log",
-    ),
-  ];
-  const shown = tabs.includes(tab)
-    ? tab
-    : tab === "preview" && tabs.includes("data")
-      ? "data"
-      : tabs[tabs.length - 1];
-  const [target, setTarget] = useState<ResultsTarget>({
-    node: fullNode,
-    port: ports[0] || "result",
-  });
-  const [failing, setFailing] = useState<FailingRows | null>(null);
-  const storage = (next: ResultsTarget) =>
-    sampleKey(user, snapshot.worktree.project, next.node, next.port);
-  // The sample travels between outputs and inputs, to compare the same rows before and after.
-  const [shownSample, setShownSample] = useState(() => ({
-    environment,
-    ...loadSample(storage(target)),
-  }));
-  // The environment selected in the top bar keeps the sample but forgets failing rows.
-  if (shownSample.environment !== environment) {
-    setShownSample({ ...shownSample, environment });
-    setFailing(null);
-  }
-  // A component instance stores no rows: its outputs are those of nodes inside it.
-  const stored = (item: { node: string; port: string }) =>
-    snapshot.bundle
-      ? outputSource(snapshot.bundle, item.node, item.port)
-      : item;
-  const datasetOf = (item: { node: string; port: string }) => {
-    const source = stored(item);
-    return statuses.nodes[source.node]?.outputs?.[source.port];
-  };
-  // The node whose run the panel tells: this node, or the one computing the shown output.
-  const producer = stored({
-    node: fullNode,
-    port: target.input ? ports[0] || "result" : target.port,
-  }).node;
-  const worktree = useOptionalWorktree();
-  const collector =
-    snapshot.partitions?.[environment]?.nodes[producer]?.collect.length;
-  const baseResult = statuses.nodes[producer];
-  const sourceLocation =
-    snapshot.bundle && nodeLocation(snapshot.bundle, producer);
-  // A blocked collector waits for keys: retry those that failed rather than every key.
-  const blocked = collector ? baseResult?.error || undefined : undefined;
-  const failedKeys = useApiResource<PartitionPage>(
-    blocked
-      ? withQuery(`/worktrees/${snapshot.worktree.id}/partitions`, {
-          environment,
-          status: "failed",
-          limit: 1,
-        })
-      : null,
-    { refresh: JSON.stringify([statuses.active?.id, blocked]) },
-  );
-  const retryFailed = !!failedKeys.data?.entries.length;
-  const runLabel = t(
-    !collector ? "runNode" : retryFailed ? "partitionRunFailed" : "run",
-  );
-  const runResult =
-    collector && worktree
-      ? () => {
-          void worktree.run(
-            undefined,
-            retryFailed ? { partitions: { mode: "failed" } } : undefined,
-          );
-        }
-      : onRun;
-  const partition = usePartitionQuery(target.node, target.port);
-  const partitionPreview = useApiResource<PreviewPage>(
-    partition.manifest
-      ? withQuery(
-          `/worktrees/${snapshot.worktree.id}/preview/${encodeURIComponent(target.node)}`,
-          { environment, port: target.port, limit: 1, ...partition },
-        )
-      : null,
-    { refresh: JSON.stringify(statuses) },
-  );
-  const dataset = partition.manifest
-    ? partitionPreview.data || undefined
-    : datasetOf(target);
-  const result = partition.manifest
-    ? {
-        outputs: dataset ? { [target.port]: dataset } : {},
-        results: partitionPreview.data?.results || [],
-        error: partitionPreview.data?.error || null,
-        result_run: dataset?.run,
-      }
-    : baseResult;
-  // The node's own last execution failed; blocked, canceled and per-key states keep their own views.
-  const failure =
-    !target.input &&
-    !partition.manifest &&
-    baseResult?.error &&
-    baseResult.execution_status === "failed"
-      ? baseResult
-      : null;
-  // A preview lacking some partitions is incomplete, as the banner below details.
-  const datasetStatus = dataset?.incomplete ? "incomplete" : dataset?.status;
-  const running = computing(statuses, fullNode);
-  // The run that produced the displayed rows, for the header.
-  const generation = useApiResource<Run>(
-    dataset ? `/runs/${encodeURIComponent(dataset.run)}` : null,
-  );
-  const run = generation.data?.id === dataset?.run ? generation.data : null;
-  const state = run?.nodes?.[stored(target).node];
   const local = localDefinitions(snapshot, parent);
   const inputs = graphEdges
     .filter((edge) => edge.target === node.id)
@@ -256,6 +148,161 @@ export default function ResultsPanel({
           : edge.source,
       };
     });
+  const tabs: ResultsTab[] = [
+    ...(preview ? (["preview"] as const) : []),
+    ...RESULT_TABS.filter(
+      (key) =>
+        ports.length > 0 ||
+        inputs.length > 0 ||
+        key === "tests" ||
+        key === "log",
+    ),
+  ];
+  const shown = tabs.includes(tab)
+    ? tab
+    : tab === "preview" && tabs.includes("data")
+      ? "data"
+      : tabs[tabs.length - 1];
+  const defaultTarget: ResultsTarget =
+    ports.length || !inputs.length
+      ? { node: fullNode, port: ports[0] || "result" }
+      : inputs[0];
+  const [target, setTarget] = useState<ResultsTarget>(defaultTarget);
+  // Follow a reconnected input, or fall back when its connection is removed.
+  const connected = inputs.find((input) => input.input === target.input);
+  if (
+    target.input &&
+    (!connected ||
+      connected.node !== target.node ||
+      connected.port !== target.port)
+  )
+    setTarget(connected || defaultTarget);
+  else if (!ports.length && inputs.length && !target.input)
+    setTarget(defaultTarget);
+  const [failing, setFailing] = useState<FailingRows | null>(null);
+  const storage = (next: ResultsTarget) =>
+    sampleKey(user, snapshot.worktree.project, next.node, next.port);
+  // The sample travels between outputs and inputs, to compare the same rows before and after.
+  const [shownSample, setShownSample] = useState(() => ({
+    environment,
+    target: outputKey(target),
+    ...loadSample(storage(target)),
+  }));
+  // A reconnected input restores its own sample instead of retaining the old schema's filter.
+  if (shownSample.target !== outputKey(target)) {
+    setShownSample({
+      environment,
+      target: outputKey(target),
+      ...loadSample(storage(target)),
+    });
+    setFailing(null);
+  } else if (shownSample.environment !== environment) {
+    setShownSample({ ...shownSample, environment });
+    setFailing(null);
+  }
+  // A component instance stores no rows: its outputs are those of nodes inside it.
+  const stored = (item: { node: string; port: string }) =>
+    snapshot.bundle
+      ? outputSource(snapshot.bundle, item.node, item.port)
+      : item;
+  const datasetOf = (item: { node: string; port: string }) => {
+    const source = stored(item);
+    return statuses.nodes[source.node]?.outputs?.[source.port];
+  };
+  // The node whose run the panel tells: this node, or the one computing the shown output.
+  const producer = stored({
+    node: fullNode,
+    port: target.input ? ports[0] || "result" : target.port,
+  }).node;
+  const worktree = useOptionalWorktree();
+  const collector =
+    snapshot.partitions?.[environment]?.nodes[producer]?.collect.length;
+  const baseResult = statuses.nodes[producer];
+  const downloadable =
+    signature.kind !== "component" && !!signature.definition?.download;
+  const exportDownload = useExportDownload(
+    snapshot.worktree.id,
+    environment,
+    downloadable ? producer : null,
+  );
+  // A blocked collector waits for keys: retry those that failed rather than every key.
+  const blocked = collector ? baseResult?.error || undefined : undefined;
+  const failedKeys = useApiResource<PartitionPage>(
+    blocked
+      ? withQuery(`/worktrees/${snapshot.worktree.id}/partitions`, {
+          environment,
+          status: "failed",
+          limit: 1,
+        })
+      : null,
+    { refresh: JSON.stringify([statuses.active?.id, blocked]) },
+  );
+  const retryFailed = !!failedKeys.data?.entries.length;
+  const runLabel = t(
+    !collector ? "runNode" : retryFailed ? "partitionRunFailed" : "run",
+  );
+  const runResult =
+    collector && worktree
+      ? () => {
+          void worktree.run(
+            undefined,
+            retryFailed ? { partitions: { mode: "failed" } } : undefined,
+          );
+        }
+      : () => onRun();
+  const partition = usePartitionQuery(target.node, target.port);
+  const partitionPreview = useApiResource<PreviewPage>(
+    partition.manifest
+      ? withQuery(
+          `/worktrees/${snapshot.worktree.id}/preview/${encodeURIComponent(target.node)}`,
+          { environment, port: target.port, limit: 1, ...partition },
+        )
+      : null,
+    { refresh: JSON.stringify(statuses) },
+  );
+  const dataset = partition.manifest
+    ? partitionPreview.data || undefined
+    : datasetOf(target);
+  const result =
+    partition.manifest && !target.input
+      ? {
+          outputs: dataset ? { [target.port]: dataset } : {},
+          results: partitionPreview.data?.results || [],
+          error: partitionPreview.data?.error || null,
+          result_run: dataset?.run,
+        }
+      : baseResult;
+  // Include nested failures even when the component's first output succeeded.
+  // Per-key failures and blocked collectors retain their partition-specific views.
+  // A node without outputs shows its inputs, and still tells its own failure above them.
+  const failures =
+    (!target.input || !ports.length) && !partition.manifest && !collector
+      ? executionFailures(statuses, fullNode)
+      : [];
+  const [logNode, setLogNode] = useState<string | null>(null);
+  const logFailure =
+    failures.find((failure) => failure.node === logNode) || failures[0];
+  const logLocation =
+    snapshot.bundle && logFailure
+      ? nodeLocation(snapshot.bundle, logFailure.node)
+      : null;
+  const logSignature = logLocation
+    ? nodeInterface(
+        logLocation.node,
+        snapshot.parsed_templates,
+        snapshot.bundle?.components,
+        localDefinitions(snapshot, logLocation.parent),
+      )
+    : signature;
+  // A preview lacking some partitions is incomplete, as the banner below details.
+  const datasetStatus = dataset?.incomplete ? "incomplete" : dataset?.status;
+  const running = computing(statuses, fullNode);
+  // The run that produced the displayed rows, for the header.
+  const generation = useApiResource<Run>(
+    dataset ? `/runs/${encodeURIComponent(dataset.run)}` : null,
+  );
+  const run = generation.data?.id === dataset?.run ? generation.data : null;
+  const state = run?.nodes?.[stored(target).node];
   const tests = declaredTests(signature, result?.results);
   const testResults = (result?.results || []).filter(
     (item) => item.origin.kind === "test",
@@ -277,37 +324,65 @@ export default function ResultsPanel({
         dataset?.columns.map((c) => c.name),
       )
     )
-      setShownSample({ environment, ...loadSample(storage(next)) });
+      setShownSample({
+        environment,
+        target: outputKey(next),
+        ...loadSample(storage(next)),
+      });
+    else setShownSample({ ...shownSample, target: outputKey(next) });
   };
-  // The node's last run error, above the rows or the chart.
-  const failureCard = failure && (
-    <ExecutionError
-      failure={failure}
-      node={producer}
-      environment={environment}
-      currentSource={
-        snapshot.bundle && sourceLocation
-          ? nodeCode(
-              snapshot.bundle,
-              sourceLocation.node,
-              sourceLocation.parent,
-            )
-          : ""
-      }
-      onEditCode={(line) => onEditCode(line, producer)}
-      onLog={() => onTab("log")}
-    />
-  );
+  const blockedNode = wasBlocked(statuses, fullNode);
+  const failureCards = failures.map(({ node: failedNode, result: failure }) => {
+    const sourceLocation =
+      snapshot.bundle && nodeLocation(snapshot.bundle, failedNode);
+    return (
+      <ExecutionError
+        key={`${failure.error_run}:${failedNode}`}
+        failure={failure}
+        node={failedNode}
+        blocked={blockedNode}
+        label={
+          failedNode !== fullNode
+            ? displayNodeName(snapshot.node_names?.[failedNode], failedNode, t)
+            : undefined
+        }
+        environment={environment}
+        currentSource={
+          snapshot.bundle && sourceLocation
+            ? nodeCode(
+                snapshot.bundle,
+                sourceLocation.node,
+                sourceLocation.parent,
+              )
+            : ""
+        }
+        onEditCode={(line) => onEditCode(line, failedNode)}
+        onLog={
+          shown === "log" && failedNode === logFailure?.node
+            ? undefined
+            : () => {
+                setLogNode(failedNode);
+                onTab("log");
+              }
+        }
+      />
+    );
+  });
+  // Rows missing from a node without outputs are those of its ancestors: running them writes nothing.
+  const ancestorsOnly = !ports.length && !!target.input && !collector;
   // How the Data and Chart tabs run the node and explain a missing result.
   const runState: RunState = {
     canEdit: !readOnly,
     active: !!statuses.active,
     starting: worktree?.starting,
-    onRun: runResult,
-    runLabel,
+    onRun: ancestorsOnly ? () => onRun({ ancestors: true }) : runResult,
+    runLabel: ancestorsOnly ? t("runAncestors") : runLabel,
+    hint: ancestorsOnly ? t("inputsNoResultHint") : undefined,
     reason: target.input ? undefined : blocked,
-    failureShown: !!failure,
+    failureShown: failures.length > 0,
   };
+  // A single dataset needs no selector: name the input it comes from.
+  const onlyInput = !ports.length && inputs.length === 1 ? inputs[0] : null;
   // The tabs of the shown dataset start over on another output, environment or partition.
   const datasetKey = `${outputKey(target)}:${environment}:${JSON.stringify(partition)}`;
   return (
@@ -321,7 +396,7 @@ export default function ResultsPanel({
         <div className="results-identity">
           <Table2 size={15} aria-hidden="true" />
           <strong title={label}>{label}</strong>
-          {ports.length > 0 && (ports.length > 1 || inputs.length > 0) && (
+          {ports.length + inputs.length > 1 && (
             <DatasetPicker
               target={target}
               ports={ports.map((port) => ({
@@ -338,6 +413,11 @@ export default function ResultsPanel({
           )}
           {ports.length === 1 && !inputs.length && (
             <span className="results-port">{ports[0]}</span>
+          )}
+          {onlyInput && (
+            <span className="results-port">
+              {onlyInput.input} ← {onlyInput.label} · {onlyInput.port}
+            </span>
           )}
           {running ? (
             <span className="badge running">
@@ -383,6 +463,12 @@ export default function ResultsPanel({
               {dataset.count.toLocaleString()} {t("rows")} · {columns.length}{" "}
               {t("columns")}
             </span>
+          )}
+          {exportNode && (
+            <ExportDownloadButton
+              state={exportDownload}
+              onFailure={() => onTab("log")}
+            />
           )}
           <button
             className="icon"
@@ -445,6 +531,9 @@ export default function ResultsPanel({
           );
         })}
       </div>
+      {shown !== "preview" && failures.length > 0 && (
+        <div className="execution-errors">{failureCards}</div>
+      )}
       {shown === "preview" && preview ? (
         <DraftPreviewView
           key={preview.result ? "computed" : "pending"}
@@ -456,8 +545,7 @@ export default function ResultsPanel({
         />
       ) : shown === "data" ? (
         <>
-          {failureCard}
-          {(!failure || dataset) && (
+          {(!failures.length || dataset) && (
             <ResultsData
               key={datasetKey}
               snapshot={snapshot}
@@ -470,7 +558,12 @@ export default function ResultsPanel({
               failing={failing}
               tests={tests}
               onSample={(sample, view) => {
-                setShownSample({ environment, sample, view });
+                setShownSample({
+                  environment,
+                  target: outputKey(target),
+                  sample,
+                  view,
+                });
                 storeSample(storage(target), sample, view);
               }}
               onFailing={setFailing}
@@ -484,8 +577,7 @@ export default function ResultsPanel({
         </>
       ) : shown === "chart" ? (
         <>
-          {failureCard}
-          {(!failure || dataset) && (
+          {(!failures.length || dataset) && (
             <ResultsChart
               key={datasetKey}
               snapshot={snapshot}
@@ -550,14 +642,21 @@ export default function ResultsPanel({
         <ResultsLog
           snapshot={snapshot}
           environment={environment}
-          fullNode={producer}
-          exportNode={exportNode}
+          fullNode={logFailure?.node || producer}
+          exportNode={logSignature.kind === "export"}
           download={
-            signature.kind !== "component" && !!signature.definition?.download
+            downloadable && (logFailure?.node || producer) === producer
+              ? exportDownload
+              : null
           }
           readOnly={readOnly}
-          result={result}
-          inputs={inputs.map((input) => ({ ...input, ...stored(input) }))}
+          result={logFailure?.result || result}
+          errorShown={!!logFailure}
+          inputs={
+            logFailure && logFailure.node !== producer
+              ? []
+              : inputs.map((input) => ({ ...input, ...stored(input) }))
+          }
           statuses={statuses}
           onTests={() => onTab("tests")}
         />

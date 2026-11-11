@@ -272,6 +272,7 @@ export default function Inspector({
         bundle={snapshot.bundle}
         fullNode={fullNode}
         ports={signature.outputs}
+        hasInputs={signature.inputs.length > 0}
         statuses={statuses}
         onOpen={onResults}
       />

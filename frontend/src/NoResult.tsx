@@ -38,7 +38,7 @@ export default function NoResult({
   icon,
   error,
   all,
-  run: { canEdit, active, starting = false, onRun, runLabel, reason },
+  run: { canEdit, active, starting = false, onRun, runLabel, hint, reason },
 }: {
   icon: LucideIcon;
   /** The preview error, if any. */
@@ -57,7 +57,9 @@ export default function NoResult({
       // A translated partition message already says what to run.
       hint={
         !canEdit || explained === message
-          ? t(canEdit ? "noResultHint" : "readerNoResult")
+          ? canEdit
+            ? hint || t("noResultHint")
+            : t("readerNoResult")
           : undefined
       }
     >

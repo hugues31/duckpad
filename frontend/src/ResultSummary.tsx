@@ -1,5 +1,6 @@
 import { AlertTriangle, ChevronRight, Clock, Loader2 } from "lucide-react";
 import { withQuery } from "./api";
+import { executionFailures, wasBlocked } from "./executionFailures";
 import { warningCount } from "./ExecutionMessages";
 import { outputSource } from "./graph";
 import { countLabel, useT, type TranslationKey } from "./i18n";
@@ -17,6 +18,7 @@ export default function ResultSummary({
   bundle,
   fullNode,
   ports,
+  hasInputs = false,
   statuses,
   onOpen,
 }: {
@@ -24,6 +26,7 @@ export default function ResultSummary({
   fullNode: string;
   /** The output ports the node declares. */
   ports: string[];
+  hasInputs?: boolean;
   statuses: Statuses;
   onOpen: (tab: ResultsTab) => void;
 }) {
@@ -58,14 +61,20 @@ export default function ResultSummary({
       });
   // As in the results panel, which opens on the first output.
   const result = statuses.nodes[sources[0]?.node ?? fullNode];
+  // Also a failure inside a component whose first output succeeded.
+  const failed = executionFailures(statuses, fullNode).length > 0;
   const running = computing(statuses, fullNode);
-  const status = datasets.length
-    ? datasets.some((dataset) => dataset.incomplete)
-      ? "incomplete"
-      : datasets.every((dataset) => dataset.status === "valid")
-        ? "valid"
-        : "stale"
-    : result?.execution_status;
+  // A blocked node says so, as on the canvas; a failed one keeps the state of its rows.
+  const status =
+    failed && wasBlocked(statuses, fullNode)
+      ? "blocked"
+      : datasets.length
+        ? datasets.some((dataset) => dataset.incomplete)
+          ? "incomplete"
+          : datasets.every((dataset) => dataset.status === "valid")
+            ? "valid"
+            : "stale"
+        : result?.execution_status;
   const messages = warningCount(
     result?.results?.filter((item) => item.origin.kind !== "test"),
   );
@@ -112,7 +121,7 @@ export default function ResultSummary({
       {!status && !running && !result?.error && (
         <span className="muted">{t("noResultYet")}</span>
       )}
-      {result?.error && (
+      {(failed || result?.error) && (
         <button
           className="summary-link danger"
           title={tabTitle("log")}
@@ -153,7 +162,7 @@ export default function ResultSummary({
       )}
       <button
         className="summary-link results-link"
-        onClick={() => onOpen(ports.length ? "data" : "log")}
+        onClick={() => onOpen(ports.length || hasInputs ? "data" : "log")}
       >
         {t("results")}
         <ChevronRight size={13} aria-hidden="true" />

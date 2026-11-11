@@ -377,7 +377,11 @@ function InlineText({
           rows={2}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(event) => {
-            if (event.key === "Escape") setDraft(null);
+            if (event.key === "Escape") {
+              // Cancelling the edit consumes the key: the panel stays open.
+              event.preventDefault();
+              setDraft(null);
+            }
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();
               event.currentTarget.form?.requestSubmit();

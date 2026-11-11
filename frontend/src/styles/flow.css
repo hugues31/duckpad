@@ -320,14 +320,12 @@
   border-radius: 9px;
   flex-shrink: 0;
 }
-.palette-icon.sources {
+.palette-icon.sources,
+.palette-icon.exports {
   color: var(--accent);
 }
 .palette-icon.components {
   color: light-dark(#6b589c, #d0bcff);
-}
-.palette-icon.exports {
-  color: light-dark(#886025, #f0cf92);
 }
 .palette-plus {
   opacity: 0;
@@ -598,7 +596,8 @@ fieldset.palette-bottom {
   color: var(--accent);
   position: relative;
 }
-.source-node .node-shape {
+/* Sources and exports: where data enters or leaves the pipeline. */
+.square-node .node-shape {
   border-radius: 8px;
   border-color: var(--accent);
   color: light-dark(#1559df, #f2f6ff);
@@ -607,11 +606,6 @@ fieldset.palette-bottom {
 .pipeline-node.component .node-shape {
   border-color: #9481c4;
   color: light-dark(#6b589c, #d0bcff);
-  background: var(--surface);
-}
-.pipeline-node.export .node-shape {
-  border-color: var(--accent);
-  color: var(--accent);
   background: var(--surface);
 }
 /* The links a muted node passes through, drawn like canvas links. */
@@ -640,6 +634,121 @@ fieldset.palette-bottom {
 }
 .pipeline-node.is-muted .node-title {
   color: var(--muted);
+}
+/* A running node glows; selection keeps its own ring below. */
+.pipeline-node.is-running .node-shape {
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent),
+    0 6px 22px color-mix(in srgb, var(--accent) 26%, transparent);
+}
+.pipeline-node.is-running .node-shape::after {
+  content: "";
+  position: absolute;
+  inset: -1.5px;
+  border: 2px solid var(--accent);
+  border-radius: inherit;
+  opacity: 0;
+  pointer-events: none;
+  animation: node-running-pulse 2.4s cubic-bezier(0.2, 0.6, 0.3, 1) infinite;
+}
+.pipeline-node.is-running:has(.node-progress[data-paused]) .node-shape::after {
+  animation-play-state: paused;
+}
+@keyframes node-running-pulse {
+  0% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  70%,
+  100% {
+    opacity: 0;
+    transform: scale(1.22);
+  }
+}
+/* Run progress fills the shape from left to right, under its icon. */
+.node-shape > svg {
+  position: relative;
+}
+.node-progress {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.node-progress-fill {
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    light-dark(
+      color-mix(in srgb, var(--accent) 5%, transparent),
+      color-mix(in srgb, var(--accent) 10%, transparent)
+    ),
+    light-dark(
+      color-mix(in srgb, var(--accent) 24%, transparent),
+      color-mix(in srgb, var(--accent) 38%, transparent)
+    )
+  );
+}
+.square-node .node-progress-fill {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent) 10%, transparent),
+    color-mix(in srgb, var(--accent) 40%, transparent)
+  );
+}
+/* The leading edge of an estimated fill. */
+.node-progress-fill::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 10px 2px color-mix(in srgb, var(--accent) 50%, transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.node-progress:is([data-state="estimated"], [data-state="overrun"])
+  .node-progress-fill::after {
+  opacity: 0.9;
+}
+/* A result washes the shape with its outcome while the fill fades. */
+.node-progress[data-outcome="success"] .node-progress-fill {
+  background: color-mix(in srgb, var(--success) 22%, transparent);
+}
+.node-progress[data-outcome="failed"] .node-progress-fill {
+  background: color-mix(in srgb, var(--danger) 22%, transparent);
+}
+/* Without an estimate, or past it, a sweep shows activity, not progress. */
+.node-progress::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 60%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    light-dark(
+      color-mix(in srgb, var(--accent) 28%, transparent),
+      color-mix(in srgb, var(--accent) 40%, transparent)
+    ),
+    transparent
+  );
+  transform: translateX(-100%);
+}
+.node-progress:is([data-state="working"], [data-state="overrun"])::after {
+  animation: node-progress-sweep 1.8s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+}
+.node-progress[data-paused]::after {
+  animation-play-state: paused;
+}
+@keyframes node-progress-sweep {
+  to {
+    transform: translateX(170%);
+  }
 }
 .pipeline-node.is-selected .node-shape {
   border-color: var(--accent);
@@ -709,6 +818,15 @@ fieldset.palette-bottom {
 }
 .node-status.running {
   color: var(--accent);
+}
+.node-status-time {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+/* Like a long title, a long elapsed time may extend past the node. */
+.node-status-slot:has(.node-status-time) {
+  max-width: 190px;
 }
 .react-flow__handle {
   width: 16px;
@@ -780,8 +898,14 @@ fieldset.palette-bottom {
 }
 @media (prefers-reduced-motion: reduce) {
   .node-status .spin,
-  .react-flow__edge.animated .react-flow__edge-path {
+  .react-flow__edge.animated .react-flow__edge-path,
+  .pipeline-node.is-running .node-shape::after,
+  .node-progress::after {
     animation: none !important;
+  }
+  /* Activity without motion: a steady tint. */
+  .node-progress:is([data-state="working"], [data-state="overrun"]) {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
   }
 }
 .react-flow__edge.selected .react-flow__edge-path {

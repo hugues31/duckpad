@@ -51,6 +51,10 @@ view. **Auto-arrange nodes** places dependencies in columns, orders each column 
 avoid crossing links, and lines up linked sockets. Drag a port onto empty space to
 add a compatible connected node.
 
+Press **Escape** to clear the selection and close its inspector and results.
+Selecting a node opens both panels again. An open dialog, menu or list of
+suggestions takes Escape first, and the code editor keeps it for itself.
+
 Select one or more nodes and press **M**, or choose **Mute node (M)** among a
 node's actions, to bypass their code; repeat to restore it. A muted node is faded, with a
 dashed outline and its links drawn through it, and its inspector offers **Unmute
@@ -109,6 +113,18 @@ While a run is active, the strip below the project tabs, and a running Job's
 details, show its environment, completed nodes (or partitions, failed ones
 counted separately) and an approximate time remaining. The estimate uses previous
 successful node durations in the same worktree and environment.
+
+On the canvas, nodes waiting in the run show **Pending**, and running nodes show
+their elapsed time. A node with a previous successful duration fills from left to
+right with its expected progress, keeping the last part of the fill for the
+actual result. A component combines the nodes inside it and stays in progress
+from its first node to its last one; partitioned nodes are in progress while
+their partition keys execute. Without a previous duration, or once a node runs
+longer than before, a sweep shows activity instead of progress, and the status
+tooltip compares both durations. A failure shows as soon as it happens. Links
+into running nodes animate, and links between nodes this run finished stay
+highlighted. With reduced motion, the sweep and the pulse around running nodes
+are replaced by a steady tint.
 
 Successful canvas nodes show the primary output's row count; stale, failed and
 warning indicators remain visible. Results belong to a branch and environment;

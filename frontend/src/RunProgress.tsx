@@ -1,19 +1,14 @@
 import { Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
 import { useT } from "./i18n";
 import { preparationStages } from "./PythonEnvironmentStatus";
 import { remainingDuration, remainingSeconds } from "./runEstimate";
 import type { Run } from "./types";
+import { useNow } from "./useNow";
 
 /** Keep live execution details out of the project navigation and run controls. */
 export default function RunProgress({ run }: { run: Run }) {
   const t = useT();
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => {
-    if (run.status !== "running") return;
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, [run.id, run.status]);
+  const now = useNow(run.status === "running");
   const seconds = remainingSeconds(run, now);
   const remaining =
     run.status === "running" || run.status === "preparing"
