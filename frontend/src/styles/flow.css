@@ -824,6 +824,10 @@ fieldset.palette-bottom {
   font-variant-numeric: tabular-nums;
   font-weight: 500;
 }
+/* Like a long title, a long elapsed time may extend past the node. */
+.node-status-slot:has(.node-status-time) {
+  max-width: 190px;
+}
 .react-flow__handle {
   width: 16px;
   height: 16px;

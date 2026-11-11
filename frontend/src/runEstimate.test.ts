@@ -242,7 +242,6 @@ describe("nodeProgress", () => {
         estimated_duration: 4,
       }),
       "box::c": node({ estimated_duration: 10 }),
-      "box::d": node({ status: "blocked" }),
       boxed: node({ status: "running", started: ago(1) }),
     };
     // The instance itself has no previous duration, so the total is unknown.
@@ -260,6 +259,31 @@ describe("nodeProgress", () => {
       done: 6,
       running: [{ started: now - 2000, estimate: 4 }],
     });
+    // Between two of its nodes, the component keeps the progress it reached.
+    const waiting = nodeProgress(
+      run({
+        ...children,
+        "box::b": node({ status: "success", started: ago(2), duration: 1 }),
+      }),
+      "box",
+    )!;
+    expect(waiting).toEqual({
+      phase: "running",
+      started: now - 8000,
+      total: 17,
+      done: 7,
+      running: [],
+    });
+    expect(progressTimeline(waiting, now)).toEqual({
+      duration: 0,
+      frames: [{ offset: 0, share: 7 / 17 }],
+    });
+    expect(overran(waiting, now + 60_000)).toBe(false);
+    // A failed or blocked node shows through, whatever is left to run.
+    for (const status of ["failed", "blocked"] as const)
+      expect(
+        nodeProgress(run({ ...children, "box::a": node({ status }) }), "box"),
+      ).toBeUndefined();
     expect(
       nodeProgress(
         run({
@@ -273,6 +297,42 @@ describe("nodeProgress", () => {
         "part",
       )?.total,
     ).toBeUndefined();
+  });
+
+  it("shows partitioned nodes in progress while their keys execute", () => {
+    const partitioned = (partitions: Partial<NonNullable<Run["partitions"]>>) =>
+      nodeProgress(
+        {
+          ...run({
+            zone: node({ partitioned: true, estimated_duration: 3 }),
+          }),
+          partitions: {
+            total: 4,
+            selected: 4,
+            completed: 0,
+            failed: 0,
+            not_started: 4,
+            phase: "consumers",
+            started: ago(9),
+            execution: { parallelism: 1, on_error: "continue" },
+            ...partitions,
+          },
+        },
+        "zone",
+      );
+    // Its own state stays pending until the run ends.
+    expect(partitioned({})?.phase).toBe("queued");
+    expect(partitioned({ active: ["first"] })).toEqual({
+      phase: "running",
+      started: now - 9000,
+      total: undefined,
+      done: 0,
+      running: [],
+    });
+    // Between two keys, and until the last one settles.
+    expect(partitioned({ completed: 1, active: [] })?.phase).toBe("running");
+    expect(partitioned({ completed: 4 })?.phase).toBe("done");
+    expect(partitioned({ completed: 3, failed: 1 })).toBeUndefined();
   });
 });
 

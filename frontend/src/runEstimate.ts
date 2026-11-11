@@ -67,7 +67,10 @@ export function remainingDuration(seconds: number): string {
 
 /** What the active run does with a canvas node and the nodes nested in it. */
 export interface NodeProgress {
-  /** Waiting for its turn, executing, or finished successfully in this run. */
+  /**
+   * Waiting for its turn, in progress from its first node to its last one, or
+   * finished successfully in this run.
+   */
   phase: "queued" | "running" | "done";
   /** Earliest start of its nodes in this run, in epoch milliseconds. */
   started?: number;
@@ -78,13 +81,39 @@ export interface NodeProgress {
   total?: number;
   /** Expected seconds of its nodes that already finished. */
   done: number;
-  /** Start (epoch milliseconds) and expected seconds of each executing node. */
+  /**
+   * Start (epoch milliseconds) and expected seconds of each executing node; empty
+   * while a component waits between two of its nodes.
+   */
   running: { started: number; estimate: number }[];
   /** The run is stopping, so its animations stand still. */
   paused?: boolean;
 }
 
 const ACTIVE_RUN = ["preparing", "running", "canceling"];
+
+/**
+ * A partitioned node's own state stays pending until the run ends: it executes
+ * from the first partition key to the last one settled.
+ */
+function partitionedState(state: NodeRun, run: Run): NodeRun {
+  const partitions = run.partitions;
+  if (!state.partitioned || state.status !== "pending" || !partitions?.selected)
+    return state;
+  const settled = partitions.completed + partitions.failed;
+  if (settled < partitions.selected && !settled && !partitions.active?.length)
+    return state;
+  return {
+    ...state,
+    status:
+      settled < partitions.selected
+        ? "running"
+        : partitions.failed
+          ? "failed"
+          : "success",
+    started: partitions.started,
+  };
+}
 
 /** Progress of a canvas node in the active run, or undefined outside its scope. */
 export function nodeProgress(
@@ -94,26 +123,27 @@ export function nodeProgress(
   if (!run || !ACTIVE_RUN.includes(run.status)) return undefined;
   const states = Object.entries(run.nodes || {})
     .filter(([key]) => key === id || key.startsWith(id + "::"))
-    .map(([, state]) => state);
+    .map(([, state]) => partitionedState(state, run));
   if (!states.length) return undefined;
   const open = (state: NodeRun) =>
     state.status === "pending" || state.status === "running";
+  const settled = states.filter((state) => !open(state));
+  // A failure, even among nodes still to run, keeps its own status.
+  if (settled.some((state) => state.status !== "success")) return undefined;
+  if (settled.length === states.length)
+    return { phase: "done", done: 0, running: [] };
   const executing = states.filter((state) => state.status === "running");
-  if (!states.some(open))
-    return states.every((state) => state.status === "success")
-      ? { phase: "done", done: 0, running: [] }
-      : undefined;
   // Partition summaries are not the timing of one execution.
   const weight = (state: NodeRun) =>
     state.partitioned
       ? undefined
       : positive(state.estimated_duration)
         ? state.estimated_duration
-        : state.status === "success" && positive(state.duration)
-          ? state.duration
-          : open(state)
-            ? undefined
-            : 0;
+        : state.status === "success"
+          ? positive(state.duration)
+            ? state.duration
+            : 0
+          : undefined;
   const weights = states.map(weight);
   const known = weights.every((value) => value !== undefined);
   // A component started with its first node, even one that already finished.
@@ -121,7 +151,8 @@ export function nodeProgress(
     .map((state) => Date.parse(state.started ?? ""))
     .filter(Number.isFinite);
   return {
-    phase: executing.length ? "running" : "queued",
+    // A component stays in progress while the run executes nodes outside it.
+    phase: executing.length || settled.length ? "running" : "queued",
     started: starts.length ? Math.min(...starts) : undefined,
     total: known ? weights.reduce((sum, value) => sum + value, 0) : undefined,
     done: known

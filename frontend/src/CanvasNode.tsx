@@ -27,11 +27,12 @@ import { memo, useEffect, type ComponentProps } from "react";
 import { PythonIcon } from "./AddIcon";
 import { WarningBadge } from "./ExecutionMessages";
 import { useT, type Translate } from "./i18n";
-import { NodeProgressFill, useNow } from "./NodeProgressFill";
+import { NodeProgressFill } from "./NodeProgressFill";
 import type { PartitionNode } from "./partitions";
 import { seconds } from "./results";
 import { elapsedDuration, overran, type NodeProgress } from "./runEstimate";
 import type { TemplateKind } from "./types";
+import { useNow } from "./useNow";
 
 /** The icon of a template, from its ID, or of any component. */
 export function NodeIcon({ kind, ...props }: LucideProps & { kind: string }) {

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { overran, progressTimeline, type NodeProgress } from "./runEstimate";
 
 /** The fill keeps its last part for the actual result, never an estimate. */
@@ -7,19 +7,8 @@ const offset = (share: number) =>
   `translateX(${((share * FILL_LIMIT - 1) * 100).toFixed(2)}%)`;
 const EMPTY = offset(0);
 
-/** The current time, refreshed every second while `active`. */
-export function useNow(active: boolean) {
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => {
-    if (!active) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, [active]);
-  return now;
-}
-
 /** How a node's shape shows its progress, for styles and tests. */
-export function progressState(progress: NodeProgress | undefined, now: number) {
+function progressState(progress: NodeProgress | undefined, now: number) {
   if (progress?.phase !== "running") return progress?.phase ?? "idle";
   if (!progress.total) return "working";
   return overran(progress, now) ? "overrun" : "estimated";
@@ -46,8 +35,10 @@ export function NodeProgressFill({
       ? JSON.stringify([progress.done, progress.total, progress.running])
       : "";
   const paused = !!progress?.paused;
-  const outcome =
-    status === "valid" || status === "success"
+  // Results of a component's first nodes are no outcome while others remain.
+  const outcome = plan
+    ? ""
+    : status === "valid" || status === "success"
       ? "success"
       : status === "failed"
         ? "failed"

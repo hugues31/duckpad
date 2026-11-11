@@ -113,6 +113,13 @@ test("canvas nodes fill with their expected progress, and links follow the run",
       enriched: { status: "running", started: ago(2), estimated_duration: 20 },
       period: { status: "running", started: ago(1) },
       validated: { status: "pending", estimated_duration: 1 },
+      "report::summary::eligible": {
+        status: "success",
+        started: ago(3),
+        duration: 1,
+        estimated_duration: 1,
+      },
+      "report::summary::metrics": { status: "pending", estimated_duration: 3 },
     },
   };
   await page.route(`**/api/worktrees/${tree.id}/status?*`, (route) =>
@@ -165,6 +172,16 @@ test("canvas nodes fill with their expected progress, and links follow the run",
     en.pending,
   );
   await expect(node("reach").locator(".node-status")).toHaveCount(0);
+  // Between two of its nodes, a component keeps its progress and looks unfinished.
+  const component = node("report").locator(".node-progress");
+  await expect(node("report")).toHaveClass(/is-running/);
+  await expect(component).toHaveAttribute("data-state", "estimated");
+  await expect(component).not.toHaveAttribute("data-outcome");
+  expect(
+    await component
+      .locator(".node-progress-fill")
+      .evaluate((element) => element.getAnimations().length),
+  ).toBe(0);
   // Data flows along links into executing nodes only.
   await expect(edge("orders_result_enriched_left")).toHaveClass(/is-flowing/);
   await expect(edge("orders_result_enriched_left")).toHaveClass(/animated/);
