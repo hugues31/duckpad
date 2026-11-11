@@ -13,10 +13,17 @@ const blocked: NodeResult = {
   error: "Blocked by report::summary::metrics",
   error_run: "run-1",
   execution_status: "blocked",
-  error_causes: [{ ...failed, node: "report::summary::metrics" }],
+  error_causes: ["run-1:report::summary::metrics"],
+};
+const causes: Statuses["causes"] = {
+  "run-1:report::summary::metrics": {
+    ...failed,
+    node: "report::summary::metrics",
+  },
 };
 const statuses: Statuses = {
   active: null,
+  causes,
   nodes: {
     "report::summary::filter": {
       outputs: {},
@@ -48,10 +55,11 @@ it("explains downstream blockers and keeps independent causes", () => {
     executionFailures(
       {
         active: null,
+        causes: { ...causes, "run-1:other": second },
         nodes: {
           export: {
             ...blocked,
-            error_causes: [...blocked.error_causes!, second],
+            error_causes: [...blocked.error_causes!, "run-1:other"],
           },
         },
       },

@@ -1434,6 +1434,7 @@
   "errorLine": "Ligne {line}",
   "openErrorLine": "Ouvrir le code à la ligne {line}",
   "viewErrorLog": "Voir le log",
+  "blockedBy": "Bloqué par {node}",
   "errorCompiledSql": "SQL avant exécution",
   "errorCodeChanged": "Le code a changé depuis cet échec. Relancez le nœud pour vérifier cette version.",
   "noJobsAdmin": "Un Job exécute une version choisie de ce projet depuis un ordonnanceur externe ou l’API.",

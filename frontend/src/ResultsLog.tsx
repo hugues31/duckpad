@@ -64,6 +64,7 @@ export default function ResultsLog({
   download,
   readOnly,
   result,
+  errorShown = false,
   inputs,
   statuses,
   onTests,
@@ -75,6 +76,8 @@ export default function ResultsLog({
   download: boolean;
   readOnly: boolean;
   result?: NodeResult;
+  /** Whether the panel already shows this run's error above the log. */
+  errorShown?: boolean;
   inputs: { node: string; port: string; input: string; label: string }[];
   statuses: Statuses;
   onTests: () => void;
@@ -306,7 +309,7 @@ export default function ResultsLog({
         </Link>
       </div>
       <div className="data-scroll log-scroll">
-        {error && (
+        {error && !errorShown && (
           <div className="notice error log-error">
             {/* Multi-line errors such as tracebacks keep their layout; the timeline shows their summary. */}
             {error.includes("\n") ? (

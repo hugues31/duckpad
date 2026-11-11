@@ -6,6 +6,7 @@ import { Link } from "react-router";
 import { missingFunctionExtension } from "./extensions";
 import { useOptionalWorktree } from "./worktree";
 import { projectPageUrl } from "./navigation";
+import { partitionMessage } from "./partitions";
 
 /** Node errors carry no code: a run whose Python policy was disabled mid-run fails with this. */
 const PYTHON_DISABLED = "Python execution is disabled";
@@ -24,10 +25,13 @@ export default function ExecutionError({
   node: string;
   environment: string;
   currentSource: string;
+  /** The failed node's name, when it is not the selected one. */
   label?: string;
+  /** Whether the selected node was blocked rather than failing itself. */
   blocked?: boolean;
   onEditCode: (line?: number) => void;
-  onLog: () => void;
+  /** Absent where the log below already belongs to this failure. */
+  onLog?: () => void;
 }) {
   const t = useT();
   const diagnostic = failure.diagnostic;
@@ -36,27 +40,29 @@ export default function ExecutionError({
   const extension = missingFunctionExtension(
     diagnostic?.message || failure.error || "",
   );
+  // A blocked node names its culprit in the title; a component names its failed inner node.
+  const title = !blocked
+    ? t("lastRunFailed")
+    : label
+      ? t("blockedBy").replace("{node}", label)
+      : t("blocked");
   return (
-    <section
-      className="execution-error"
-      role="alert"
-      aria-label={t(blocked ? "blocked" : "lastRunFailed")}
-    >
+    <section className="execution-error" role="alert" aria-label={title}>
       <div className="row gap">
         <AlertCircle size={18} aria-hidden="true" />
-        <strong>{t(blocked ? "blocked" : "lastRunFailed")}</strong>
+        <strong>{title}</strong>
         {diagnostic && (
           <span>
             {t("errorLine").replace("{line}", String(diagnostic.line))}
           </span>
         )}
       </div>
-      {label && <p>{label}</p>}
+      {label && !blocked && <p>{label}</p>}
       <pre className="execution-error-message">
         {diagnostic?.message ||
           (failure.error === PYTHON_DISABLED
             ? t("pythonExecutionDisabled")
-            : failure.error)}
+            : partitionMessage(t, failure.error || ""))}
       </pre>
       {extension && worktree?.canEdit && worktree.snapshot && (
         <p>
@@ -92,9 +98,11 @@ export default function ExecutionError({
             ? t("openErrorLine").replace("{line}", String(diagnostic.line))
             : t("editNodeCode")}
         </button>
-        <button className="text-button" onClick={onLog}>
-          {t("viewErrorLog")}
-        </button>
+        {onLog && (
+          <button className="text-button" onClick={onLog}>
+            {t("viewErrorLog")}
+          </button>
+        )}
         <AskAssistant
           node={node}
           run={failure.error_run}

@@ -515,8 +515,8 @@ export interface Run {
 }
 /** The latest results of a node in an environment. */
 export interface NodeResult {
-  /** Original failures from this node's failed run, through any blocked dependencies. */
-  error_causes?: (NodeResult & { node: string })[];
+  /** The failures that blocked this node in its run, as keys of the statuses' causes. */
+  error_causes?: string[];
   diagnostic?: SqlDiagnostic | null;
   results?: ExecutionResult[];
   result_run?: string;
@@ -528,6 +528,8 @@ export interface NodeResult {
 }
 export interface Statuses {
   nodes: Record<string, NodeResult>;
+  /** The failures behind blocked nodes, each held once however many nodes it blocked. */
+  causes?: Record<string, NodeResult & { node: string }>;
   active: Run | null;
 }
 /** Statistics of one column over a whole retained result. */

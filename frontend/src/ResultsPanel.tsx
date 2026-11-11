@@ -13,12 +13,11 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { withQuery } from "./api";
-import { nodeStatus } from "./canvasResults";
 import { DatasetPicker } from "./DatasetPicker";
 import type { PreviewState } from "./draftPreview";
 import DraftPreviewView from "./DraftPreviewView";
 import ExecutionError from "./ExecutionError";
-import { executionFailures } from "./executionFailures";
+import { executionFailures, wasBlocked } from "./executionFailures";
 import { WarningBadge, warningCount } from "./ExecutionMessages";
 import { nodeInterface, outputSource, type NodeInterface } from "./graph";
 import { nodeLabel, useT } from "./i18n";
@@ -292,6 +291,7 @@ export default function ResultsPanel({
     )
       setShownSample({ environment, ...loadSample(storage(next)) });
   };
+  const blockedNode = wasBlocked(statuses, fullNode);
   const failureCards = failures.map(({ node: failedNode, result: failure }) => {
     const sourceLocation =
       snapshot.bundle && nodeLocation(snapshot.bundle, failedNode);
@@ -300,7 +300,7 @@ export default function ResultsPanel({
         key={`${failure.error_run}:${failedNode}`}
         failure={failure}
         node={failedNode}
-        blocked={nodeStatus(statuses, fullNode) === "blocked"}
+        blocked={blockedNode}
         label={
           failedNode !== fullNode
             ? displayNodeName(snapshot.node_names?.[failedNode], failedNode, t)
@@ -317,10 +317,14 @@ export default function ResultsPanel({
             : ""
         }
         onEditCode={(line) => onEditCode(line, failedNode)}
-        onLog={() => {
-          setLogNode(failedNode);
-          onTab("log");
-        }}
+        onLog={
+          shown === "log" && failedNode === logFailure?.node
+            ? undefined
+            : () => {
+                setLogNode(failedNode);
+                onTab("log");
+              }
+        }
       />
     );
   });
@@ -471,7 +475,9 @@ export default function ResultsPanel({
           );
         })}
       </div>
-      {shown !== "preview" && failureCards}
+      {shown !== "preview" && failures.length > 0 && (
+        <div className="execution-errors">{failureCards}</div>
+      )}
       {shown === "preview" && preview ? (
         <DraftPreviewView
           key={preview.result ? "computed" : "pending"}
@@ -583,6 +589,7 @@ export default function ResultsPanel({
           }
           readOnly={readOnly}
           result={logFailure?.result || result}
+          errorShown={!!logFailure}
           inputs={
             logFailure && logFailure.node !== producer
               ? []

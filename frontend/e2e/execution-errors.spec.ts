@@ -46,10 +46,12 @@ test("muting enrichment explains blocked components and downstream nodes directl
   await run("partial_failure");
   // The default output succeeds; another nested node fails and blocks the report.
   await node("report").locator(".node-shape").click();
-  const error = results.getByRole("alert", { name: "Blocked", exact: true });
+  const error = results.getByRole("alert", {
+    name: "Blocked by Regional revenue / Regional summary / Revenue by region",
+    exact: true,
+  });
   await expect(error).toHaveCount(1);
   await expect(error).toContainText('Referenced column "region" not found');
-  await expect(error).toContainText("Revenue by region");
   await page
     .locator(".inspector .result-summary")
     .getByRole("button", { name: "Last run failed", exact: true })
@@ -58,7 +60,11 @@ test("muting enrichment explains blocked components and downstream nodes directl
     "aria-selected",
     "true",
   );
+  // The log is the failed node's, and the card above it tells the error once.
   await expect(error).toBeVisible();
+  await expect(results.locator(".log-error")).toHaveCount(0);
+  await expect(results.locator(".run-summary .badge")).toHaveText("Failed");
+  await expect(error.getByRole("button", { name: "View log" })).toHaveCount(0);
   await error.getByRole("button", { name: /Open code at line/ }).click();
   const editor = page.getByRole("dialog");
   await expect(editor.locator(".squiggly-error")).not.toHaveCount(0);
@@ -66,7 +72,6 @@ test("muting enrichment explains blocked components and downstream nodes directl
   // The export has no rows and is several dependencies away from the original failure.
   await node("export").locator(".node-shape").click();
   await expect(error).toContainText('Referenced column "region" not found');
-  await expect(error).toContainText("Revenue by region");
   await toggle();
   await run("success");
   await node("report").locator(".node-shape").click();
