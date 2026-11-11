@@ -83,7 +83,7 @@ through joins and aggregates, down to the original source cells. Coverage is
 explicit: when a step cannot be explained, Duckpad
 [tells you](docs/LINEAGE.md).
 
-![The lineage of a regional revenue total: the first five of the 27 source amounts behind the sum](docs/images/lineage.png)
+![The lineage of a regional revenue total: the first five of the 27 source amounts behind the sum](docs/images/readme-lineage.png)
 
 ### Write SQL and preview it on real rows
 
@@ -93,7 +93,7 @@ SQL, with the input columns one click away, and you can
 [preview](docs/SQL.md#preview-while-you-edit) the query you are typing on real
 rows.
 
-![A SQL node edited beside the canvas, with its input columns and a preview of the result](docs/images/code-preview.png)
+![A SQL node edited beside the canvas, with its input columns and a preview of the result](docs/images/readme-code-preview.png)
 
 ### Review changes before they run
 
@@ -101,7 +101,7 @@ Work on a branch, compare two versions node by node, check the impact on the
 data and merge after review. Projects are ordinary Git repositories, so you can
 also [push and pull](docs/GIT.md#origin-fetch-pull-and-push) them.
 
-![Two branches compared: the modified node stands out on the flow, with the changed parameter before and after](docs/images/git-comparison.png)
+![Two branches compared: the modified node stands out on the flow, with the changed parameter before and after](docs/images/readme-git-comparison.png)
 
 ### And also
 

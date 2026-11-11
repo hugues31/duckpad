@@ -73,10 +73,12 @@ suite verifies runs and lineage before capturing. Keep English, light theme,
 UTC and the fixed viewport for consistent images. Sign-in happens before recording;
 never include credentials or private infrastructure in media.
 
-The same suite captures the `readme-*.png` images of the repository README, at
-double density and in a smaller viewport that stays legible at GitHub's width.
-Its custom-node scene runs the SQL and Python samples printed in `README.md`:
-change a sample there, then capture again.
+The same suite captures the `readme-*.png` images of the repository README.
+They keep the rounded corners of the captured window, with transparency
+outside them, so that they sit on GitHub's light or dark page. The README's own
+scenes use double density and a smaller viewport that stays legible at GitHub's
+width. The custom-node scene runs the SQL and Python samples printed in
+`README.md`: change a sample there, then capture again.
 
 The recorder writes `website/public/demos/northstar.webm` and its captions.
 Screenshots belong in `docs/images/`; do not edit generated copies under

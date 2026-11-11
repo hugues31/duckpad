@@ -91,7 +91,7 @@ async function capture(
   await mkdir(resolve("../docs/images"), { recursive: true });
   await page.evaluate(() => document.fonts.ready);
   await page.mouse.move(0, 0);
-  await region.screenshot({
+  return region.screenshot({
     path: resolve("../docs/images", `${name}.png`),
     animations: "disabled",
     caret: "hide",
@@ -100,6 +100,42 @@ async function capture(
       ".toast, .resource-monitor, .git-revisions small { visibility: hidden !important; }" +
       extraStyle,
   });
+}
+
+/**
+ * A capture for the README, which sits on GitHub's light or dark page: the
+ * image keeps the rounded corners of the captured window, or lightly rounded
+ * ones for a whole page, and what lies outside them becomes transparent.
+ */
+async function captureForReadme(
+  page: Page,
+  name: string,
+  region: Page | Locator = page,
+  extraStyle = "",
+) {
+  const image = await capture(page, name, region, extraStyle);
+  const radius =
+    "boundingBox" in region
+      ? await region.evaluate((element) =>
+          parseFloat(getComputedStyle(element).borderTopLeftRadius),
+        )
+      : 12;
+  expect(radius).toBeGreaterThan(0);
+  // Chromium draws the capture again under its rounded outline, pixel for
+  // pixel, and leaves the page behind it out of the new image.
+  const frame = await page.context().newPage();
+  const density = await frame.evaluate(() => devicePixelRatio);
+  // The width in the PNG header is in device pixels.
+  const width = image.readUInt32BE(16) / density;
+  await frame.setContent(
+    `<img style="display: block; width: ${width}px; border-radius: ${radius}px"
+      src="data:image/png;base64,${image.toString("base64")}">`,
+  );
+  await frame.locator("img").screenshot({
+    path: resolve("../docs/images", `${name}.png`),
+    omitBackground: true,
+  });
+  await frame.close();
 }
 
 function node(page: Page, label: string) {
@@ -182,6 +218,7 @@ test("capture project creation, results, lineage and SQL", async ({ page }) => {
   });
   await expect(lineage.locator(".lineage-card.is-source")).toHaveCount(5);
   await capture(page, "lineage", lineage);
+  await captureForReadme(page, "readme-lineage", lineage);
   await page.keyboard.press("Escape");
   await page.getByRole("link", { name: "Code", exact: true }).click();
   await page.getByRole("treeitem", { name: "templates", exact: true }).click();
@@ -448,6 +485,12 @@ test("capture the docked code editor and its preview", async ({ page }) => {
   await capture(
     page,
     "code-preview",
+    page,
+    ".draft-preview-time { visibility: hidden !important; }",
+  );
+  await captureForReadme(
+    page,
+    "readme-code-preview",
     page,
     ".draft-preview-time { visibility: hidden !important; }",
   );
@@ -889,6 +932,7 @@ test("capture branch creation and a real parameter comparison", async ({
     git.locator(".comparison-values tr").filter({ hasText: "refunded" }),
   ).toBeInViewport({ ratio: 1 });
   await capture(page, "git-comparison", git);
+  await captureForReadme(page, "readme-git-comparison", git);
 });
 
 test("capture account roles, project access and personal preferences", async ({
@@ -1176,7 +1220,7 @@ test.describe("README", () => {
         .click();
       await expect(page.locator(".inspector")).toBeHidden();
       await fitted(page);
-      await capture(
+      await captureForReadme(
         page,
         theme === "light" ? "readme-workspace" : "readme-workspace-dark",
       );
@@ -1290,7 +1334,7 @@ FROM range(1, 121) t(i);
       await expect(
         palette.getByRole("button", { name, exact: true }),
       ).toBeInViewport();
-    await capture(page, "readme-custom-nodes");
+    await captureForReadme(page, "readme-custom-nodes");
   });
 });
 
