@@ -1073,10 +1073,3 @@ fieldset.palette-bottom {
 .node-action-menu button:focus-visible {
   background: var(--surface-alt);
 }
-
-.palette-hint {
-  margin: 0;
-  padding: 10px 15px;
-  font-size: 11px;
-  color: var(--muted);
-}

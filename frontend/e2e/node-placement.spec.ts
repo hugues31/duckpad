@@ -19,14 +19,20 @@ async function addNode(page: Page, label = "SQL") {
       response.url().includes("/api/worktrees/") &&
       response.request().method() === "PUT",
   );
+  const linked = label.startsWith("Add linked: ");
   await page
     .locator(".palette")
     .getByRole("button", {
-      name: label,
+      name: label.replace("Add linked: ", ""),
       exact: true,
     })
-    .click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Add linked", exact: true }).click();
+    .click({ button: linked ? "right" : "left" });
+  await page
+    .getByRole(linked ? "menuitem" : "button", {
+      name: linked ? "Add linked" : "Add to canvas",
+      exact: true,
+    })
+    .click();
   expect((await saved).ok()).toBe(true);
   await expect(page.locator(".react-flow__node")).toHaveCount(before + 1);
   const created = page.locator(".react-flow__node").last();
@@ -67,7 +73,7 @@ async function expectNoOverlap(page: Page) {
   expect(overlaps).toEqual([]);
 }
 
-test("repeated Northstar linked additions avoid existing bounds after pan and zoom", async ({
+test("repeated Northstar palette additions avoid existing bounds after pan and zoom", async ({
   page,
 }) => {
   test.setTimeout(90000);
@@ -89,7 +95,14 @@ test("repeated Northstar linked additions avoid existing bounds after pan and zo
   const zoom = () => canvasZoom(page);
   await expect.poll(zoom).not.toBeCloseTo(1, 2);
   const chosen = await zoom();
-  for (const label of ["SQL", "Filter", "Filter", "Filter", "SQL", "Filter"]) {
+  for (const label of [
+    "SQL",
+    "Filter",
+    "Add linked: Filter",
+    "Regional report",
+    "SQL",
+    "Filter",
+  ]) {
     await addNode(page, label);
     await expectNoOverlap(page);
     // Revealing a new node pans the canvas but keeps the user's zoom.

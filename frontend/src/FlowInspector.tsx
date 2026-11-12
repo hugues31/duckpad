@@ -30,7 +30,9 @@ import type { PanelVisibility } from "./WorkspacePanels";
 
 export default function FlowInspector({
   paletteChoice,
+  paletteFocus,
   onClosePalette,
+  onAddPalette,
   panels,
   busy,
   node,
@@ -66,7 +68,9 @@ export default function FlowInspector({
   showResults,
 }: {
   paletteChoice: NodeChoice | undefined;
+  paletteFocus: boolean;
   onClosePalette: () => void;
+  onAddPalette: (() => void) | undefined;
   panels: PanelVisibility;
   busy: boolean;
   node: FlowNode | undefined;
@@ -114,7 +118,9 @@ export default function FlowInspector({
         <PaletteDetails
           key={`${paletteChoice.kind}:${paletteChoice.id}`}
           choice={paletteChoice}
+          focus={paletteFocus}
           onClose={onClosePalette}
+          onAdd={onAddPalette}
         />
       ) : node && definition && signature && codeShown ? (
         <NodeCodePanel

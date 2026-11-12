@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { NodeIcon } from "./CanvasNode";
 import type { NodeChoice } from "./graph";
@@ -8,17 +8,24 @@ import { isWideLayout } from "./WorkspacePanels";
 /** Read the definition's interface without creating or editing a graph node. */
 export default function PaletteDetails({
   choice,
+  focus,
   onClose,
+  onAdd,
 }: {
   choice: NodeChoice;
+  /** Whether the keyboard opened the details, far from the palette in tab order. */
+  focus: boolean;
   onClose: () => void;
+  /** Adds an instance without a drag; absent when the project is read-only. */
+  onAdd?: () => void;
 }) {
   const t = useT();
   const close = useRef<HTMLButtonElement>(null);
+  const add = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     // On small screens the palette closes, so focus follows the visible panel.
-    if (!isWideLayout()) close.current?.focus();
-  }, []);
+    if (focus || !isWideLayout()) (add.current ?? close.current)?.focus();
+  }, [focus]);
   const { signature, definition } = choice;
   const label =
     choice.kind === "component"
@@ -29,8 +36,9 @@ export default function PaletteDetails({
       className="inspector palette-details"
       aria-label={t("nodeTypeDetails")}
       onKeyDown={(event) => {
-        if (event.key === "Escape") {
-          event.stopPropagation();
+        if (event.key === "Escape" && !event.defaultPrevented) {
+          // The canvas would otherwise also deselect its node.
+          event.preventDefault();
           onClose();
         }
       }}
@@ -57,8 +65,15 @@ export default function PaletteDetails({
           <X size={18} />
         </button>
       </div>
+      {onAdd && (
+        <div className="inspector-actions">
+          <button ref={add} className="button primary small" onClick={onAdd}>
+            <Plus size={15} aria-hidden="true" />
+            {t("addToCanvas")}
+          </button>
+        </div>
+      )}
       <div className="inspector-body">
-        <p className="muted small">{t("paletteDetailsHint")}</p>
         {choice.kind === "template" && choice.definition.error ? (
           <p className="notice error" role="alert">
             {choice.definition.error}

@@ -14,7 +14,12 @@ export interface FlowLocation {
   /** Whether the code of the selected node replaces the inspector. */
   code: boolean;
   /** The palette definition being inspected, without creating an instance. */
-  paletteNode: { kind: NodeKind; id: string } | null;
+  paletteNode: {
+    kind: NodeKind;
+    id: string;
+    /** Opened from the keyboard: focus follows to the details. */
+    keyboard?: boolean;
+  } | null;
 }
 
 /**

@@ -141,6 +141,14 @@ SELECT * FROM {{ right }};`;
   await details.getByRole("button", { name: "Close", exact: true }).focus();
   await page.keyboard.press("Escape");
   await expect(details).toHaveCount(0);
+  // From the clicked entry, Escape closes the details and keeps the canvas selection.
+  await item.click();
+  await expect(item).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(details).toHaveCount(0);
+  await expect(page.locator('.react-flow__node[data-id="orders"]')).toHaveClass(
+    /selected/,
+  );
   await item.click();
   await dragPaletteNode(page, "Review transform");
   await expect(page.locator(".react-flow__node")).toHaveCount(
@@ -161,9 +169,23 @@ SELECT * FROM {{ right }};`;
     .locator(`.react-flow__node[data-id="${added.id}"] .node-shape`)
     .click();
   await expect(details).toHaveCount(0);
+  // Without a pointer, the details take focus and their button adds the node.
+  await item.focus();
+  await page.keyboard.press("Enter");
+  await expect(
+    details.getByRole("button", { name: "Add to canvas", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".react-flow__node")).toHaveCount(
+    before.bundle!.flow.nodes.length + 2,
+  );
+  await expect(details).toHaveCount(0);
+  await expect
+    .poll(async () => (await read()).bundle!.flow.nodes.at(-1)!.origin)
+    .toBe("review_transform");
   await page.reload();
   await expect(page.locator(".react-flow__node")).toHaveCount(
-    before.bundle!.flow.nodes.length + 1,
+    before.bundle!.flow.nodes.length + 2,
   );
   return id as string;
 }

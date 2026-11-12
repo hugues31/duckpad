@@ -24,6 +24,7 @@ export default function NodePalette({
   onClose,
   inspected,
   onInspect,
+  onDismiss,
   onAdd,
   onDragStart,
   onNewTemplate,
@@ -37,7 +38,14 @@ export default function NodePalette({
   hidden: boolean;
   onClose: () => void;
   inspected: { kind: NodeKind; id: string } | null;
-  onInspect: (kind: NodeKind, id: string, trigger: HTMLButtonElement) => void;
+  onInspect: (
+    kind: NodeKind,
+    id: string,
+    trigger: HTMLButtonElement,
+    keyboard: boolean,
+  ) => void;
+  /** Closes the details of the inspected entry. */
+  onDismiss: () => void;
   onAdd: (kind: NodeKind, id: string, linked?: boolean) => void;
   onDragStart: (kind: NodeKind, id: string, transfer: DataTransfer) => void;
   onNewTemplate: (language: "sql" | "python") => void;
@@ -80,6 +88,14 @@ export default function NodePalette({
       id="node-palette"
       aria-label={t("nodes")}
       hidden={hidden}
+      onKeyDown={(event) => {
+        // Focus stays on the clicked entry: Escape closes its details first,
+        // before the canvas deselects its node.
+        if (event.key !== "Escape" || event.defaultPrevented || !inspected)
+          return;
+        event.preventDefault();
+        onDismiss();
+      }}
     >
       <div className="palette-title">
         <span>{t("nodes")}</span>
@@ -124,7 +140,13 @@ export default function NodePalette({
                       onDragStart(item.kind, item.id, e.dataTransfer);
                     }}
                     onClick={(event) =>
-                      onInspect(item.kind, item.id, event.currentTarget)
+                      onInspect(
+                        item.kind,
+                        item.id,
+                        event.currentTarget,
+                        // Enter and Space click without a pointer.
+                        event.detail === 0,
+                      )
                     }
                     onContextMenu={(event) => {
                       if (readOnly || busy || item.kind !== "template") return;
@@ -137,8 +159,10 @@ export default function NodePalette({
                     }}
                     title={[
                       item.description,
-                      t("paletteDetailsHint"),
-                      item.kind === "template" ? t("addLinkedHint") : "",
+                      readOnly ? "" : t("paletteDetailsHint"),
+                      !readOnly && item.kind === "template"
+                        ? t("addLinkedHint")
+                        : "",
                     ]
                       .filter(Boolean)
                       .join(" · ")}
@@ -161,7 +185,6 @@ export default function NodePalette({
           </section>
         ))}
       </div>
-      <p className="palette-hint">{t("paletteDetailsHint")}</p>
       {context && !readOnly && !busy && (
         <ActionMenu
           label={t("addLinked")}

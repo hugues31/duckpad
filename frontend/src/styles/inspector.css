@@ -2,6 +2,9 @@
 .palette-details .inspector-body {
   overflow-wrap: anywhere;
 }
+.palette-details .inspector-body > section:first-of-type > h4 {
+  margin-top: 0;
+}
 .palette-description {
   white-space: pre-wrap;
   font-size: 12px;

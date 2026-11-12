@@ -313,6 +313,12 @@ export default function FlowPage() {
           },
     );
   };
+  const closePaletteDetails = () => {
+    view.change({ paletteNode: null });
+    // Small screens hid the palette to show its entry's details.
+    if (!isWideLayout()) panels.set({ palette: true });
+    requestAnimationFrame(() => paletteTrigger.current?.focus());
+  };
   /** A node's main action: its code, or the contents of a component. */
   const openNode = (target: FlowNode) =>
     target.component
@@ -356,9 +362,10 @@ export default function FlowPage() {
         hidden={!panels.open.palette}
         onClose={() => panels.set({ palette: false })}
         inspected={panels.open.inspector ? view.paletteNode : null}
-        onInspect={(kind, id, trigger) => {
+        onDismiss={closePaletteDetails}
+        onInspect={(kind, id, trigger, keyboard) => {
           paletteTrigger.current = trigger;
-          view.change({ paletteNode: { kind, id }, cell: null });
+          view.change({ paletteNode: { kind, id, keyboard }, cell: null });
           panels.set({
             inspector: true,
             ...(isWideLayout() ? {} : { palette: false }),
@@ -540,11 +547,13 @@ export default function FlowPage() {
       )}
       <FlowInspector
         paletteChoice={paletteChoice}
-        onClosePalette={() => {
-          view.change({ paletteNode: null });
-          panels.set({ palette: true });
-          requestAnimationFrame(() => paletteTrigger.current?.focus());
-        }}
+        paletteFocus={!!view.paletteNode?.keyboard}
+        onClosePalette={closePaletteDetails}
+        onAddPalette={
+          canEdit && paletteChoice
+            ? () => safe(() => addNode(paletteChoice.kind, paletteChoice.id))
+            : undefined
+        }
         panels={panels}
         busy={busy}
         node={node}

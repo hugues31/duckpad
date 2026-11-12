@@ -51,7 +51,7 @@ For XLSX, select the sheet and check the [workbook limits](CONNECTORS.md#xlsx-wo
 
 ## 2. Transform the rows
 
-Click **Select columns** in the palette. Connect the reader's output to its
+Drag **Select columns** from the palette onto the canvas. Connect the reader's output to its
 `source` input, either by dragging between ports or using the inspector's input
 selector. The upstream run makes column choices available.
 
@@ -67,7 +67,7 @@ turn a sample filter into a node with **Add as a Filter node**.
 
 ## 3. Export and download
 
-1. Click **Export CSV** in the palette.
+1. Drag **Export CSV** from the palette onto the canvas.
 2. Connect the transformation's output to the export's `source` input.
 3. Keep **Location → Project files**, set `destination` to `revenue.csv`, and
    choose the delimiter and header settings you want.

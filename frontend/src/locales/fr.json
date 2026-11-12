@@ -94,10 +94,10 @@
   "newTemplate": "Nouveau modèle SQL",
   "addToPalette": "Ajouter à la palette",
   "paletteImport": "Importer",
-  "newTemplateHint": "Modifiez le code pour ajouter un modèle SQL réutilisable à la palette, puis cliquez dessus ou glissez-le sur le canevas pour créer des nœuds.",
+  "newTemplateHint": "Modifiez le code pour ajouter un modèle SQL réutilisable à la palette, puis glissez-le sur le canevas pour créer des nœuds.",
   "python": "Python",
   "newPythonTemplate": "Nouveau modèle Python",
-  "newPythonTemplateHint": "Modifiez le code pour ajouter un modèle Python réutilisable à la palette, puis cliquez dessus ou glissez-le sur le canevas pour créer des nœuds.",
+  "newPythonTemplateHint": "Modifiez le code pour ajouter un modèle Python réutilisable à la palette, puis glissez-le sur le canevas pour créer des nœuds.",
   "editPythonTemplate": "Modifier le modèle Python partagé",
   "flow": "Flux",
   "code": "Code",
@@ -1660,5 +1660,6 @@
   "noNodeDescription": "Aucune description fournie.",
   "noNodeInputs": "Aucune entrée.",
   "noNodeOutputs": "Aucune sortie.",
-  "noNodeParameters": "Aucun paramètre."
+  "noNodeParameters": "Aucun paramètre.",
+  "addToCanvas": "Ajouter au canevas"
 }

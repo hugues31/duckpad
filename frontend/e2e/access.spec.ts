@@ -77,6 +77,9 @@ test("manage instance accounts, project users and live reader access", async ({
   );
   await readerPage.locator(".palette-item").first().click();
   await expect(readerPage.locator(".palette-details")).toBeVisible();
+  await expect(
+    readerPage.getByRole("button", { name: "Add to canvas", exact: true }),
+  ).toHaveCount(0);
   for (const name of [
     "New SQL template",
     "New Python template",

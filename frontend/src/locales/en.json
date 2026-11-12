@@ -94,10 +94,10 @@
   "newTemplate": "New SQL template",
   "addToPalette": "Add to palette",
   "paletteImport": "Import",
-  "newTemplateHint": "Edit the code to add a reusable SQL template to the palette, then click or drag it onto the canvas to create nodes.",
+  "newTemplateHint": "Edit the code to add a reusable SQL template to the palette, then drag it onto the canvas to create nodes.",
   "python": "Python",
   "newPythonTemplate": "New Python template",
-  "newPythonTemplateHint": "Edit the code to add a reusable Python template to the palette, then click or drag it onto the canvas to create nodes.",
+  "newPythonTemplateHint": "Edit the code to add a reusable Python template to the palette, then drag it onto the canvas to create nodes.",
   "editPythonTemplate": "Edit shared Python template",
   "flow": "Flow",
   "code": "Code",
@@ -1660,5 +1660,6 @@
   "noNodeDescription": "No description provided.",
   "noNodeInputs": "No inputs.",
   "noNodeOutputs": "No outputs.",
-  "noNodeParameters": "No parameters."
+  "noNodeParameters": "No parameters.",
+  "addToCanvas": "Add to canvas"
 }

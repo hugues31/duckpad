@@ -48,4 +48,11 @@ test("palette details remain readable and dismissible on a phone in French and P
     await expect(page.locator(".palette")).toBeVisible();
     await expect(page.locator(".react-flow__node")).toHaveCount(0);
   }
+  // A touch screen adds the node from its details, without a drag.
+  await page
+    .locator(".palette-list")
+    .getByRole("button", { name: pt.load_csv, exact: true })
+    .click();
+  await page.getByRole("button", { name: pt.addToCanvas, exact: true }).click();
+  await expect(page.locator(".react-flow__node")).toHaveCount(1);
 });

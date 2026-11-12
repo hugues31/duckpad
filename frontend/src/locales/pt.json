@@ -94,10 +94,10 @@
   "newTemplate": "Novo modelo SQL",
   "addToPalette": "Adicionar à paleta",
   "paletteImport": "Importar",
-  "newTemplateHint": "Edite o código para adicionar um modelo SQL reutilizável à paleta e clique nele ou arraste-o para o canvas para criar nós.",
+  "newTemplateHint": "Edite o código para adicionar um modelo SQL reutilizável à paleta e arraste-o para o canvas para criar nós.",
   "python": "Python",
   "newPythonTemplate": "Novo modelo Python",
-  "newPythonTemplateHint": "Edite o código para adicionar um modelo Python reutilizável à paleta e clique nele ou arraste-o para o canvas para criar nós.",
+  "newPythonTemplateHint": "Edite o código para adicionar um modelo Python reutilizável à paleta e arraste-o para o canvas para criar nós.",
   "editPythonTemplate": "Editar modelo Python compartilhado",
   "flow": "Fluxo",
   "code": "Código",
@@ -1655,10 +1655,11 @@
   "codeFixRemoveQuotes": "Remover as aspas",
   "codeFixChangeTo": "Trocar por {text}",
   "codeFixRemoveArguments": "Remover os argumentos",
-  "paletteDetailsHint": "Clique para consultar. Arraste para a tela para adicionar.",
+  "paletteDetailsHint": "Clique para consultar. Arraste para o canvas para adicionar.",
   "nodeTypeDetails": "Detalhes do tipo de nó",
   "noNodeDescription": "Nenhuma descrição disponível.",
   "noNodeInputs": "Nenhuma entrada.",
   "noNodeOutputs": "Nenhuma saída.",
-  "noNodeParameters": "Nenhum parâmetro."
+  "noNodeParameters": "Nenhum parâmetro.",
+  "addToCanvas": "Adicionar ao canvas"
 }
