@@ -166,8 +166,12 @@ def check(config, requirements, imports):
         )
 
 
+# Built-in readers whose function comes from an extension, which their new nodes enable.
+READER_EXTENSIONS = {"load_xlsx": "excel", "load_delta": "delta"}
+
+
 def activate_file_readers(base, proposal):
-    """New XLSX readers request Excel in the same save as their node.
+    """New XLSX and Delta readers request their extension in the same save as their node.
 
     A later explicit disable remains possible, and malformed extension files stay editable.
     """
@@ -187,25 +191,28 @@ def activate_file_readers(base, proposal):
                 if not isinstance(node, dict):
                     continue
                 kind = node.get("preset") or node.get("template") or node.get("origin")
-                if kind == "load_xlsx" and isinstance(node.get("id"), str):
-                    found.add((path, node["id"]))
+                if kind in READER_EXTENSIONS and isinstance(node.get("id"), str):
+                    found.add((path, node["id"], READER_EXTENSIONS[kind]))
         return found
 
     # Unchanged files hold the same readers on both sides: only edited graphs are parsed.
     changed = {path: text for path, text in proposal.items() if base.get(path) != text}
-    if not readers(changed) - readers({path: base[path] for path in changed if path in base}):
+    added = readers(changed) - readers({path: base[path] for path in changed if path in base})
+    if not added:
         return proposal
     extensions = read(proposal.get(FILE))
     if isinstance(extensions, str):
         return proposal
     extensions = dict(extensions or {})
-    excel = extensions.get("excel")
-    if excel is not None and not isinstance(excel, dict):
-        return proposal
-    if excel and excel.get("enabled") is True:
-        return proposal
-    extensions["excel"] = {**(excel or {"source": "core"}), "enabled": True}
-    return {**proposal, FILE: write(extensions)}
+    missing = []
+    for name in sorted({extension for _, _, extension in added}):
+        current = extensions.get(name)
+        if current is not None and not isinstance(current, dict):
+            return proposal
+        if not (current and current.get("enabled") is True):
+            missing.append(name)
+            extensions[name] = {**(current or {"source": "core"}), "enabled": True}
+    return {**proposal, FILE: write(extensions)} if missing else proposal
 
 
 if __name__ == "__main__":

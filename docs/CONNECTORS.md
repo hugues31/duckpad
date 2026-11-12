@@ -7,7 +7,7 @@ a database. Instance administrators configure it and grant it to your project.
 
 ## Project files and storage locations
 
-Every file node (Load CSV, Load Parquet, Load XLSX, Load JSON, Export CSV and Export XLSX) has a **Location** field. It defaults to **Project files**: the project's uploads and its exports, available in every environment without a connection or a grant. Drop one or more CSV, Parquet, XLSX or JSON files onto the canvas to upload them: each becomes a configured reader node, named after its file, at the drop position. Other dropped files are skipped and named in a notice. XLSX drops enable the project's `excel` extension; an instance administrator must have installed it first if it is not built in.
+Every file node (Load CSV, Load Parquet, Load XLSX, Load JSON, Load Delta, Export CSV and Export XLSX) has a **Location** field. It defaults to **Project files**: the project's uploads and its exports, available in every environment without a connection or a grant. Drop one or more CSV, Parquet, XLSX or JSON files onto the canvas to upload them: each becomes a configured reader node, named after its file, at the drop position. Other dropped files are skipped and named in a notice. XLSX drops enable the project's `excel` extension; an instance administrator must have installed it first if it is not built in.
 
 The `file` field selects one of the project's uploaded files, and **Upload file** adds one. New file readers start empty. Uploads are stored as project-relative references, so node parameters and project ZIP exports contain no server path. **Relative path or expression** accepts a resource path or a variable expression. Paths resolve as follows:
 
@@ -99,6 +99,24 @@ dataset row and column, not an Excel cell address. Missing files, missing sheets
 and malformed workbooks report execution errors and retain the last result as
 stale. See the [DuckDB Excel extension documentation](https://duckdb.org/docs/stable/core_extensions/excel.html)
 for native format behavior and limits.
+
+## Delta Lake tables
+
+**Load Delta** reads the current version of a Delta Lake table with DuckDB's
+`delta` extension. A Delta table is a folder that holds Parquet files and a
+`_delta_log` directory: enter that folder's path, relative to the Location, for
+example `lake/orders`. Choose a granted Server folder or S3 connection as the
+Location, as for Parquet; S3 tables reuse the connection's credentials.
+
+Adding a Load Delta node enables the project's `delta` extension in the same
+save. An instance administrator must have installed it first; see
+[File formats and extensions](#file-formats-and-extensions). Load Delta only
+reads: Duckpad does not write Delta tables.
+
+Tested with DuckDB 2.0.0 and its matching `delta` extension on local folders, in
+embedded and isolated execution. S3, other object stores, time travel and Unity
+Catalog are outside the validated scope. See the
+[DuckDB Delta extension documentation](https://duckdb.org/docs/stable/core_extensions/delta.html).
 
 ## Database tables
 

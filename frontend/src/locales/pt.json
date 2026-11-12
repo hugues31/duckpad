@@ -1511,6 +1511,7 @@
   "askAdministratorHint": "Somente um administrador da instância pode criar uma conexão e autorizá-la para este projeto. Peça a um dos administradores do projeto listados em Usuários.",
   "sourceConnectionReturnHint": "A conexão criada aqui será autorizada para este projeto e, em seguida, você voltará ao fluxo.",
   "load_json": "Carregar JSON",
+  "load_delta": "Carregar Delta",
   "dataType": "Tipo de dados",
   "sourcePathExpression": "Caminho relativo ou expressão",
   "searchNodeTypes": "Pesquisar um tipo de nó…",

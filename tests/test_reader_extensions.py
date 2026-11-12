@@ -30,6 +30,15 @@ def test_saving_an_xlsx_source_enables_excel_and_preserves_other_requirements(se
     assert added["bundle"]["extensions"]["excel"]["enabled"]
 
 
+def test_a_new_delta_reader_enables_delta_beside_excel():
+    nodes = [{"id": "lake", "template": "load_delta"}, {"id": "sheet", "preset": "load_xlsx"}]
+    files = activate_file_readers({}, {"flow.json": dumps({"nodes": nodes})})
+    assert '"delta": {' in files["extensions.json"] and '"excel": {' in files["extensions.json"]
+    disabled = {**files, "extensions.json": files["extensions.json"].replace("true", "false")}
+    # Unchanged readers keep an explicit disable.
+    assert activate_file_readers(disabled, disabled) == disabled
+
+
 def test_nested_readers_preserve_malformed_extension_documents():
     files = {"components/group.json": dumps({"nodes": [{"id": "sheet", "preset": "load_xlsx"}]})}
     assert "extensions.json" in activate_file_readers({}, files)

@@ -116,7 +116,15 @@ def test_source_readers_reject_undeclared_or_unverifiable_files(body):
 
 
 PROJECT_FILES = {"file": Path("/resources"), "destination": Path("/exports")}
-FILE_TEMPLATES = ["load_csv", "load_parquet", "load_xlsx", "load_json", "export_csv", "export_xlsx"]
+FILE_TEMPLATES = [
+    "load_csv",
+    "load_parquet",
+    "load_xlsx",
+    "load_json",
+    "load_delta",
+    "export_csv",
+    "export_xlsx",
+]
 
 
 @pytest.mark.parametrize("name", ["load_csv", "load_parquet", "load_xlsx", "load_json"])
@@ -144,6 +152,7 @@ def test_builtin_file_templates_default_to_project_files(name):
         ("load_parquet", {"file": "inbox/customers.parquet"}, "/resources/inbox/customers.parquet"),
         ("load_xlsx", {"file": "/resources/abc_budget.xlsx"}, "/resources/abc_budget.xlsx"),
         ("load_csv", {"connection": "local", "file": "orders.csv"}, "/data/orders.csv"),
+        ("load_delta", {"connection": "local", "table": "lake/orders"}, "/data/lake/orders"),
         ("load_csv", {"file": "s3://bucket/orders.csv"}, "s3://bucket/orders.csv"),
         ("export_csv", {}, "/exports/export.csv"),
         ("export_xlsx", {"destination": "reports/budget.xlsx"}, "/exports/reports/budget.xlsx"),

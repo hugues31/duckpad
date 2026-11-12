@@ -1511,6 +1511,7 @@
   "askAdministratorHint": "Seul un administrateur de l’instance peut créer une connexion et l’autoriser pour ce projet. Demandez-le à l’un des administrateurs du projet listés dans Utilisateurs.",
   "sourceConnectionReturnHint": "La connexion créée ici sera autorisée pour ce projet, puis vous reviendrez au flux.",
   "load_json": "Charger JSON",
+  "load_delta": "Charger Delta",
   "dataType": "Type de données",
   "sourcePathExpression": "Chemin relatif ou expression",
   "searchNodeTypes": "Rechercher un type de nœud…",
