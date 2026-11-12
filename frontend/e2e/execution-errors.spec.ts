@@ -37,6 +37,7 @@ test("muting enrichment explains blocked components and downstream nodes directl
         { timeout: 90000 },
       )
       .toBe(expected);
+    await expect(page.locator(".run-failure-notice")).toHaveCount(0);
   };
   const toggle = async () => {
     await node("enriched").locator(".node-shape").click();
@@ -85,6 +86,91 @@ test("muting enrichment explains blocked components and downstream nodes directl
   await results.getByRole("tab", { name: "Data", exact: true }).click();
   await expect(results.locator(".data-table")).toBeVisible();
   await expect(error).toBeVisible();
+});
+
+test("a missing extension shows the run failure on Flow with settings and history actions", async ({
+  page,
+}) => {
+  await signIn(page);
+  const created = await page.request.post("/api/projects", {
+    data: { name: "Run preparation failure" },
+  });
+  expect(created.ok()).toBeTruthy();
+  const { id } = await created.json();
+  const endpoint = `/api/worktrees/${id}`;
+  const snapshot: Snapshot = await (await page.request.get(endpoint)).json();
+  const bundle = snapshot.bundle!;
+  bundle.flow.nodes = [
+    { id: "query", name: "Rows", position: { x: 0, y: 0 }, params: {} },
+  ];
+  bundle.node_sql = {
+    "nodes/query.sql": "-- @output result\nSELECT 1 AS amount;",
+  };
+  // This requires an administrator import, even though the SQL does not use Delta.
+  bundle.extensions = { delta: { source: "core", enabled: true } };
+  expect(
+    (
+      await page.request.put(endpoint, {
+        data: { revision: snapshot.revision, bundle },
+      })
+    ).ok(),
+  ).toBeTruthy();
+  await page.goto(`/worktrees/${id}/flow?environment=dev`);
+  const launch = async () => {
+    const response = page.waitForResponse(
+      (r) =>
+        r.url().endsWith(`${endpoint}/runs`) && r.request().method() === "POST",
+    );
+    await page.getByRole("button", { name: "Run all", exact: true }).click();
+    return (await response).json();
+  };
+  const run = await launch();
+  const notice = page.locator(".run-failure-notice");
+  // No node selection or history navigation is needed to discover the failure.
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText("Cannot initialize execution worker");
+  await expect(notice).toContainText("Import delta from core");
+  const outcome: Run = await (
+    await page.request.get(`/api/runs/${run.id}`)
+  ).json();
+  expect(outcome.status).toBe("failed");
+  expect(outcome.nodes).toEqual({});
+  await expect(
+    notice.getByRole("link", { name: "Execution history" }),
+  ).toHaveAttribute(
+    "href",
+    `/worktrees/${id}/history?environment=dev&run=${run.id}`,
+  );
+  await page.getByLabel("Environment", { exact: true }).selectOption("prod");
+  await expect(notice).toHaveCount(0);
+  await page.getByLabel("Environment", { exact: true }).selectOption("dev");
+  await expect(notice).toContainText("Import delta from core");
+  await notice.getByRole("link", { name: "Execution history" }).click();
+  await expect(page.getByRole("dialog")).toContainText(outcome.error!);
+  await page.goBack();
+  await notice.getByRole("link", { name: "Open extension settings" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Extensions for this project" }),
+  ).toBeVisible();
+  const updated: Snapshot = await (await page.request.get(endpoint)).json();
+  updated.bundle!.extensions = {};
+  expect(
+    (
+      await page.request.put(endpoint, {
+        data: { revision: updated.revision, bundle: updated.bundle },
+      })
+    ).ok(),
+  ).toBeTruthy();
+  await page.goBack();
+  const retry = await launch();
+  await expect(notice).toHaveCount(0);
+  await expect
+    .poll(
+      async () =>
+        (await (await page.request.get(`/api/runs/${retry.id}`)).json()).status,
+    )
+    .toBe("success");
+  await expect(notice).toHaveCount(0);
 });
 
 test("execution errors open from the canvas, point into saved code and clear after a successful run", async ({

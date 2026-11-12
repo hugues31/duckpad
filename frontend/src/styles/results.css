@@ -607,6 +607,21 @@
   border: 1px solid light-dark(#b43b43, #ff9aa3);
   border-radius: 8px;
 }
+.run-failure-notice {
+  position: absolute;
+  z-index: 20;
+  top: calc(var(--stage-top) + 48px);
+  left: calc(var(--canvas-left) + 12px);
+  right: calc(var(--canvas-right) + 12px);
+  margin: 0;
+  max-height: 35%;
+  overflow: auto;
+  background: var(--surface);
+}
+.nested-flow .run-failure-notice,
+.flow-layout:has(.branch-results-notice) .run-failure-notice {
+  top: calc(var(--stage-top) + 90px);
+}
 .execution-error-message {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
