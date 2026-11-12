@@ -50,10 +50,13 @@ export async function verifyNodeCode(page: Page) {
   expect(first.template).toBeUndefined();
   expect(second.template).toBeUndefined();
   const original = snapshot.files[`nodes/${first.id}.sql`];
+  // The node's copy leaves out the description of the palette entry.
+  const template = snapshot.bundle!.templates.filter;
+  expect(template.replace(/^-- @description .*\n/m, "")).toBe(original);
   await edit("Edit code", '-- @param marker: text = "local"\n' + original);
   snapshot = await read();
   expect(snapshot.files[`nodes/${first.id}.sql`]).toBe(original);
-  expect(snapshot.bundle!.templates.filter).toBe(original);
+  expect(snapshot.bundle!.templates.filter).toBe(template);
   await expect(
     inspector.getByRole("textbox", { name: /marker/ }),
   ).toBeVisible();

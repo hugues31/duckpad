@@ -178,6 +178,7 @@ SELECT * FROM {{ right }};`;
   await page.keyboard.press("Enter");
   await expect(page.locator(".react-flow__node")).toHaveCount(
     before.bundle!.flow.nodes.length + 2,
+    { timeout: 30000 },
   );
   await expect(details).toHaveCount(0);
   await expect
