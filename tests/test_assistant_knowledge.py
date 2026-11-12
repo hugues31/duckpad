@@ -26,7 +26,7 @@ def test_manual_is_available_without_a_project_and_instructions_reach_each_turn(
     app, client = instance
     configure(client, allow_data=False)
     context = {"page": "projects"}
-    identity = conversation(client, context)
+    identity = conversation(client)
     received = []
 
     async def stream(messages, info):

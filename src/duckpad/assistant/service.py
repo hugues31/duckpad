@@ -50,7 +50,6 @@ from .config import Configuration, provider_error
 from .gateway import TURN_TIMEOUT
 from .knowledge import AUTHORING_INSTRUCTIONS
 from .registry import offered
-from .runs import recheck_run_reads
 from .tools import Dependencies, PageContext, recorded_reads, validate_context
 
 INSTRUCTIONS = """You are Duckpad's project assistant. Answer in the user's language.
@@ -102,6 +101,11 @@ For a value explanation, find the output with preview_output and follow explain_
 When data tools are unavailable, do not invent values or ask the user to bypass the instance policy.
 Page context contains only identifiers and names; read saved content through tools.
 """
+# Follows the page context: a conversation that just discussed another project otherwise reads
+# "this project" as that one, and refuses the edit.
+HERE = """
+"This project", "this branch", "this node", "here" and an unqualified node name in the user's
+message mean those of this page context, even right after another project was discussed."""
 MAX_TURNS = 100
 # The title of a conversation until its first prompt names it, unless the user renames it first.
 UNTITLED = "New conversation"
@@ -303,9 +307,8 @@ class Assistant:
             if context["worktree"]:
                 deps.branch().snapshot()
             if record["messages"]:
-                # Recheck access and connection grants before old tool results go back to a provider.
+                # Recheck connection grants before old tool results go back to a provider.
                 deps.recheck_reads()
-                recheck_run_reads(deps, record["turns"])
             if identity in self.active:
                 raise Problem("A response is already in progress", 409)
             if last.get("status") == "resuming":
@@ -323,8 +326,12 @@ class Assistant:
         """What the conversation's turns read so far."""
         reads = recorded_reads(record["turns"])
         if record["worktree"]:
-            # A conversation started while tied to a branch recorded no read: it read that branch.
-            reads.append({k: record[k] for k in UNBOUND} | {"results": True})
+            # A conversation started while tied to a branch recorded no read: it read that branch,
+            # and the runs its tool calls name.
+            runs = {card.get("args", {}).get("run") for turn in record["turns"] for card in turn["tools"]}
+            reads.append(
+                {k: record[k] for k in UNBOUND} | {"results": True, "runs": sorted(runs - {None, ""})}
+            )
         return reads
 
     @staticmethod
@@ -451,7 +458,8 @@ class Assistant:
                     instructions=INSTRUCTIONS
                     + AUTHORING_INSTRUCTIONS
                     + "\nValidated page context: "
-                    + json.dumps(deps.context),
+                    + json.dumps(deps.context)
+                    + HERE,
                     model_settings={"max_tokens": 4096},
                     retries=1,
                 )

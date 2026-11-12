@@ -8,6 +8,7 @@ import {
   Undo2,
   type LucideIcon,
 } from "lucide-react";
+import { Link } from "react-router";
 import { useAssistantError } from "./assistantErrors";
 import { AssistantRun, type RunControls } from "./AssistantRun";
 import type {
@@ -17,6 +18,7 @@ import type {
 } from "./assistantTypes";
 import { useT, type TranslationKey } from "./i18n";
 import MarkdownText from "./MarkdownText";
+import { worktreeUrl } from "./navigation";
 
 const toolLabels: Record<string, TranslationKey> = {
   read_flow: "assistantReadFlow",
@@ -217,7 +219,7 @@ function ToolCard({
             canCancel={canCancel}
             onDecision={onDecision}
           />
-        ) : edit && !action ? (
+        ) : edit && (!action || tool.approval?.decision === null) ? (
           <EditConfirmation
             tool={tool}
             canApprove={canApprove}
@@ -322,6 +324,12 @@ export function AssistantMessage({
     !controls.here &&
     !!turn.context.worktree &&
     turn.tools.some((tool) => tool.action?.commit || tool.approval);
+  // The notice names that branch as a link to it.
+  const [before, after] = t(
+    turn.status === "awaiting_approval"
+      ? "assistantPendingElsewhere"
+      : "assistantElsewhere",
+  ).split("{branch}");
   return (
     <article className={`assistant-turn${entering ? " entering" : ""}`}>
       <p className="assistant-question">{turn.user}</p>
@@ -336,12 +344,19 @@ export function AssistantMessage({
         ))}
         {elsewhere && (
           <p className="assistant-notice">
-            {t("assistantElsewhere").replace(
-              "{branch}",
-              [turn.context.project_name, turn.context.branch]
+            {before}
+            <Link
+              to={worktreeUrl(
+                turn.context.worktree,
+                "flow",
+                turn.context.environment,
+              )}
+            >
+              {[turn.context.project_name, turn.context.branch]
                 .filter(Boolean)
-                .join(" / "),
-            )}
+                .join(" / ")}
+            </Link>
+            {after}
           </p>
         )}
         {remaining > 1 && (

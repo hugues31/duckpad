@@ -35,7 +35,7 @@ def run_model(args=None, count=1):
 
 def request_run(app, client, context, args=None, count=1):
     app.state.assistant.configuration.model_override = run_model(args, count)
-    identity = conversation(client, context)
+    identity = conversation(client)
     result = turn(client, identity, context, "Run the flow")[-1]["turn"]
     assert result["status"] == "awaiting_approval", result
     assert client.get(f"/api/runs?worktree={context['worktree']}").json() == []
@@ -372,7 +372,7 @@ def test_failed_run_lookup_does_not_block_the_next_turn(instance):
             yield {0: DeltaToolCall(name="inspect_run", json_args='{"run":"latest"}', tool_call_id="missing")}
 
     app.state.assistant.configuration.model_override = FunctionModel(stream_function=stream)
-    identity = conversation(client, context)
+    identity = conversation(client)
     first = turn(client, identity, context)[-1]["turn"]
     assert first["tools"][0]["status"] == "error"
     assert first["status"] == "complete"
@@ -525,7 +525,7 @@ def test_follow_up_after_an_inspected_run_expired(instance):
             yield {0: DeltaToolCall(name="inspect_run", json_args='{"run":"run_old"}', tool_call_id="read")}
 
     app.state.assistant.configuration.model_override = FunctionModel(stream_function=stream)
-    identity = conversation(client, context)
+    identity = conversation(client)
     first = turn(client, identity, context)[-1]["turn"]
     assert first["tools"][0]["status"] == "complete", first["tools"][0]["summary"]
     # Retention removes old runs; the conversation that read one must stay usable.

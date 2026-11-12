@@ -55,7 +55,7 @@ class Approvals:
 
     @staticmethod
     def pending(record, data):
-        """The last turn and its unanswered run request that a decision answers."""
+        """The last turn and its unanswered request that a decision answers."""
         turn = record["turns"][-1] if record["turns"] else None
         card = None
         if turn and turn["id"] == data.turn and turn["status"] == "awaiting_approval":

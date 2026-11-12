@@ -103,8 +103,9 @@ class Dependencies:
             access.require(user, self.context["project"])
         if write and not worktree:
             raise Problem("Open a project branch to edit its content", 403)
-        # What this turn read goes back to the provider with its next request.
-        for read in {(r.get("instance"), r.get("project")): r for r in self.turn_reads()}.values():
+        # What the conversation read goes back to the provider with the next request.
+        reads = [*self.earlier, *self.turn_reads()]
+        for read in {(r.get("instance"), r.get("project")): r for r in reads}.values():
             self.require_read(user, read)
         return user, config
 
@@ -161,7 +162,8 @@ class Dependencies:
         return self.reads.setdefault(call, {}).setdefault(key, scope) if call else None
 
     def turn_reads(self):
-        return [read for reads in self.reads.values() for read in reads.values()]
+        # Copies: a tool call records its read while the response stream rechecks access.
+        return [read for reads in list(self.reads.values()) for read in list(reads.values())]
 
     def require_read(self, user, read):
         """Refuse a conversation whose author can no longer open what it read."""
@@ -194,20 +196,26 @@ class Dependencies:
         return selected if selected in names else names[0]
 
     def recheck_reads(self):
-        """Recheck what earlier turns read, before their results go back to a provider.
+        """Recheck the results earlier turns read, before they go back to a provider; `check`
+        rechecks access to what the conversation read on every call.
 
-        Results follow the connection grants of their branch. A branch deleted since is skipped
-        while its project is still open to the user: its connections are unknown, and refusing it
-        would block the conversation for good.
+        Results follow the connection grants of their branch and of their runs. A branch deleted
+        or a run that retention removed since is skipped while its project is still open to the
+        user: its connections are unknown, and refusing it would block the conversation for good.
         """
-        user, _ = self.check()
-        for read in self.earlier:
-            self.require_read(user, read)
-            if read.get("results") and self.services.store.get("worktree", read["worktree"]):
-                try:
+        self.check()
+        store, access = self.services.store, self.services.engine.access
+        runs = set()
+        try:
+            for read in self.earlier:
+                if read.get("results") and store.get("worktree", read["worktree"]):
                     self.branch(read["worktree"]).recheck_connections()
-                except Problem:
-                    raise Problem(LOST_ACCESS, 409) from None
+                runs.update(read.get("runs", []))
+            for identity in sorted(runs):
+                if (record := store.get("run", identity)) is not None:
+                    access.connections(record["project"], list(record.get("connections", {})))
+        except Problem:
+            raise Problem(LOST_ACCESS, 409) from None
 
     def safe(self, value):
         """Redact configured credentials even if user-authored content happens to repeat one.

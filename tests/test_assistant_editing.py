@@ -89,7 +89,7 @@ def documentation(**entry):
 
 
 def write_turn(app, client, context, calls, **options):
-    identity = conversation(client, context)
+    identity = conversation(client)
     scripted(app, calls, **options)
     events = turn(client, identity, context, "Make the requested change")
     result = events[-1]["turn"]
@@ -207,7 +207,7 @@ def test_a_project_write_never_delays_other_conversations(instance, monkeypatch)
 
     monkeypatch.setattr(projects, "write", slow)
     app.state.assistant.configuration.model_override = FunctionModel(stream_function=stream)
-    writer, reader = conversation(client, context), conversation(client, context)
+    writer, reader = conversation(client), conversation(client)
 
     async def scenario():
         headers = {"authorization": "Bearer " + client.cookies["duckpad_session"]}
@@ -483,7 +483,7 @@ def test_three_rejected_calls_in_a_row_end_the_turn_without_saving(instance, bad
     app, client = instance
     worktree, context = seed(app, client)
     before = app.state.services.projects.snapshot(worktree["id"])
-    identity = conversation(client, context)
+    identity = conversation(client)
     scripted(app, [bad, bad, bad, good])
     result = turn(client, identity, context, "Make the requested change")[-1]["turn"]
     assert result["status"] == "error", result
@@ -503,7 +503,7 @@ def test_losing_edit_rights_after_a_rejected_call_aborts_the_turn(instance, bad,
     before = projects.snapshot(context["worktree"])
     with TestClient(app) as client:
         client.post("/api/login", json={"username": "editor", "password": "editor-password-123"})
-        identity = conversation(client, context)
+        identity = conversation(client)
 
         def demote(index):
             if index == 1:
@@ -1142,7 +1142,7 @@ def test_editors_are_told_charts_are_vega_lite_even_without_data_reading(instanc
     _, context = seed(app, client)
     configure(client, allow_data=False)
     app.state.assistant.configuration.model_override = TestModel(call_tools=[], custom_output_text="Ready")
-    turn(client, conversation(client, context), context)
+    turn(client, conversation(client), context)
     available = app.state.assistant.configuration.model_override.last_model_request_parameters.function_tools
     tool = next(t for t in available if t.name == "edit_chart")
     models = tool.parameters_json_schema["$defs"]
@@ -1163,7 +1163,7 @@ def test_reader_has_no_write_tools_and_forced_write_or_undo_is_denied(instance):
         app.state.assistant.configuration.model_override = TestModel(
             call_tools=[], custom_output_text="Read only"
         )
-        identity = conversation(reader, context)
+        identity = conversation(reader)
         result = turn(reader, identity, context)[-1]["turn"]
         available = (
             app.state.assistant.configuration.model_override.last_model_request_parameters.function_tools
@@ -1208,7 +1208,7 @@ def test_job_results_offer_no_write_or_run_tools_to_project_admins(instance):
     app.state.assistant.configuration.model_override = TestModel(
         call_tools=[], custom_output_text="Read only"
     )
-    turn(admin, conversation(admin, context), context)
+    turn(admin, conversation(admin), context)
     available = app.state.assistant.configuration.model_override.last_model_request_parameters.function_tools
     assert {t.name for t in available}.isdisjoint(WRITING)
 
@@ -1432,7 +1432,7 @@ def test_multiple_calls_in_one_model_response_are_sequential_and_restart_undoabl
 
     app, client = instance
     worktree, context = seed(app, client)
-    identity = conversation(client, context)
+    identity = conversation(client)
 
     async def stream(messages, info):
         if any(isinstance(p, ToolReturnPart) for p in messages[-1].parts):

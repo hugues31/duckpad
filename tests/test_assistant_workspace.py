@@ -33,7 +33,10 @@ SETTINGS = {"page": "instanceSettings", "section": "connections"}
 
 
 def scripted(*calls):
-    """A model that makes the given tool calls, one per request, then answers."""
+    """A model that makes the given tool calls, one per request, then answers.
+
+    A call is a tool name, its arguments and, for a provider that reuses call IDs, its ID.
+    """
 
     async def stream(messages, info):
         answered = 0
@@ -42,10 +45,9 @@ def scripted(*calls):
                 break
             answered += sum(isinstance(part, ToolReturnPart) for part in message.parts)
         if answered < len(calls):
-            name, arguments = calls[answered]
-            yield {
-                0: DeltaToolCall(name=name, json_args=json.dumps(arguments), tool_call_id=f"call-{answered}")
-            }
+            name, arguments, *call = calls[answered]
+            call = call[0] if call else f"call-{answered}"
+            yield {0: DeltaToolCall(name=name, json_args=json.dumps(arguments), tool_call_id=call)}
         else:
             yield "Done."
 
@@ -106,7 +108,7 @@ def test_a_settings_page_reads_a_named_project_and_the_connections(instance):
         ("read_connections", {}),
         ("read_connections", {"connection": "files", "details": True}),
     )
-    identity = conversation(client, SETTINGS)
+    identity = conversation(client)
     result = turn(client, identity, SETTINGS, "Which nodes of Sales use the Files connection?")[-1]["turn"]
     assert result["status"] == "complete", result
     listed, flow, sql, connections, details = result["tools"]
@@ -284,7 +286,7 @@ def test_a_conversation_stops_once_its_author_loses_what_it_read(instance):
 
     def asked(client, *calls):
         assistant.configuration.model_override = scripted(*calls)
-        identity = conversation(client, page)
+        identity = conversation(client)
         assert turn(client, identity, page)[-1]["turn"]["status"] == "complete"
         return identity
 
@@ -313,6 +315,22 @@ def test_a_conversation_stops_once_its_author_loses_what_it_read(instance):
         assert lost(analyst, definitions) and lost(analyst, results) and lost(analyst, edited)
         access.member(sales["project"], user["id"], "reader")
         assert turn(analyst, definitions, page)[-1]["turn"]["status"] == "complete"
+
+        # Lost during a response: its next tool call ends it, before what earlier turns read
+        # returns to the provider.
+        async def revoked(messages, info):
+            access.member(sales["project"], user["id"], None)
+            yield {0: DeltaToolCall(name="list_projects", json_args="{}", tool_call_id="later")}
+
+        assistant.configuration.model_override = FunctionModel(stream_function=revoked)
+        ended = turn(analyst, definitions, page)[-1]["turn"]
+        assert (ended["status"], ended["error"], ended["tools"][0]["status"]) == (
+            "error",
+            LOST_ACCESS,
+            "stopped",
+        )
+        assistant.configuration.model_override = scripted()
+        access.member(sales["project"], user["id"], "reader")
         # A branch deleted since never blocks the conversation while its project stays open.
         app.state.services.store.delete("worktree", feature["id"])
         assert turn(analyst, removed, page)[-1]["turn"]["status"] == "complete"
@@ -343,7 +361,7 @@ def test_a_stopped_call_still_records_what_it_read(instance, monkeypatch):
         app.state.assistant.configuration.model_override = scripted(
             ("read_sql", {"node": "source", "compiled": True, "worktree": sales["id"]})
         )
-        identity = conversation(analyst, page)
+        identity = conversation(analyst)
         result = turn(analyst, identity, page)[-1]["turn"]
         # The refusal ended the turn before its tool result event.
         assert (result["status"], result["tools"][0]["status"]) == ("error", "stopped")
@@ -411,6 +429,23 @@ def test_an_edit_after_a_read_elsewhere_waits_for_its_confirmation(instance):
     _, result, _ = ask(foreign, size=5000)
     assert result["status"] == "complete" and "too large to confirm" in result["tools"][-1]["summary"]
     assert readme() == before
+    # What the save derives is confirmed with the change: a spreadsheet reader enables Excel.
+    reader = {"operation": "add", "id": "sheet", "template": "load_xlsx"}
+    app.state.assistant.configuration.model_override = scripted(foreign, ("edit_flow", {"nodes": [reader]}))
+    identity = conversation(client)
+    pending = turn(client, identity, context)[-1]["turn"]
+    assert [d["path"] for d in pending["tools"][-1]["approval"]["diffs"]] == ["extensions.json", "flow.json"]
+    action = decide(client, identity, pending, True)["tools"][-1]["action"]
+    assert action["status"] == "applied"
+    assert set(projects.git(mine["path"], "show", "--name-only", "--format=", action["commit"]).split()) == {
+        "extensions.json",
+        "flow.json",
+    }
+    # A change the project would refuse is reported at once, not after its confirmation.
+    invalid = ("write_sql", {"node": "source", "sql": "-- @unknown directive\nSELECT 1;"})
+    app.state.assistant.configuration.model_override = scripted(foreign, invalid)
+    refused = turn(client, conversation(client), context)[-1]["turn"]
+    assert refused["status"] == "complete" and "changes are invalid" in refused["tools"][-1]["summary"]
     # A declined edit saves nothing, and the conversation continues.
     before = readme()
     identity, pending, _ = ask(foreign)
@@ -458,28 +493,24 @@ def test_reads_survive_reused_call_ids_and_conversations_started_on_a_branch(ins
     _, context = project(app, client, "Mine")
     sales, elsewhere = project(app, client, "Sales")
     entry = {"section": "project", "text": "After the pause"}
-    steps = [
+    later = {"section": "project", "text": "Another change"}
+    app.state.assistant.configuration.model_override = scripted(
         ("read_flow", {"section": "nodes", "worktree": sales["id"]}, "same"),
         ("write_documentation", {"entry": entry}, "edit"),
-        # After the confirmation, the provider reuses the ID of the first call.
+        # After the confirmation, the provider reuses the IDs of the earlier calls.
         ("read_flow", {"section": "nodes"}, "same"),
-    ]
-
-    async def reusing(messages, info):
-        answered = sum(isinstance(p, ToolReturnPart) for m in messages for p in m.parts)
-        if answered < len(steps):
-            name, arguments, call = steps[answered]
-            yield {0: DeltaToolCall(name=name, json_args=json.dumps(arguments), tool_call_id=call)}
-        else:
-            yield "Done."
-
-    app.state.assistant.configuration.model_override = FunctionModel(stream_function=reusing)
+        ("write_documentation", {"entry": later}, "edit"),
+    )
     identity = conversation(client)
     pending = turn(client, identity, context)[-1]["turn"]
     resumed = decide(client, identity, pending, True)
-    assert resumed["status"] == "complete", resumed
     read = next(card for card in resumed["tools"] if card["id"] == "same")
     assert {r["project_name"] for r in read["reads"]} == {"Sales", "Mine"}
+    # One answer confirms one save: the second edit asks again.
+    assert resumed["status"] == "awaiting_approval", resumed
+    assert "+Another change" in resumed["tools"][-1]["approval"]["diffs"][0]["diff"]
+    assert decide(client, identity, resumed, True)["status"] == "complete"
+    assert app.state.services.projects.snapshot(context["worktree"])["files"]["README.md"] == "Another change"
     # A conversation started while tied to a branch recorded no read: it read that branch.
     app.state.assistant.configuration.model_override = scripted(("read_flow", {"section": "nodes"}))
     bound = conversation(client)
@@ -495,6 +526,34 @@ def test_reads_survive_reused_call_ids_and_conversations_started_on_a_branch(ins
     assert {"project", "worktree", "branch"}.isdisjoint(
         client.get(f"/api/assistant/conversations/{bound}").json()
     )
+
+
+def test_a_run_read_is_rechecked_under_the_grants_it_ran_with(instance):
+    app, client = instance
+    configure(client)
+    services = app.state.services
+    files_connection(services.catalog)
+    sales, _ = project(app, client, "Sales", ["files"])
+    page = {"page": "projects"}
+    run = services.engine.launch(sales["id"], "dev")
+    assert join_run(services.store, run["id"])["status"] == "success"
+    # The card of a reused call ID keeps the arguments of its first call: the read names the run.
+    app.state.assistant.configuration.model_override = scripted(
+        ("read_flow", {"section": "nodes", "worktree": sales["id"]}, "same"),
+        ("inspect_run", {"run": run["id"]}, "same"),
+    )
+    identity = conversation(client)
+    card = turn(client, identity, page)[-1]["turn"]["tools"][0]
+    assert card["args"] == {"section": "nodes", "worktree": sales["id"]}
+    assert [read.get("runs") for read in card["reads"]] == [None, [run["id"]]]
+    # The branch stops using the connection, whose grant is then revoked: only the run used it.
+    snapshot = services.projects.snapshot(sales["id"])
+    snapshot["bundle"]["node_sql"]["nodes/source.sql"] = "-- @output result\nSELECT 1 AS value;"
+    services.projects.write(sales["id"], snapshot["revision"], bundle_to_files(snapshot["bundle"]))
+    assert message(client, identity, page).status_code == 200
+    app.state.access.grant_connections(sales["project"], [])
+    response = message(client, identity, page)
+    assert response.status_code == 409 and response.json()["error"] == LOST_ACCESS
 
 
 def test_a_conversation_follows_its_author_and_undoes_on_the_branch_it_edited(instance):
@@ -552,7 +611,7 @@ def test_page_context_names_the_project_and_keeps_only_a_known_environment(insta
     sales, _ = project(app, client, "Sales")
     page = {"page": "projectSettings", "project": sales["project"], "environment": "removed"}
     app.state.assistant.configuration.model_override = scripted()
-    result = turn(client, conversation(client, page), page)[-1]["turn"]
+    result = turn(client, conversation(client), page)[-1]["turn"]
     assert result["context"]["project_name"] == "Sales"
     assert result["context"]["environment"] == ""
     # Results of another branch are read in the first environment when the page selects none.

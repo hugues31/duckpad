@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { cleanup, render } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, expect, it } from "vitest";
 import { AssistantMessage } from "./AssistantMessage";
 import type { AssistantTurn } from "./assistantTypes";
@@ -135,15 +136,19 @@ it("shows the exact changes of an edit to confirm, on the branch it was asked fr
   expect(container.querySelector(".assistant-run pre")?.textContent).toBe(
     "+Copied",
   );
-  expect(queryByText(/Made on/)).toBeNull();
+  expect(queryByText(/Asked on/)).toBeNull();
   getByRole("button", { name: "Apply change" }).click();
   getByRole("button", { name: "Decline" }).click();
   expect(decisions).toEqual([
     ["edit", true],
     ["edit", false],
   ]);
-  // From another page, the change can only be declined.
-  rerender(<AssistantMessage turn={turn} onDecision={onDecision} />);
+  // From another page, the change can only be declined, and the notice links to its branch.
+  rerender(
+    <MemoryRouter>
+      <AssistantMessage turn={turn} onDecision={onDecision} />
+    </MemoryRouter>,
+  );
   expect(getByRole("button", { name: "Apply change" })).toHaveProperty(
     "disabled",
     true,
@@ -152,11 +157,12 @@ it("shows the exact changes of an edit to confirm, on the branch it was asked fr
     "disabled",
     false,
   );
-  expect(
-    queryByText(
-      "Made on Mine / main. Open that branch to undo, compare or confirm.",
-    ),
-  ).not.toBeNull();
+  expect(container.querySelector(".assistant-notice")?.textContent).toBe(
+    "Asked on Mine / main. Open that branch to confirm.",
+  );
+  expect(getByRole("link", { name: "Mine / main" }).getAttribute("href")).toBe(
+    "/worktrees/worktree_open/flow",
+  );
 });
 
 it("shows the waiting indicator only while the answer is coming", () => {

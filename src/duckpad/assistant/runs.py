@@ -14,7 +14,7 @@ from ..graph import connection_references
 from ..python_policy import get_policy
 from ..util import Problem
 from .registry import tool
-from .tools import LOST_ACCESS, Dependencies, page
+from .tools import Dependencies, page
 
 
 def proposal(deps, environment="", node=""):
@@ -103,33 +103,13 @@ def run_record(ctx, identity):
     if (record["project"], record["branch"]) != (branch.project, branch.name):
         raise Problem("Execution not found", 404)
     branch.require_grants(list(record.get("connections", {})))
-    # Later turns recheck these grants run by run (`recheck_run_reads`), and those of the branch
-    # for a run that retention has removed since.
+    # Later turns recheck these grants run by run (`recheck_reads`), and those of the branch for
+    # a run that retention has removed since.
     if branch.scope is not None:
         branch.scope["results"] = True
+        if identity not in (runs := branch.scope.setdefault("runs", [])):
+            runs.append(identity)
     return record
-
-
-def recheck_run_reads(deps, turns):
-    """Recheck the connection grants of the runs earlier tool calls read, once per run.
-
-    The caller has checked access to their branches. A run that retention has since removed is
-    skipped: its connections are unknown, and refusing it would block the conversation for good.
-    """
-    runs = {
-        tool.get("args", {}).get("run")
-        for turn in turns
-        for tool in turn.get("tools", [])
-        if tool.get("status") == "complete"
-    }
-    for identity in sorted(runs - {None, ""}):
-        if (record := deps.services.store.get("run", identity)) is not None:
-            try:
-                deps.services.engine.access.connections(
-                    record["project"], list(record.get("connections", {}))
-                )
-            except Problem:
-                raise Problem(LOST_ACCESS, 409) from None
 
 
 def run_summary(record):

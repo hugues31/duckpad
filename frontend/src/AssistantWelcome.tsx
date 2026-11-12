@@ -36,17 +36,20 @@ export default function AssistantWelcome({
         )}
       </p>
       <div className="assistant-quick-prompts">
-        {(options.quick_prompts ?? defaultPrompts).map((prompt, index) => (
-          <button
-            key={index}
-            type="button"
-            className="assistant-chip"
-            disabled={busy || undoing || !selected}
-            onClick={() => void submit(prompt.prompt)}
-          >
-            {prompt.label}
-          </button>
-        ))}
+        {/* The default prompts are about the open flow, its runs and its selected node. */}
+        {(options.quick_prompts ?? (branchOpen ? defaultPrompts : [])).map(
+          (prompt, index) => (
+            <button
+              key={index}
+              type="button"
+              className="assistant-chip"
+              disabled={busy || undoing || !selected}
+              onClick={() => void submit(prompt.prompt)}
+            >
+              {prompt.label}
+            </button>
+          ),
+        )}
       </div>
       <small>
         {t(options.allow_data ? "assistantDataOn" : "assistantDataOff")}

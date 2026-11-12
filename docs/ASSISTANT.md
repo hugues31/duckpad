@@ -152,7 +152,8 @@ another project names that project and branch.
 It can also read the instance's connections from any page:
 
 - Everyone gets the name, family and capabilities of the connections granted
-  to the projects they can open, and which of those projects use each one.
+  to the projects they can open, and which of those projects each one is
+  granted to.
 - An instance administrator sees every connection and can ask for its
   details, for example “Which host does Warehouse use in prod?”: the connector
   type and the parameter values by environment. Secrets are masked exactly as
@@ -169,14 +170,16 @@ project, the assistant asks you to open the branch first.
 
 Once a conversation has read the content of another project, or connection
 details, each edit waits for your confirmation: its card shows every file
-change in full, with **Apply change** and **Decline**. Project content is not
-trusted as instructions, but a model can be misled by text planted in what it
-reads; the confirmation lets you check that no content of another project, or
-connection setting, is written into a branch whose members could not otherwise
-read it. Nothing is saved before you answer. If the branch changed meanwhile in
-a way that alters the change, nothing is saved either: ask for it again. A
-change too large to show in full is refused, so the assistant makes it in
-smaller steps. Reading another branch of the same project, or the names of
+change in full, with **Apply change** and **Decline**. Only the lock file that
+Duckpad resolves when a first Python node is added is not shown. A change the
+project would refuse is reported instead of being offered. Project content is
+not trusted as instructions, but a model can be misled by text planted in what
+it reads; the confirmation lets you check that no content of another project,
+or connection setting, is written into a branch whose members could not
+otherwise read it. Nothing is saved before you answer. If the branch changed
+meanwhile in a way that alters the change, nothing is saved either: ask for it
+again. A change too large to show in full is refused, so the assistant makes it
+in smaller steps. Reading another branch of the same project, or the names of
 projects and connections, needs no confirmation.
 
 ## Request a change
@@ -270,7 +273,8 @@ and execution status metadata.
 
 New conversations offer buttons such as **Optimize the flow**, **Debug the latest
 run** and **Explain a value**. Clicking one sends its full prompt. The default
-buttons and prompts follow the interface language.
+buttons and prompts follow the interface language; they are about the open
+branch, so they appear only on a page with one.
 
 Instance administrators manage **Quick prompts** in **Instance settings → AI
 assistant**; the list applies to everyone on the instance. A customized list keeps its authored language;
@@ -288,7 +292,7 @@ to page. Each message carries the page it is sent from, which tells the
 assistant what “this node” or “this project” means and which branch it may
 change. The changes of a turn belong to the branch its message was sent from:
 open that branch to undo or compare them, or to confirm a run or an edit the
-turn is waiting for. From another page, the turn names that branch and a
+turn is waiting for. From another page, the turn links to that branch and a
 pending request can only be declined.
 
 Conversations are private to their author, including against other instance

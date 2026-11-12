@@ -10,7 +10,10 @@ from ..bundle import bundle_to_files
 from ..charts import declarations as chart_declarations
 from ..charts import unknown_fields
 from ..components import expand, group, output_port
+from ..git.workspace import require_valid
 from ..node_code import code_path, find_node
+from ..project_extensions import activate_file_readers
+from ..python_nodes import remember_contracts
 from ..util import Problem
 from .actions import describe
 from .arguments import (
@@ -60,13 +63,19 @@ def save(ctx, snapshot, bundle, **details):
         raise Problem("Start an assistant turn before editing", 403)
     files = bundle_to_files(bundle)
     if ctx.deps.read_outside():
-        proposal = ctx.deps.safe(describe(snapshot["files"], files, every=True))
-        diffs = proposal["diffs"] = proposal.pop("sql_diffs")
         before = snapshot["files"]
-        changed = {path for path in before.keys() | files.keys() if before.get(path) != files.get(path)}
+        # What the save adds to these files is confirmed with them, and a change the project
+        # would refuse is reported now, not after its confirmation. The lock of changed Python
+        # dependencies is resolved by the save alone.
+        after = remember_contracts(activate_file_readers(before, dict(files)))
+        require_valid(after, "The proposed changes are invalid", baseline=before)
+        proposal = ctx.deps.safe(describe(before, after, every=True))
+        diffs = proposal["diffs"] = proposal.pop("sql_diffs")
+        changed = {path for path in before.keys() | after.keys() if before.get(path) != after.get(path)}
         if any(diff["truncated"] for diff in diffs) or {diff["path"] for diff in diffs} != changed:
             raise Problem("This change is too large to confirm at once. Make it in smaller changes.", 409)
-        confirmed = ctx.deps.confirmed.get(ctx.tool_call_id)
+        # One answer confirms one save, also when a provider reuses the ID of its call.
+        confirmed = ctx.deps.confirmed.pop(ctx.tool_call_id, None)
         # A save that changes no file has nothing to confirm.
         if confirmed is None and proposal["diffs"]:
             raise ApprovalRequired(proposal)

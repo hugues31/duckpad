@@ -179,6 +179,10 @@
   font-size: 11px;
   background: var(--surface-alt);
 }
+.assistant-notice a {
+  color: var(--accent);
+  font-weight: 600;
+}
 .assistant-body {
   display: flex;
   flex: 1;
