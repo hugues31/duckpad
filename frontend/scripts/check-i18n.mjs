@@ -31,6 +31,7 @@ const DYNAMIC_KEYS = [
   // Built-in template labels, translated by templateLabel().
   "load_csv",
   "load_json",
+  "load_delta",
   "load_parquet",
   "load_xlsx",
   "load_table",
