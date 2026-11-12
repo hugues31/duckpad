@@ -372,7 +372,7 @@ test("file nodes offer granted storage connections as locations, custom types in
       "Finance share",
     ]);
     // A Delta table is a folder, which no upload holds: its path is typed.
-    await page.getByRole("button", { name: "Load Delta", exact: true }).click();
+    await dragPaletteNode(page, "Load Delta");
     const inspector = page.locator(".inspector");
     await expect(
       inspector.getByRole("textbox", { name: /^table/ }),
