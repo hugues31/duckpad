@@ -95,6 +95,7 @@ export type PipelineNode = Node<PipelineData, "pipeline">;
 
 /** Center of the 96px shape inside the 150px node (see flow.css). */
 export const NODE_SHAPE_CENTER = { x: 75, y: 48 };
+const HEXAGON_POINTS = "24,0 72,0 96,48 72,96 24,96 0,48";
 
 export const PipelineNode = memo(function PipelineNode({
   id,
@@ -125,6 +126,7 @@ export function PipelineNodeView({
   const partition = data.partition;
   const Port = preview ? PreviewHandle : Handle;
   const square = data.kind === "source" || data.kind === "export";
+  const component = data.kind === "component";
   const StatusTag = data.status === "failed" ? "button" : "span";
   const progress = data.progress;
   const running = progress?.phase === "running";
@@ -133,7 +135,11 @@ export function PipelineNodeView({
   const portPosition = (index: number, count: number) => {
     const spacing = Math.min(24, 72 / Math.max(1, count - 1));
     const top = 48 + (index - (count - 1) / 2) * spacing;
-    const inset = square ? 27 : 75 - Math.sqrt(48 ** 2 - (top - 48) ** 2);
+    const inset = square
+      ? 27
+      : component
+        ? 27 + Math.abs(top - 48) / 2
+        : 75 - Math.sqrt(48 ** 2 - (top - 48) ** 2);
     return { top, inset };
   };
   return (
@@ -163,6 +169,13 @@ export function PipelineNodeView({
         </svg>
       )}
       <div className="node-shape">
+        {component && (
+          <svg className="node-hexagon" viewBox="0 0 96 96" aria-hidden="true">
+            <polygon className="node-hexagon-ring" points={HEXAGON_POINTS} />
+            <polygon className="node-hexagon-body" points={HEXAGON_POINTS} />
+            <polygon className="node-hexagon-pulse" points={HEXAGON_POINTS} />
+          </svg>
+        )}
         {!preview && (
           <NodeProgressFill
             progress={progress}
@@ -170,7 +183,7 @@ export function PipelineNodeView({
             now={now}
           />
         )}
-        <NodeIcon kind={data.icon} size={27} strokeWidth={1.6} />
+        <NodeIcon kind={data.icon} size={48} strokeWidth={1.6} />
       </div>
       <div className="node-title" title={data.label}>
         {data.label}
