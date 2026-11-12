@@ -3,6 +3,7 @@ import type { Snapshot } from "../src/types";
 import en from "../src/locales/en.json" with { type: "json" };
 import fr from "../src/locales/fr.json" with { type: "json" };
 import pt from "../src/locales/pt.json" with { type: "json" };
+import de from "../src/locales/de.json" with { type: "json" };
 
 /** Exercise node creation on a local instance or an authenticated preview. */
 export async function verifyNodeCreation(page: Page) {
@@ -130,7 +131,7 @@ export async function verifyNodeCreation(page: Page) {
   expect((await read()).bundle!.flow.nodes.at(-1)!.template).toBe("filter");
   await expect(page.locator(".banner.error")).toHaveCount(0);
 
-  for (const [language, labels] of Object.entries({ en, fr, pt })) {
+  for (const [language, labels] of Object.entries({ en, fr, pt, de })) {
     await page.evaluate(
       (language) => localStorage.setItem("duckpad-language", language),
       language,
