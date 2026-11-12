@@ -69,6 +69,7 @@ for (const scenario of [
 
 for (const scenario of [
   { languages: ["es-ES", "pt-PT", "fr-FR"], expected: "pt" },
+  { languages: ["es-ES", "de-AT", "fr-FR"], expected: "de" },
   { languages: [], expected: "fr" },
 ] as const) {
   test(`uses ordered browser languages ${JSON.stringify(scenario.languages)} and ignores invalid saved values`, async ({
