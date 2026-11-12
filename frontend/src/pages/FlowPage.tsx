@@ -30,6 +30,7 @@ import {
   identifier,
   nodeInterface,
   pathPrefix,
+  reconnectInput,
   resolveNodePath,
   type PathPart,
 } from "../graph";
@@ -426,6 +427,9 @@ export default function FlowPage() {
             }
             onConnect={(connection) =>
               safe(() => updateGraph((g) => connectInput(g, connection)))
+            }
+            onReconnect={(id, connection) =>
+              safe(() => updateGraph((g) => reconnectInput(g, id, connection)))
             }
             onDelete={(nodes, edges) => reported(removeNodes(nodes, edges))}
             onFiles={(files, position) =>
