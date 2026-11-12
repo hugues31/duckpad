@@ -344,6 +344,8 @@ test("the log keeps the export execution and download alongside its input data",
   await expect(timeline).toContainText("Published");
   await panel.locator(".executed-sql summary").click();
   await expect(panel.locator(".executed-sql .monaco-editor")).toBeVisible();
+  // The canvas is centered on Paid orders; bring the export back into view.
+  await page.getByRole("button", { name: "Fit view", exact: true }).click();
   await page.locator('.react-flow__node[data-id="export"] .node-shape').click();
   await expect(panel.getByRole("tab")).toHaveCount(5);
   await expect(
