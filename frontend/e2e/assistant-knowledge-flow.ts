@@ -60,6 +60,23 @@ export async function verifyAssistantKnowledge(page: Page) {
       })
     ).ok(),
   ).toBeTruthy();
+  // From a settings page, the assistant finds a project named in the question.
+  await page.goto("/instance-settings/connections");
+  await page
+    .getByRole("button", { name: "Open AI assistant", exact: true })
+    .click();
+  await ask(
+    "Which nodes does the project Assistant variable checks contain? Answer with their IDs.",
+  );
+  const tools = chat.locator(".assistant-tool");
+  await expect(
+    tools.filter({ hasText: "Lists your projects" }),
+  ).not.toHaveCount(0);
+  await expect(
+    tools.filter({ hasText: "Assistant variable checks / main" }),
+  ).not.toHaveCount(0);
+  await expect(chat.locator(".assistant-markdown")).toContainText("source");
+  await chat.getByRole("button", { name: "Close", exact: true }).click();
   await page.goto(`/worktrees/${worktree.id}/flow`);
   await page
     .getByRole("button", { name: "Open AI assistant", exact: true })

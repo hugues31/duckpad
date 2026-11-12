@@ -36,6 +36,8 @@ const errors: Record<string, TranslationKey> = {
   "Data reading is now disabled. Start a new conversation to keep previous values private.":
     "assistantErrorPolicy",
   "Assistant settings changed. Start a new turn.": "assistantErrorChanged",
+  "This conversation read content you can no longer open. Start a new conversation.":
+    "assistantErrorLostAccess",
   "The assistant is disabled": "assistantErrorDisabled",
   "Choose an allowed assistant model": "assistantErrorChooseModel",
   "Provide an API key for this provider": "assistantErrorProvideKey",

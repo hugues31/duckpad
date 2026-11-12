@@ -2,11 +2,13 @@
 
 The assistant answers questions about the saved project: the flow, SQL,
 documentation, variables, execution history and, when enabled, existing output
-values and their lineage. Project editors and administrators can also ask it to
-change the open branch, with an Undo button for each saved change, and propose a
-run for your explicit approval. It cannot execute arbitrary SQL or change
-instance settings. Responses can be mistaken; inspect the cited
-nodes and tool results before relying on an explanation.
+values and their lineage. From any page, it can also read the other projects
+you can open and the instance's connections, with your own rights. Project
+editors and administrators can ask it to change the open branch, with an Undo
+button for each saved change, and propose a run for your explicit approval. It
+cannot execute arbitrary SQL or change instance settings. Responses can be
+mistaken; inspect the cited nodes and tool results before relying on an
+explanation.
 
 The assistant stays on topic: Duckpad, your projects and their data, and data or
 software development questions such as SQL, DuckDB, data modeling, Python or
@@ -115,9 +117,7 @@ current page and the selected node or Code file. The branch and environment are
 those of the top bar; the title names the environment only when it differs, for
 example after **Ask the assistant** on a prod run. Before sending a message,
 Duckpad saves pending editor changes. A failed save stops the message so you can
-resolve it first. The server validates the context and reads saved content. On
-pages without an open working branch, the assistant can answer general Duckpad,
-data and development questions but has no project-reading tools.
+resolve it first. The server validates the context and reads saved content.
 
 The assistant receives Duckpad's SQL and parameter rules, including the difference
 between `-- @param` declarations and project variables. It can consult every
@@ -137,6 +137,44 @@ preserves the conversation. Expand tool cards to inspect results.
 Each turn is limited to 12 provider requests, 30 tool calls and two minutes.
 
 ![The compact assistant and the selected Northstar node](images/assistant-chat.png)
+
+## Ask about other projects and connections
+
+The page you are on is the assistant's starting point, not its limit. On every
+page, including **Instance settings**, it can list the projects you can open
+and read any of their branches: flow, code, documentation, variables, Git
+history, execution history and, when data reading is enabled, existing results.
+Name the project in your question, for example “Which nodes of Sales use the
+Warehouse connection?” from the **Connections** settings, or “Compare this flow
+with the Finance project” from a branch. The card of a tool call that reads
+another project names that project and branch.
+
+It can also read the instance's connections from any page:
+
+- Everyone gets the name, family and capabilities of the connections granted
+  to the projects they can open, and which of those projects use each one.
+- An instance administrator sees every connection and can ask for its
+  details, for example “Which host does Warehouse use in prod?”: the connector
+  type and the parameter values by environment. Secrets are masked exactly as
+  in **Instance settings → Connections**.
+
+The assistant never has more rights than you: every tool call rechecks your
+session and your access to the project it reads, and results of another project
+follow that project's connection grants. A project you cannot open is reported
+as not found. Results of another branch are read in the page's environment, or
+in the first configured environment on a page that selects none.
+
+Changes and runs stay on the open branch. From another page or about another
+project, the assistant asks you to open the branch first.
+
+A conversation that has read the content of another project, or connection
+details, no longer edits: the assistant says so and asks you to start a new
+conversation for the change. Project content is not trusted as instructions,
+but a model can be misled by text planted in what it reads; this rule keeps
+such text from having another project's content, or connection settings,
+written into a branch whose members could not otherwise read them. Reading
+another branch of the same project, or the names of projects and connections,
+does not end editing, and runs keep their confirmation.
 
 ## Request a change
 
@@ -247,8 +285,15 @@ administrators. Sending
 a message after navigating to another project or branch starts a new
 conversation. A conversation continues while the project files have errors, so
 you can ask for help fixing them. Losing project access prevents further
-project-reading turns.
-Deleting the author or the project removes its conversations from SQLite.
+project-reading turns. The same holds for what a conversation read elsewhere:
+once you lose access to another project whose content it read, the connection
+grant behind results it read there, or the instance administrator role after it
+read connection details, it cannot continue, so that content does not return to
+a provider; start a new conversation. Names of projects, branches and
+connections are not rechecked.
+Deleting the author or the project removes its conversations from SQLite. A
+conversation opened elsewhere keeps the answers it gave about a deleted project
+but cannot continue.
 
 ## Control what leaves the instance
 
@@ -263,8 +308,12 @@ its previous values are not resent.
 Even with data reading disabled, your questions, saved code and its literal
 values, documentation, variable declarations and values, flow parameters, output
 schemas, status metadata and branch commit metadata can reach the selected
-provider. This is a data-result policy, not a secret scanner for user-authored
-project text. Keep credentials in instance connections. Provider keys, OAuth2
-client secrets and resolved connection secrets are never offered to the model.
+provider, for the open branch and for any other branch the assistant reads at
+your request. So can the names of your projects and connections and, when an
+instance administrator asks for connection details, their non-secret parameter
+values, such as hosts, database names and folder paths. This is a data-result
+policy, not a secret scanner for user-authored project text. Keep credentials
+in instance connections. Provider keys, OAuth2 client secrets and resolved
+connection secrets are never offered to the model.
 See the [provider data contract](../docs/SPEC.md#ai-assistant) for the full
 list.

@@ -24,6 +24,8 @@ const toolLabels: Record<string, TranslationKey> = {
   read_sql: "assistantReadSql",
   read_documentation: "assistantReadDocs",
   read_guide: "assistantReadGuide",
+  list_projects: "assistantListProjects",
+  read_connections: "assistantReadConnections",
   read_variables: "assistantReadVariables",
   read_schemas: "assistantReadSchemas",
   read_runs: "assistantReadRuns",
@@ -83,7 +85,18 @@ function ToolCard({
     tool.args.template ||
     tool.args.section ||
     nested?.section ||
+    tool.args.connection ||
     "";
+  // A read outside the conversation's branch names the project and branch it comes from;
+  // the internal checkout of a Job has no branch to name.
+  const origin = (tool.reads ?? [])
+    .filter((read) => read.project_name)
+    .map((read) =>
+      read.branch && !read.branch.startsWith("job:")
+        ? `${read.project_name} / ${read.branch}`
+        : read.project_name,
+    )
+    .join(", ");
   const status =
     tool.approval?.decision === null
       ? "assistantRunConfirmation"
@@ -111,6 +124,7 @@ function ToolCard({
           </span>
           <span className="assistant-tool-label">
             {t(toolLabels[tool.name] || "assistantReadFlow")}
+            {origin ? ` · ${origin}` : ""}
             {target ? ` · ${String(target)}` : ""}
           </span>
           <small>

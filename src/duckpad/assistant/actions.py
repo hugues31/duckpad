@@ -94,7 +94,7 @@ class Actions:
                 assistant.save_turn(identity, turn)
                 deps.failed.add(tool_id)
                 return {"error": str(error), "action": card["action"]}
-            deps.editing_snapshot = result
+            deps.snapshots[deps.context["worktree"]] = result
             if result["commit"] == before["commit"]:
                 return {"changed": False}
             action.update(commit=result["commit"], **describe(before["files"], result["files"]))

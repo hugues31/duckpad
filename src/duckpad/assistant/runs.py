@@ -13,7 +13,8 @@ from ..execution.launches import launch_scope
 from ..graph import connection_references
 from ..python_policy import get_policy
 from ..util import Problem
-from .tools import Dependencies, page
+from .registry import tool
+from .tools import LOST_ACCESS, Dependencies, page
 
 
 def proposal(deps, environment="", node=""):
@@ -68,6 +69,7 @@ def proposal(deps, environment="", node=""):
     )
 
 
+@tool(needs="run", approval=True)
 def launch_run(ctx: RunContext[Dependencies], environment: str = "", node: str = "") -> dict:
     """Propose a run in an environment, for a node (and its inputs) or the entire flow.
 
@@ -80,66 +82,80 @@ def launch_run(ctx: RunContext[Dependencies], environment: str = "", node: str =
     return ctx.deps.launcher(ctx.tool_call_id, environment, node)
 
 
-def run_record(deps, identity):
-    deps.check()
-    record = branch_run(deps, identity)
-    if record is None:
-        raise Problem("Execution not found", 404)
-    require_run_connections(deps, record)
-    return record
+def run_record(ctx, identity):
+    """A run of a branch the user can open, with its connection grants rechecked.
 
-
-def branch_run(deps, identity):
-    """The record of a run of the conversation's branch, or None."""
+    A run names its branch: no tool needs a worktree argument to read it.
+    """
+    deps = ctx.deps
     record = deps.services.store.get("run", identity)
-    if not record or any(record[k] != deps.context[k] for k in ("worktree", "project", "branch")):
-        return None
+    if record is None:
+        deps.check()
+        raise Problem("Execution not found", 404)
+    try:
+        # Also rechecks the session and the user's access to the branch.
+        branch = deps.branch(record["worktree"], call=ctx.tool_call_id)
+    except Problem as error:
+        if error.status != 404:
+            raise
+        raise Problem("Execution not found", 404) from None
+    # A worktree can check out another branch after a run: that run is no longer one of its runs.
+    if (record["project"], record["branch"]) != (branch.project, branch.name):
+        raise Problem("Execution not found", 404)
+    # Later turns recheck these grants run by run (`recheck_run_reads`).
+    branch.require_grants(list(record.get("connections", {})))
     return record
-
-
-def require_run_connections(deps, record):
-    deps.services.engine.access.connections(deps.context["project"], list(record.get("connections", {})))
 
 
 def recheck_run_reads(deps, turns):
     """Recheck the connection grants of the runs earlier tool calls read, once per run.
 
-    The caller has checked access. A run that retention has since removed is skipped: its
-    connections are unknown, and refusing it would block the conversation for good.
+    The caller has checked access to their branches. A run that retention has since removed is
+    skipped: its connections are unknown, and refusing it would block the conversation for good.
     """
-    readers = {tool.__name__ for tool in RUN_READERS}
     runs = {
         tool.get("args", {}).get("run")
         for turn in turns
         for tool in turn.get("tools", [])
-        if tool["name"] in readers and tool.get("status") == "complete"
+        if tool.get("status") == "complete"
     }
     for identity in sorted(runs - {None, ""}):
-        if (record := branch_run(deps, identity)) is not None:
-            require_run_connections(deps, record)
+        if (record := deps.services.store.get("run", identity)) is not None:
+            try:
+                deps.services.engine.access.connections(
+                    record["project"], list(record.get("connections", {}))
+                )
+            except Problem:
+                if record["worktree"] == deps.context.get("worktree"):
+                    raise
+                raise Problem(LOST_ACCESS, 409) from None
 
 
 def run_summary(record):
     return {k: record.get(k) for k in ("id", "environment", "scope", "status", "entry_point", "commit")}
 
 
+@tool(needs="run")
 def cancel_run(ctx: RunContext[Dependencies], run: str) -> dict:
-    """Cancel an active run on this branch. External writes already made cannot be undone."""
+    """Cancel an active run of the open branch. External writes already made cannot be undone."""
     ctx.deps.check(write=True)
-    run_record(ctx.deps, run)
+    if run_record(ctx, run)["worktree"] != ctx.deps.context["worktree"]:
+        raise Problem("Only a run of the open branch can be cancelled. Open its branch first.", 409)
     return run_summary(ctx.deps.services.engine.cancel(run))
 
 
+@tool
 def wait_for_run(ctx: RunContext[Dependencies], run: str, seconds: int = 10) -> dict:
     """Wait at most 15 seconds for a run, then return its current status. Use inspect_run for errors."""
     deadline = time.monotonic() + max(0, min(15, seconds))
     while True:
-        record = run_record(ctx.deps, run)
+        record = run_record(ctx, run)
         if record["status"] not in UNFINISHED_RUN_STATUSES or time.monotonic() >= deadline:
             return run_summary(record)
         time.sleep(0.2)
 
 
+@tool
 def inspect_run(
     ctx: RunContext[Dependencies], run: str, node: str = "", offset: int = 0, limit: int = 20
 ) -> dict:
@@ -147,7 +163,7 @@ def inspect_run(
 
     Omit node to page through node outcomes; select a node to page through all its messages/tests.
     """
-    record = run_record(ctx.deps, run)
+    record = run_record(ctx, run)
     config = ctx.deps.configuration.get()
     details = {**run_summary(record), "has_error": bool(record.get("error"))}
     if config["allow_data"]:
@@ -182,22 +198,24 @@ def inspect_run(
     return details
 
 
+@tool(needs="data")
 def read_run_sql(ctx: RunContext[Dependencies], run: str, node: str, offset: int = 0) -> dict:
     """Read the SQL actually executed in this run, including materialization statements.
 
     This is historical SQL, unlike read_sql(compiled=True), which compiles current definitions.
     """
     ctx.deps.check(data=True)
-    record = run_record(ctx.deps, run)
+    record = run_record(ctx, run)
     state = record["nodes"].get(node)
     if state is None:
         raise Problem("Node execution not found", 404)
     return page(state.get("statements", []), offset, 5)
 
 
+@tool
 def compare_run(ctx: RunContext[Dependencies], run: str, offset: int = 0, limit: int = 20) -> dict:
     """Compare node outcomes with the preceding successful run in the same environment and scope."""
-    record = run_record(ctx.deps, run)
+    record = run_record(ctx, run)
     user, config = ctx.deps.check()
     previous = next(
         (
@@ -211,7 +229,7 @@ def compare_run(ctx: RunContext[Dependencies], run: str, offset: int = 0, limit:
     )
     if previous is None:
         return {"run": run, "previous": None}
-    previous = run_record(ctx.deps, previous["id"])
+    previous = run_record(ctx, previous["id"])
     fields = ["status", "duration", "fingerprint"]
     if config["allow_data"]:
         fields += ["error", "results"]
@@ -224,9 +242,3 @@ def compare_run(ctx: RunContext[Dependencies], run: str, offset: int = 0, limit:
         for key in sorted(set(record["nodes"]) | set(previous["nodes"]))
     ]
     return {"run": run, "previous": previous["id"], **page(items, offset, min(limit, config["max_rows"]))}
-
-
-RUN_TOOLS = [launch_run, cancel_run]
-DEBUG_TOOLS = [inspect_run, compare_run, wait_for_run]
-# Tools whose results hold a run's node outcomes, rechecked before they go back to a provider.
-RUN_READERS = [inspect_run, read_run_sql, compare_run, wait_for_run]

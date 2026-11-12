@@ -19,14 +19,16 @@ from test_assistant import instance as instance
 from test_project_save_atomicity import observe_after_quiet_period
 
 from duckpad.assistant.arguments import AddNode, ConnectEdge, DisconnectEdge, RemoveNode, UpdateNode
-from duckpad.assistant.editing import WRITE_TOOLS, edit_flow
-from duckpad.assistant.runs import RUN_TOOLS
+from duckpad.assistant.editing import edit_flow
+from duckpad.assistant.registry import TOOLS
 from duckpad.bundle import bundle_to_files
 from duckpad.git.command import GitTimeout
 from duckpad.util import Problem
 from duckpad.validation import validate
 
 SQL = "-- @output result\nSELECT 1 AS value;\n"
+# The tools that change or run the open branch.
+WRITING = {name for name, spec in TOOLS.items() if spec.needs in ("run", "edit")}
 BAR = {"mark": "bar", "encoding": {"x": {"field": "value", "type": "quantitative"}}}
 CONSUMER = "-- @input input\n-- @output result\nSELECT * FROM {{ input }};"
 LINE = {"mark": "line", "encoding": {"y": {"field": "value", "type": "quantitative"}}}
@@ -864,7 +866,7 @@ def test_every_provider_receives_each_operation_with_only_its_own_fields(
         "api_key": "test-key",
         "base_url": "http://localhost:1/v1" if kind == "custom" else "",
     }
-    function = next(t for t in WRITE_TOOLS if t.__name__ == tool)
+    function = TOOLS[tool].function
 
     async def render():
         async with app.state.assistant.configuration.model(provider, "test-model") as model:
@@ -1166,7 +1168,7 @@ def test_reader_has_no_write_tools_and_forced_write_or_undo_is_denied(instance):
         available = (
             app.state.assistant.configuration.model_override.last_model_request_parameters.function_tools
         )
-        assert {t.name for t in available}.isdisjoint(t.__name__ for t in WRITE_TOOLS)
+        assert {t.name for t in available}.isdisjoint(WRITING)
         for edit in (
             AddNode(operation="add", id="forbidden"),
             UpdateNode(operation="update", id="keep.rows", label="Forbidden"),
@@ -1208,7 +1210,7 @@ def test_job_results_offer_no_write_or_run_tools_to_project_admins(instance):
     )
     turn(admin, conversation(admin, context), context)
     available = app.state.assistant.configuration.model_override.last_model_request_parameters.function_tools
-    assert {t.name for t in available}.isdisjoint(t.__name__ for t in [*WRITE_TOOLS, *RUN_TOOLS])
+    assert {t.name for t in available}.isdisjoint(WRITING)
 
 
 def test_undo_preserves_later_node_edits_beyond_base_cache(instance):

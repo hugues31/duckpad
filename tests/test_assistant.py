@@ -309,7 +309,8 @@ def dependencies(app, client, context):
     return SimpleNamespace(
         deps=Dependencies(
             app.state.services, app.state.auth, token, assistant.configuration, config["revision"], value
-        )
+        ),
+        tool_call_id="call",
     )
 
 

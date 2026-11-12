@@ -8,6 +8,7 @@ from pathlib import Path
 from pydantic_ai import RunContext
 
 from ..util import Problem
+from .registry import tool
 from .tools import Dependencies
 
 
@@ -109,6 +110,7 @@ def guide_text(topic: str) -> str:
     return GUIDES[topic].read_text(encoding="utf-8")
 
 
+@tool
 def read_guide(ctx: RunContext[Dependencies], topic: str, offset: int = 0) -> dict:
     """Read the bundled Duckpad manual, not project documentation; no project needs to be open.
 

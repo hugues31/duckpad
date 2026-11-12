@@ -308,7 +308,7 @@ def test_debug_respects_data_policy_and_historical_connection_grants(instance):
         app.state.assistant.configuration.get()["revision"],
         context,
     )
-    ctx = SimpleNamespace(deps=deps)
+    ctx = SimpleNamespace(deps=deps, tool_call_id="call")
     assert inspect_run(ctx, "run_after")["error"] == "private value"
     assert read_run_sql(ctx, "run_after", "source")["items"][0]["sql"] == "SELECT 'private value'"
     assert compare_run(ctx, "run_after")["previous"] == "run_before"

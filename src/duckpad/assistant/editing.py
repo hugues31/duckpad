@@ -31,12 +31,21 @@ from .arguments import (
     UpdateNode,
     UpdateVariable,
 )
+from .registry import tool
 from .tools import Dependencies, variable_usages
 
 
 def editable(ctx):
+    """The files of the open branch, the only one a tool edits."""
     ctx.deps.check(write=True)
-    snapshot = ctx.deps.snapshot()
+    if ctx.deps.read_outside():
+        # Also refuses a turn that read elsewhere after its tools were offered.
+        raise Problem(
+            "This conversation read another project or connection details, so it no longer edits. "
+            "Start a new conversation to change this branch.",
+            409,
+        )
+    snapshot = ctx.deps.branch().snapshot()
     if snapshot["bundle"] is None:
         raise Problem("Project files are invalid", 422, snapshot["diagnostics"])
     return snapshot
@@ -56,6 +65,7 @@ def graph_for(bundle, component):
     return bundle["components"][component]
 
 
+@tool(needs="edit", retries=2)
 def edit_flow(
     ctx: RunContext[Dependencies],
     nodes: list[Annotated[AddNode | UpdateNode | RemoveNode, Field(discriminator="operation")]] | None = None,
@@ -134,6 +144,7 @@ def edit_flow(
     return save(ctx, snapshot, bundle)
 
 
+@tool(needs="edit")
 def write_sql(ctx: RunContext[Dependencies], sql: str, node: str = "", template: str = "") -> dict:
     """Replace saved SQL or Python code for a normal node or a project template in one commit.
 
@@ -160,6 +171,7 @@ def write_sql(ctx: RunContext[Dependencies], sql: str, node: str = "", template:
     return save(ctx, snapshot, bundle, **details)
 
 
+@tool(needs="edit", retries=2)
 def write_documentation(
     ctx: RunContext[Dependencies],
     entry: Annotated[
@@ -192,6 +204,7 @@ def write_documentation(
     return save(ctx, snapshot, bundle)
 
 
+@tool(needs="edit", retries=2)
 def edit_variable(
     ctx: RunContext[Dependencies],
     change: Annotated[
@@ -247,6 +260,7 @@ def edit_variable(
     return save(ctx, snapshot, bundle)
 
 
+@tool(needs="edit")
 def group_nodes(ctx: RunContext[Dependencies], nodes: list[str], name: str, component: str = "") -> dict:
     """Group selected nodes into a reusable component using the same service as the canvas."""
     snapshot = editable(ctx)
@@ -254,6 +268,7 @@ def group_nodes(ctx: RunContext[Dependencies], nodes: list[str], name: str, comp
     return save(ctx, snapshot, bundle, selected=selected)
 
 
+@tool(needs="edit", retries=2)
 def edit_chart(
     ctx: RunContext[Dependencies],
     change: Annotated[
@@ -306,10 +321,7 @@ def edit_chart(
     bundle["charts"] = charts
     result = save(ctx, snapshot, bundle)
     if isinstance(change, (CreateChart, UpdateChart)) and "error" not in result:
-        columns = ctx.deps.output_columns(bundle, producer, port)
+        columns = ctx.deps.branch().output_columns(bundle, producer, port)
         if columns is not None and (unknown := unknown_fields(change.spec, columns)):
             result["unknown_fields"] = unknown
     return result
-
-
-WRITE_TOOLS = [edit_flow, write_sql, write_documentation, edit_variable, group_nodes, edit_chart]

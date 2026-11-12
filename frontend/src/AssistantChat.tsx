@@ -427,6 +427,7 @@ export default function AssistantChat() {
                       undoing={undoing}
                       selected={selected}
                       submit={submit}
+                      branchOpen={!!context.worktree}
                     />
                   )}
                   {conversation?.turns.map((turn, index) => (

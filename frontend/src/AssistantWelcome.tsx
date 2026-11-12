@@ -8,7 +8,10 @@ export default function AssistantWelcome({
   undoing,
   selected,
   submit,
+  branchOpen,
 }: {
+  /** Whether the page has an open branch, the only place the assistant edits. */
+  branchOpen: boolean;
   options: import("./assistantTypes").AssistantOptions;
   defaultPrompts: import("./assistantTypes").QuickPrompt[];
   busy: boolean;
@@ -26,8 +29,12 @@ export default function AssistantWelcome({
       <span className="assistant-welcome-mark" aria-hidden="true">
         <Sparkles size={24} />
       </span>
-      <h3>{t("assistantWelcome")}</h3>
-      <p>{t("assistantWelcomeHint")}</p>
+      <h3>{t(branchOpen ? "assistantWelcome" : "assistantWelcomeAnywhere")}</h3>
+      <p>
+        {t(
+          branchOpen ? "assistantWelcomeHint" : "assistantWelcomeHintAnywhere",
+        )}
+      </p>
       <div className="assistant-quick-prompts">
         {(options.quick_prompts ?? defaultPrompts).map((prompt, index) => (
           <button

@@ -65,6 +65,14 @@ export interface AssistantTool {
   args: Record<string, unknown>;
   status: string;
   summary: string;
+  /** What the call read outside the conversation's branch: other branches, or connection details. */
+  reads?: {
+    instance?: boolean;
+    project?: string;
+    worktree?: string;
+    project_name?: string;
+    branch?: string;
+  }[];
   action?: AssistantAction;
   approval?: {
     decision: boolean | null;
