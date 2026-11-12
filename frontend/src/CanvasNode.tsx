@@ -23,7 +23,12 @@ import {
   Square,
   type LucideProps,
 } from "lucide-react";
-import { memo, useEffect, type ComponentProps } from "react";
+import {
+  memo,
+  useEffect,
+  type ComponentProps,
+  type CSSProperties,
+} from "react";
 import { PythonIcon } from "./AddIcon";
 import { WarningBadge } from "./ExecutionMessages";
 import { useT, type Translate } from "./i18n";
@@ -97,14 +102,47 @@ export type PipelineNode = Node<PipelineData, "pipeline">;
 export const NODE_SHAPE_CENTER = { x: 75, y: 48 };
 // A regular hexagon inscribed in the same 48px radius as circular nodes.
 const HEXAGON_HALF_WIDTH = 24 * Math.sqrt(3);
-const HEXAGON_POINTS = [
-  "48,0",
-  `${48 + HEXAGON_HALF_WIDTH},24`,
-  `${48 + HEXAGON_HALF_WIDTH},72`,
-  "48,96",
-  `${48 - HEXAGON_HALF_WIDTH},72`,
-  `${48 - HEXAGON_HALF_WIDTH},24`,
-].join(" ");
+// Match the 8px rounding of sources and exports, tangent to each hexagon side.
+const HEXAGON_RADIUS = 8;
+const HEXAGON_TRIM = HEXAGON_RADIUS / Math.sqrt(3);
+const HEXAGON_VERTICES = [
+  [48, 0],
+  [48 + HEXAGON_HALF_WIDTH, 24],
+  [48 + HEXAGON_HALF_WIDTH, 72],
+  [48, 96],
+  [48 - HEXAGON_HALF_WIDTH, 72],
+  [48 - HEXAGON_HALF_WIDTH, 24],
+];
+const HEXAGON_PATH =
+  HEXAGON_VERTICES.map(([x, y], index, vertices) => {
+    const previous = vertices[(index + 5) % 6];
+    const next = vertices[(index + 1) % 6];
+    const fraction = HEXAGON_TRIM / 48;
+    const before = [
+      x + (previous[0] - x) * fraction,
+      y + (previous[1] - y) * fraction,
+    ];
+    const after = [x + (next[0] - x) * fraction, y + (next[1] - y) * fraction];
+    return `${index ? "L" : "M"}${before.join(",")} A${HEXAGON_RADIUS},${HEXAGON_RADIUS} 0 0 1 ${after.join(",")}`;
+  }).join(" ") + " Z";
+const HEXAGON_STYLE = {
+  "--node-hexagon-path": `path("${HEXAGON_PATH}")`,
+} as CSSProperties;
+
+/** Ports near a rounded corner follow its circular arc. */
+function hexagonInset(top: number) {
+  const distance = Math.abs(top - 48);
+  const straightEnd = 24 - HEXAGON_TRIM;
+  const halfWidth =
+    distance <= straightEnd
+      ? HEXAGON_HALF_WIDTH
+      : distance < 24 + HEXAGON_TRIM / 2
+        ? HEXAGON_HALF_WIDTH -
+          HEXAGON_RADIUS +
+          Math.sqrt(HEXAGON_RADIUS ** 2 - (distance - straightEnd) ** 2)
+        : Math.sqrt(3) * (48 - distance);
+  return 75 - halfWidth;
+}
 
 export const PipelineNode = memo(function PipelineNode({
   id,
@@ -147,7 +185,7 @@ export function PipelineNodeView({
     const inset = square
       ? 27
       : component
-        ? 75 - Math.sqrt(3) * Math.min(24, 48 - Math.abs(top - 48))
+        ? hexagonInset(top)
         : 75 - Math.sqrt(48 ** 2 - (top - 48) ** 2);
     return { top, inset };
   };
@@ -177,12 +215,12 @@ export function PipelineNodeView({
           })}
         </svg>
       )}
-      <div className="node-shape">
+      <div className="node-shape" style={component ? HEXAGON_STYLE : undefined}>
         {component && (
           <svg className="node-hexagon" viewBox="0 0 96 96" aria-hidden="true">
-            <polygon className="node-hexagon-ring" points={HEXAGON_POINTS} />
-            <polygon className="node-hexagon-body" points={HEXAGON_POINTS} />
-            <polygon className="node-hexagon-pulse" points={HEXAGON_POINTS} />
+            <path className="node-hexagon-ring" d={HEXAGON_PATH} />
+            <path className="node-hexagon-body" d={HEXAGON_PATH} />
+            <path className="node-hexagon-pulse" d={HEXAGON_PATH} />
           </svg>
         )}
         {!preview && (
