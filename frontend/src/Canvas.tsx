@@ -58,6 +58,7 @@ const edgeTypes = { pipeline: PipelineEdge };
 const NO_ENDPOINTS: EdgeEndpoints[] = [];
 // Keep listening through saves and undo so keyup events cannot leave modifiers stuck.
 const DELETE_KEYS = ["Backspace", "Delete"];
+const ENDS = ["source", "sourceHandle", "target", "targetHandle"] as const;
 function CanvasInner({ ref, ...props }: CanvasProps) {
   const t = useT();
   const [context, setContext] = useState<{
@@ -125,6 +126,7 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
     () => setPendingConnection(null),
     [],
   );
+  const reconnecting = useRef(false);
   const flow = useRef<HTMLDivElement>(null);
   const [insertionEdge, setInsertionEdge] = useState<string | null>(null);
   useEffect(() => {
@@ -277,7 +279,7 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
     const phases = new Map(
       nodes.map((node) => [node.id, node.data.progress?.phase]),
     );
-    return props.edges.map((e): PipelineEdge => {
+    const drawn = props.edges.map((e): PipelineEdge => {
       const connected = selected.has(e.source) || selected.has(e.target);
       const pointed = hovered === e.source || hovered === e.target;
       const edgeSelected = selectedEdges.has(e.id);
@@ -320,6 +322,12 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
           : undefined,
       };
     });
+    // Links leaving one output share the spot that drags their end: the
+    // selected link is drawn last, so it is the one that moves.
+    return [
+      ...drawn.filter((edge) => !edge.selected),
+      ...drawn.filter((edge) => edge.selected),
+    ];
   }, [
     props.edges,
     nodes,
@@ -490,9 +498,44 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
                 props.onConnect(connection as Omit<FlowEdge, "id">)
         }
         onConnectStart={closeConnectionPalette}
+        onReconnectStart={() => {
+          reconnecting.current = true;
+        }}
+        onReconnect={(edge, connection) => {
+          // An end dropped back on its own port changes nothing.
+          const moved = ENDS.some((end) => edge[end] !== connection[end]);
+          if (!props.readOnly && moved)
+            props.onReconnect(edge.id, connection as Omit<FlowEdge, "id">);
+        }}
+        onReconnectEnd={(event, edge, _, connection) => {
+          reconnecting.current = false;
+          // Invalid handles can be transparent to pointer hit testing while dragging.
+          if (props.readOnly || connection.isValid || connection.toHandle)
+            return;
+          const pointer =
+            "changedTouches" in event ? event.changedTouches[0] : event;
+          if (!pointer) return;
+          // Only dropping on empty canvas disconnects a link. Invalid ports,
+          // node bodies and controls keep the saved connection intact.
+          const target = document.elementFromPoint(
+            pointer.clientX,
+            pointer.clientY,
+          );
+          if (!target?.classList.contains("react-flow__pane")) return;
+          // Like a link deleted from the keyboard, Undo restores it unselected.
+          setSelectedEdges((current) => {
+            const next = new Set(current);
+            next.delete(edge.id);
+            return next;
+          });
+          void props.onDelete([], [edge.id]).catch(() => {
+            // The workspace reports the error; edges still use the saved graph.
+          });
+        }}
         onConnectEnd={(event, connection) => {
           if (
             props.readOnly ||
+            reconnecting.current ||
             connection.isValid ||
             !connection.fromNode ||
             !connection.fromHandle?.id
@@ -615,6 +658,7 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
         minZoom={0.1}
         maxZoom={1.8}
         connectionRadius={28}
+        reconnectRadius={16}
         deleteKeyCode={DELETE_KEYS}
         selectionKeyCode="Shift"
         multiSelectionKeyCode="Shift"
