@@ -617,11 +617,6 @@ fieldset.palette-bottom {
   color: light-dark(#1559df, #f2f6ff);
   background: light-dark(#c0d6ff, #245bb8);
 }
-.pipeline-node.component .node-shape {
-  border-color: #9481c4;
-  color: light-dark(#6b589c, #d0bcff);
-  background: var(--surface);
-}
 /* The links a muted node passes through, drawn like canvas links. */
 .node-passthrough {
   position: absolute;
@@ -773,6 +768,86 @@ fieldset.palette-bottom {
 .pipeline-node:hover .node-shape {
   border-color: var(--accent);
 }
+/* Component frames and their feedback follow the same six-sided outline. */
+.pipeline-node.component .node-shape {
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: light-dark(#6b589c, #d0bcff);
+}
+.node-shape > .node-hexagon {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+/* Only the hexagon catches pointers: the corners of its box stay with the canvas. */
+.react-flow__node-pipeline .pipeline-node.component > .node-shape {
+  pointer-events: none;
+}
+.react-flow__node-pipeline .node-hexagon-body {
+  pointer-events: auto;
+}
+.node-hexagon-body {
+  fill: var(--surface);
+  stroke: #9481c4;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  filter: drop-shadow(var(--shadow));
+}
+.node-hexagon-ring,
+.node-hexagon-pulse {
+  fill: none;
+  stroke: var(--accent);
+  stroke-linejoin: round;
+  opacity: 0;
+}
+.node-hexagon-ring {
+  stroke-width: 8;
+}
+.pipeline-node.is-selected .node-hexagon-ring {
+  opacity: 0.24;
+}
+/* Running glows like the other shapes: a fainter ring over a soft halo. */
+.pipeline-node.is-running:not(.is-selected) .node-hexagon-ring {
+  stroke-width: 6;
+  opacity: 0.16;
+}
+.pipeline-node.is-running:not(.is-selected) .node-hexagon-body {
+  filter: drop-shadow(
+    0 6px 22px color-mix(in srgb, var(--accent) 26%, transparent)
+  );
+}
+.pipeline-node:is(.is-selected, .is-running, :hover) .node-hexagon-body {
+  stroke: var(--accent);
+}
+.pipeline-node.is-muted .node-shape > .node-hexagon {
+  opacity: 1;
+}
+.pipeline-node.is-muted .node-hexagon-body {
+  fill: color-mix(in srgb, var(--surface) 35%, transparent);
+  stroke-dasharray: 5 3;
+  filter: none;
+}
+.pipeline-node.component.is-muted .node-shape {
+  color: var(--muted);
+}
+.pipeline-node.component.is-running .node-shape::after {
+  content: none;
+}
+.pipeline-node.is-running .node-hexagon-pulse {
+  stroke-width: 2;
+  transform-origin: center;
+  animation: node-running-pulse 2.4s cubic-bezier(0.2, 0.6, 0.3, 1) infinite;
+}
+.pipeline-node:has(.node-progress[data-paused]) .node-hexagon-pulse {
+  animation-play-state: paused;
+}
+.pipeline-node.component .node-progress {
+  clip-path: var(--node-hexagon-path);
+}
 .node-title {
   font-size: 14px;
   font-weight: 650;
@@ -919,6 +994,7 @@ fieldset.palette-bottom {
   .node-status .spin,
   .react-flow__edge.animated .react-flow__edge-path,
   .pipeline-node.is-running .node-shape::after,
+  .pipeline-node.is-running .node-hexagon-pulse,
   .node-progress::after {
     animation: none !important;
   }
