@@ -1,7 +1,8 @@
 /**
  * The Duckpad mark: a duck carrying a pipeline drawn like the canvas, with a
  * square source, a round step, a square export and a curved link. The
- * stylesheet paints the tile. The website's mark and favicon repeat this path.
+ * stylesheet paints the tile. The website's mark and the two favicons
+ * (`assets/favicon.svg` here, `website/public/favicon.svg`) repeat this path.
  */
 export default function DuckMark({ size = 30 }: { size?: number }) {
   return (
