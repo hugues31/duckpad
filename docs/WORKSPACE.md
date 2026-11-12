@@ -45,6 +45,15 @@ view. **Auto-arrange nodes** places dependencies in columns, orders each column 
 avoid crossing links, and lines up linked sockets. Drag a port onto empty space to
 add a compatible connected node.
 
+Drop a node onto a link to insert it between the two connected nodes. The link
+becomes a thicker dashed line while it passes under the node and can accept it.
+This works for a node already on the canvas or dragged from the palette. The node
+needs exactly one input, still unconnected, and one output, and the insertion must
+not create a cycle. Inputs exposed by an opened component are reserved for external
+connections. Other drops keep existing links intact, and moving several selected
+nodes does not insert them. Ctrl/Cmd+Z undoes the placement and both connections
+together.
+
 Press **Escape** to clear the selection and close its inspector and results.
 Selecting a node opens both panels again. An open dialog, menu or list of
 suggestions takes Escape first, and the code editor keeps it for itself.

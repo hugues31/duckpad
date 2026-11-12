@@ -24,6 +24,7 @@ import {
   usePanelSizes,
 } from "../WorkspacePanels";
 import type { CanvasHandle, FocusRequest } from "../canvasTypes";
+import { insertOnEdge } from "../edgeInsertion";
 import {
   connectInput,
   graphAt,
@@ -412,7 +413,7 @@ export default function FlowPage() {
             selected={selected}
             focusRequest={focusRequest}
             onSelect={select}
-            onMove={(nodes) =>
+            onMove={(nodes, insertion) =>
               reported(
                 updateGraph((g) => {
                   const positions = new Map(
@@ -422,6 +423,8 @@ export default function FlowPage() {
                     ...n,
                     position: positions.get(n.id) ?? n.position,
                   }));
+                  if (insertion && nodes.length === 1)
+                    insertOnEdge(g, nodes[0].id, insertion);
                 }),
               )
             }
@@ -435,8 +438,10 @@ export default function FlowPage() {
             onFiles={(files, position) =>
               safe(() => dropFiles(files, position))
             }
-            onAdd={(kind, id, position, connection) =>
-              safe(() => addNode(kind, id, position, connection))
+            onAdd={(kind, id, position, connection, insertion) =>
+              safe(() =>
+                addNode(kind, id, position, connection, false, insertion),
+              )
             }
             onOpen={(id) => {
               const target = graph.nodes.find((item) => item.id === id);

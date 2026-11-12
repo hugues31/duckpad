@@ -38,6 +38,11 @@ import { NODE_SHAPE_CENTER, PipelineNode } from "./CanvasNode";
 import { showMinimap } from "./canvasResults";
 import type { CanvasProps, FocusRequest } from "./canvasTypes";
 import ConnectionPalette from "./ConnectionPalette";
+import {
+  edgesNear,
+  planEdgeInsertion,
+  type EdgeInsertion,
+} from "./edgeInsertion";
 import { DRAG_TYPE, type NodeConnection } from "./graph";
 import { findNodePosition, layoutNodes } from "./graphLayout";
 import { useT } from "./i18n";
@@ -61,7 +66,13 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
     position: { x: number; y: number };
     trigger: HTMLElement;
   } | null>(null);
-  const { getNodes, getInternalNode, screenToFlowPosition } = useReactFlow();
+  const {
+    getNodes,
+    getInternalNode,
+    getZoom,
+    screenToFlowPosition,
+    flowToScreenPosition,
+  } = useReactFlow();
   const initialized = useNodesInitialized();
   const safeArea = useRef<HTMLDivElement>(null);
   const viewportTouched = useRef(false);
@@ -117,6 +128,37 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
   );
   const reconnecting = useRef(false);
   const flow = useRef<HTMLDivElement>(null);
+  const [insertionEdge, setInsertionEdge] = useState<string | null>(null);
+  useEffect(() => {
+    const clear = () => setInsertionEdge(null);
+    document.addEventListener("dragend", clear);
+    document.addEventListener("drop", clear);
+    return () => {
+      document.removeEventListener("dragend", clear);
+      document.removeEventListener("drop", clear);
+    };
+  }, []);
+  const insertionAt = (node: FlowNode, point: { x: number; y: number }) => {
+    if (props.readOnly) return;
+    // This runs on every drag frame: only the links under the node are planned.
+    for (const id of edgesNear(flow.current, point, getZoom())) {
+      const edge = props.edges.find((item) => item.id === id);
+      const plan = edge && planEdgeInsertion(props, node, edge);
+      if (plan) return plan;
+    }
+  };
+  const draggedInsertion = (moved: PipelineNode[]) => {
+    if (moved.length !== 1) return;
+    const node = props.nodes.find((item) => item.id === moved[0].id);
+    if (!node) return;
+    return insertionAt(
+      node,
+      flowToScreenPosition({
+        x: moved[0].position.x + NODE_SHAPE_CENTER.x,
+        y: moved[0].position.y + NODE_SHAPE_CENTER.y,
+      }),
+    );
+  };
   useDoubleClickGuard(flow, props.onOpen);
   const displayNodes = useCanvasNodes(props);
   const [nodes, setNodes] = useState<PipelineNode[]>(displayNodes);
@@ -248,7 +290,12 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
         phases.get(e.source) === "done" &&
         (target === "done" || target === "running");
       const highlighted =
-        edgeSelected || connected || pointed || flowing || travelled;
+        edgeSelected ||
+        connected ||
+        pointed ||
+        flowing ||
+        travelled ||
+        insertionEdge === e.id;
       return {
         ...e,
         selected: edgeSelected,
@@ -261,6 +308,7 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
             pointed && "node-hovered",
             flowing && "is-flowing",
             highlighted && "highlighted",
+            insertionEdge === e.id && "insertion-target",
           ]
             .filter(Boolean)
             .join(" ") || undefined,
@@ -280,10 +328,21 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
       ...drawn.filter((edge) => !edge.selected),
       ...drawn.filter((edge) => edge.selected),
     ];
-  }, [props.edges, nodes, hovered, edgeStyle, lanes, selectedEdges]);
+  }, [
+    props.edges,
+    nodes,
+    hovered,
+    edgeStyle,
+    lanes,
+    selectedEdges,
+    insertionEdge,
+  ]);
   const changes = (changes: NodeChange<PipelineNode>[]) =>
     setNodes((current) => applyNodeChanges(changes, current));
-  const persistPositions = async (moved: FlowNode[]) => {
+  const persistPositions = async (
+    moved: FlowNode[],
+    insertion?: EdgeInsertion,
+  ) => {
     const pending = new Map(
       moved.map((node) => [node.id, { position: node.position }]),
     );
@@ -296,7 +355,7 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
       })),
     );
     try {
-      await props.onMove(moved);
+      await props.onMove(moved, insertion);
     } catch {
       // The workspace reports the error and refreshes the saved graph.
     } finally {
@@ -402,6 +461,9 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
         onNodeDragStart={() => {
           viewportTouched.current = true;
         }}
+        onNodeDrag={(_, __, moved) => {
+          setInsertionEdge(draggedInsertion(moved)?.edge.id ?? null);
+        }}
         onNodeClick={(event, node) => {
           setFocus(null);
           if (!event.shiftKey) props.onSelect(node.id);
@@ -497,14 +559,17 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
             screen,
           });
         }}
-        onNodeDragStop={(_, __, moved) =>
+        onNodeDragStop={(_, __, moved) => {
+          const insertion = draggedInsertion(moved);
+          setInsertionEdge(null);
           void persistPositions(
             moved.map((n) => ({
               ...props.nodes.find((x) => x.id === n.id)!,
               position: n.position,
             })),
-          )
-        }
+            insertion,
+          );
+        }}
         onBeforeDelete={async () =>
           !props.readOnly &&
           !pendingConnection &&
@@ -524,9 +589,22 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
         }}
         onSelectionChange={selectionChanged}
         onDragOver={(event) => {
+          if (props.readOnly) return;
           event.preventDefault();
           // Files and palette items add nodes: show the copy cursor.
           event.dataTransfer.dropEffect = "copy";
+          const node = dragPreview.node;
+          setInsertionEdge(
+            (node &&
+              insertionAt(node, { x: event.clientX, y: event.clientY })?.edge
+                .id) ??
+              null,
+          );
+        }}
+        onDragLeave={(event) => {
+          // Moving between the canvas's own elements also fires dragleave.
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null))
+            setInsertionEdge(null);
         }}
         onDrop={(event) => {
           if (props.readOnly) return;
@@ -545,10 +623,27 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
               y: event.clientY,
             });
             viewportTouched.current = true;
-            props.onAdd(value.kind, value.id, {
-              x: position.x - NODE_SHAPE_CENTER.x,
-              y: position.y - NODE_SHAPE_CENTER.y,
-            });
+            const insertion = insertionAt(
+              {
+                id: "",
+                params: {},
+                position,
+                ...(value.kind === "component"
+                  ? { component: value.id }
+                  : { template: value.id }),
+              },
+              { x: event.clientX, y: event.clientY },
+            );
+            props.onAdd(
+              value.kind,
+              value.id,
+              {
+                x: position.x - NODE_SHAPE_CENTER.x,
+                y: position.y - NODE_SHAPE_CENTER.y,
+              },
+              undefined,
+              insertion,
+            );
           } catch {
             // Ignore drops that are not palette items.
           }

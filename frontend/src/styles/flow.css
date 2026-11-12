@@ -901,6 +901,11 @@ fieldset.palette-bottom {
   stroke: var(--accent);
   stroke-width: 2.3;
 }
+.react-flow__edge-pipeline.insertion-target .react-flow__edge-path {
+  stroke: var(--accent);
+  stroke-width: 4;
+  stroke-dasharray: 7 4;
+}
 .react-flow__edge.animated .react-flow__edge-path {
   stroke-dasharray: 6 6;
   animation: data-flow 1s linear infinite;
