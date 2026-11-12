@@ -61,7 +61,7 @@ tar -xzf dist/duckpad-*.tar.gz --strip-components=1 -C "$archive_tests"
 
 ## Conventions
 
-- Write code, comments, documentation, identifiers and commit messages in English. French and Portuguese are only used for values in `frontend/src/locales/fr.json` and `frontend/src/locales/pt.json`; add every new interface string to every locale file.
+- Write code, comments, documentation, identifiers and commit messages in English. French, Portuguese and German are only used for values in `frontend/src/locales/fr.json`, `frontend/src/locales/pt.json` and `frontend/src/locales/de.json`; add every new interface string to every locale file.
 - Use [Conventional Commits](https://www.conventionalcommits.org/), for example `fix(editor): preserve selection when saving`. Release notes are generated from them.
 - Keep changes focused. Update the relevant guide when usage changes; describe current behavior and remove superseded explanations. Git history preserves completed proposals and past implementations.
 - Never commit credentials, personal data or details of a private deployment.

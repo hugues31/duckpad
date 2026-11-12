@@ -11,7 +11,7 @@ description: Apply this repository's English writing rules, UI translation excep
   gives instructions in French, except for the UI translation resources below.
 - Use English for documentation, comments, identifiers, file names, test names,
   example text, default user-facing strings, log messages, and error messages.
-- Allow French and Portuguese only in localized UI values stored in dedicated
+- Allow French, Portuguese and German only in localized UI values stored in dedicated
   translation resource files, including translations of user-facing error
   messages. Keep translation keys, file names, and comments in English. Use
   translation keys from application code instead of embedding translated strings
@@ -71,6 +71,6 @@ fix/general-431-node-status-badges
 docs/readme-badges
 ```
 
-Before finishing a change, verify that any French or Portuguese text is limited
+Before finishing a change, verify that any French, Portuguese or German text is limited
 to localized UI values in dedicated translation resources, and check any proposed commit
 message and branch name against the formats above.
