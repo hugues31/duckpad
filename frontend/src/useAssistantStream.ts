@@ -22,7 +22,6 @@ export function useAssistantStream({
   setConversation,
   setTitle,
   list,
-  bound,
   worktree,
   drafts,
   context,
@@ -38,7 +37,6 @@ export function useAssistantStream({
   setConversation: Dispatch<SetStateAction<Conversation | null>>;
   setTitle: (title: string) => void;
   list: () => Promise<void>;
-  bound: boolean;
   worktree: ReturnType<typeof useWorktree>;
   drafts: ReturnType<typeof useShell>["drafts"];
   context: AssistantContext;
@@ -87,9 +85,9 @@ export function useAssistantStream({
         await worktree.flush();
       }
       abort.signal.throwIfAborted();
-      if (!value || !bound) {
+      if (!value) {
         value = await api<Conversation>("/assistant/conversations", {
-          ...send(context),
+          ...send({}),
           signal: abort.signal,
         });
         setConversation(value);
@@ -140,7 +138,7 @@ export function useAssistantStream({
     tool: string,
     approved: boolean,
   ) {
-    if (!conversation || !turn.id || busy || undoing || !bound) return;
+    if (!conversation || !turn.id || busy || undoing) return;
     setBusy(true);
     setContinuing(turn.id);
     setError("");

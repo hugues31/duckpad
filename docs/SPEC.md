@@ -89,8 +89,9 @@ The assistant is disabled until an instance administrator configures it. Tools
 recheck access, edits use normal versioned saves with Undo, and runs require
 explicit approval bound to the proposed configuration. On every page, tools read
 any branch the user can open and the connections the user can see; edits and
-runs apply to the open branch only, and a conversation that read another
-project's content or connection details no longer edits. Conversations are private
+runs apply to the open branch only, and an edit that follows a read of another
+project's content or of connection details waits for the user's confirmation.
+Conversations are tied to no page: each message carries its own. They are private
 to their author, including against other instance administrators. The
 assistant's instructions limit it to Duckpad, project content and data or
 software development topics; it declines unrelated requests.

@@ -340,13 +340,15 @@ test("configure the assistant, inspect a flow and resume a private conversation"
     .getByRole("textbox", { name: "Conversation title" })
     .fill("Northstar discussion");
   await chat.getByRole("button", { name: "Save changes", exact: true }).click();
-  await expect(
-    chat.getByRole("button", { name: "Northstar discussion main" }),
-  ).toBeVisible();
+  const discussion = chat.getByRole("button", {
+    name: "Northstar discussion",
+    exact: true,
+  });
+  await expect(discussion).toBeVisible();
   await chat
     .getByRole("button", { name: "New conversation", exact: true })
     .click();
-  await chat.getByRole("button", { name: "Northstar discussion main" }).click();
+  await discussion.click();
   await expect(
     chat.getByText("The flow contains read-only project nodes."),
   ).toBeVisible();
@@ -364,10 +366,24 @@ test("configure the assistant, inspect a flow and resume a private conversation"
   await chat
     .getByRole("button", { name: "Maximize assistant", exact: true })
     .click();
-  await chat.getByRole("button", { name: "Northstar discussion main" }).click();
+  await discussion.click();
   await expect(
     chat.getByText("The flow contains read-only project nodes."),
   ).toHaveCount(2);
+  // The conversation follows its author to another page: the next message continues it.
+  await chat
+    .getByRole("button", { name: "Minimize assistant", exact: true })
+    .click();
+  await openInstanceSettings(page, "Connections");
+  await expect(chat).toContainText("And the SQL?");
+  await chat
+    .getByRole("textbox", { name: "Message", exact: true })
+    .fill("And from here?");
+  await chat.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(
+    chat.getByText("The flow contains read-only project nodes."),
+  ).toHaveCount(3);
+  await chat.getByRole("textbox", { name: "Message", exact: true }).focus();
   await page.keyboard.press("Escape");
   await expect(
     page.getByRole("button", { name: "Open AI assistant", exact: true }),

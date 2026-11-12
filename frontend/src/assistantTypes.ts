@@ -65,7 +65,7 @@ export interface AssistantTool {
   args: Record<string, unknown>;
   status: string;
   summary: string;
-  /** What the call read outside the conversation's branch: other branches, or connection details. */
+  /** What the call read: branches, or connection details as an instance administrator. */
   reads?: {
     instance?: boolean;
     project?: string;
@@ -77,6 +77,11 @@ export interface AssistantTool {
   approval?: {
     decision: boolean | null;
     error?: string;
+    /** An edit to confirm, with its exact file changes; otherwise a run. */
+    kind?: "edit";
+    changes?: AssistantAction["changes"];
+    change_count?: number;
+    diffs?: AssistantAction["sql_diffs"];
     environment?: string;
     node?: string;
     node_count?: number;
@@ -118,11 +123,9 @@ export interface AssistantTurn {
   status: string;
   error: string;
 }
+/** A conversation follows its author from page to page; each turn keeps its own page context. */
 export interface Conversation {
   id: string;
-  project: string | null;
-  worktree: string;
-  branch: string;
   title: string;
   updated: string;
   turns: AssistantTurn[];

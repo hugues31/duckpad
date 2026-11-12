@@ -1,4 +1,5 @@
-"""Persisted, owner-only decisions for Pydantic AI deferred run calls."""
+"""Persisted, owner-only decisions for Pydantic AI deferred calls: runs, and edits that follow
+a read outside the open project."""
 
 import json
 
@@ -6,6 +7,7 @@ from pydantic import BaseModel, ConfigDict
 from pydantic_ai import CancellationToken
 
 from ..util import Problem
+from .registry import TOOLS
 from .runs import proposal, run_summary
 from .tools import PageContext
 
@@ -39,7 +41,12 @@ class Approvals:
                 }
                 turn["tools"].append(card)
             try:
-                card["approval"] = proposal(deps, **call.args_as_dict())
+                card["approval"] = (
+                    proposal(deps, **call.args_as_dict())
+                    if TOOLS[call.tool_name].approval
+                    # An editing tool attached the file changes it asks to confirm.
+                    else {"kind": "edit", "decision": None, **requests.metadata[call.tool_call_id]}
+                )
             except Problem as error:
                 card["approval"] = {"decision": None, "error": deps.safe(str(error))}
             card["status"] = "awaiting_approval"
@@ -56,7 +63,7 @@ class Approvals:
                 (c for c in turn["tools"] if c["id"] == data.tool and c["id"] in turn["approvals"]), None
             )
         if card is None or card["approval"]["decision"] is not None:
-            raise Problem("This run request has already been answered", 409)
+            raise Problem("This request has already been answered", 409)
         return turn, card
 
     def decide(self, user, token, identity, data):
@@ -71,9 +78,9 @@ class Approvals:
                 raise Problem("A response is already in progress", 409)
             turn, card = self.pending(record, data)
             if data.approved and card["approval"].get("error"):
-                raise Problem("This run request cannot be approved; decline it and request a new run", 409)
+                raise Problem("This request cannot be approved; decline it and ask again", 409)
             if data.approved:
-                assistant.services.engine.access.worktree(user, record["worktree"], "editor")
+                assistant.services.engine.access.worktree(user, turn["context"]["worktree"], "editor")
             card["approval"]["decision"] = data.approved
             card["status"] = "approved" if data.approved else "denied"
             if any(c["approval"]["decision"] is None for c in turn["tools"] if c["id"] in turn["approvals"]):

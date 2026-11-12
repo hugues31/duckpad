@@ -18,15 +18,20 @@ class UndoRequest(BaseModel):
     action: str = ""
 
 
-def describe(before, after):
+def describe(before, after, *, every=False):
+    """The changed entities and the SQL diffs of a save.
+
+    With `every`, the diff of every changed file, for a change its user must read before it is
+    saved.
+    """
     changes = [
         {k: c[k] for k in ("id", "name", "kind", "status")}
         for c in compare_files(before, after, impact=False)["entities"]
         if c["status"] != "unchanged"
     ]
-    diffs, remaining = [], 8000
+    diffs, remaining = [], 40000 if every else 8000
     for path in sorted(before.keys() | after.keys()):
-        if path.endswith(".sql") and before.get(path) != after.get(path):
+        if (every or path.endswith(".sql")) and before.get(path) != after.get(path):
             diff = "".join(
                 unified_diff(
                     before.get(path, "").splitlines(keepends=True),
@@ -107,28 +112,29 @@ class Actions:
         assistant = self.assistant
         with assistant.lock(identity):
             record = assistant.owned(user, identity)
-            context = validate_context(assistant.services, user, data.context)
-            if any(record[k] != context[k] for k in ("project", "worktree", "branch")):
-                raise Problem("Open the conversation's original branch before undoing", 409)
-            assistant.services.engine.access.worktree(user, record["worktree"], "editor")
-            if identity in assistant.active:
-                raise Problem("Wait for the assistant response before undoing", 409)
             turn = next((t for t in record["turns"] if t["id"] == data.turn), None)
             if turn is None:
                 raise Problem("Assistant turn not found", 404)
+            # A turn edited the branch its message was sent from.
+            context = validate_context(assistant.services, user, data.context)
+            if any(turn["context"][k] != context[k] for k in ("project", "worktree", "branch")):
+                raise Problem("Open the branch of this change before undoing", 409)
+            assistant.services.engine.access.worktree(user, context["worktree"], "editor")
+            if identity in assistant.active:
+                raise Problem("Wait for the assistant response before undoing", 409)
             actions = [t["action"] for t in turn["tools"] if t.get("action") and t["action"].get("commit")]
             if data.action:
                 actions = [a for a in actions if a["id"] == data.action]
             if not actions:
                 raise Problem("Assistant action not found", 404)
-            with self.projects.locked(record["worktree"]) as worktree:
+            with self.projects.locked(context["worktree"]) as worktree:
                 if self.store.has_conflicts(worktree["id"]) and not any(a.get("conflict") for a in actions):
                     raise Problem("Resolve the pending project conflict before editing", 409)
                 if (
                     self.projects.git(worktree["path"], "symbolic-ref", "-q", "HEAD", check=False)
-                    != "refs/heads/" + record["branch"]
+                    != "refs/heads/" + context["branch"]
                 ):
-                    raise Problem("The conversation branch changed. Start a new conversation.", 409)
+                    raise Problem("The open branch changed. Try again.", 409)
                 for action in reversed(actions):
                     if action["status"] == "undone":
                         continue

@@ -69,7 +69,7 @@ def proposal(deps, environment="", node=""):
     )
 
 
-@tool(needs="run", approval=True)
+@tool(needs="write", approval=True)
 def launch_run(ctx: RunContext[Dependencies], environment: str = "", node: str = "") -> dict:
     """Propose a run in an environment, for a node (and its inputs) or the entire flow.
 
@@ -102,8 +102,11 @@ def run_record(ctx, identity):
     # A worktree can check out another branch after a run: that run is no longer one of its runs.
     if (record["project"], record["branch"]) != (branch.project, branch.name):
         raise Problem("Execution not found", 404)
-    # Later turns recheck these grants run by run (`recheck_run_reads`).
     branch.require_grants(list(record.get("connections", {})))
+    # Later turns recheck these grants run by run (`recheck_run_reads`), and those of the branch
+    # for a run that retention has removed since.
+    if branch.scope is not None:
+        branch.scope["results"] = True
     return record
 
 
@@ -126,8 +129,6 @@ def recheck_run_reads(deps, turns):
                     record["project"], list(record.get("connections", {}))
                 )
             except Problem:
-                if record["worktree"] == deps.context.get("worktree"):
-                    raise
                 raise Problem(LOST_ACCESS, 409) from None
 
 
@@ -135,7 +136,7 @@ def run_summary(record):
     return {k: record.get(k) for k in ("id", "environment", "scope", "status", "entry_point", "commit")}
 
 
-@tool(needs="run")
+@tool(needs="write")
 def cancel_run(ctx: RunContext[Dependencies], run: str) -> dict:
     """Cancel an active run of the open branch. External writes already made cannot be undone."""
     ctx.deps.check(write=True)

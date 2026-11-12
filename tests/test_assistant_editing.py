@@ -28,7 +28,7 @@ from duckpad.validation import validate
 
 SQL = "-- @output result\nSELECT 1 AS value;\n"
 # The tools that change or run the open branch.
-WRITING = {name for name, spec in TOOLS.items() if spec.needs in ("run", "edit")}
+WRITING = {name for name, spec in TOOLS.items() if spec.needs == "write"}
 BAR = {"mark": "bar", "encoding": {"x": {"field": "value", "type": "quantitative"}}}
 CONSUMER = "-- @input input\n-- @output result\nSELECT * FROM {{ input }};"
 LINE = {"mark": "line", "encoding": {"y": {"field": "value", "type": "quantitative"}}}

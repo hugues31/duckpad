@@ -10,7 +10,6 @@ from .actions import UndoRequest
 from .approvals import ApprovalRequest
 from .config import ConnectionCheck, ProviderSettings, Settings
 from .service import Assistant, Rename, TurnRequest
-from .tools import PageContext
 
 
 def router(assistant: Assistant):
@@ -43,8 +42,8 @@ def router(assistant: Assistant):
         return assistant.list(request.state.user, offset)
 
     @routes.post("/conversations")
-    def create(request: Request, context: PageContext):
-        return assistant.create(request.state.user, context)
+    def create(request: Request):
+        return assistant.create(request.state.user)
 
     @routes.get("/conversations/{identity}")
     def get(request: Request, identity: str):

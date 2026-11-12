@@ -3,7 +3,7 @@
 from typing import Annotated
 
 from pydantic import Field
-from pydantic_ai import RunContext
+from pydantic_ai import ApprovalRequired, RunContext
 
 from .. import variables
 from ..bundle import bundle_to_files
@@ -12,6 +12,7 @@ from ..charts import unknown_fields
 from ..components import expand, group, output_port
 from ..node_code import code_path, find_node
 from ..util import Problem
+from .actions import describe
 from .arguments import (
     AddNode,
     ColumnDocumentation,
@@ -32,29 +33,46 @@ from .arguments import (
     UpdateVariable,
 )
 from .registry import tool
-from .tools import Dependencies, variable_usages
+from .tools import Dependencies, reading, variable_usages
 
 
 def editable(ctx):
-    """The files of the open branch, the only one a tool edits."""
+    """The files of the open branch, the only one a tool edits.
+
+    An edit is also a read: its result holds diffs and diagnostics of the branch.
+    """
     ctx.deps.check(write=True)
-    if ctx.deps.read_outside():
-        # Also refuses a turn that read elsewhere after its tools were offered.
-        raise Problem(
-            "This conversation read another project or connection details, so it no longer edits. "
-            "Start a new conversation to change this branch.",
-            409,
-        )
-    snapshot = ctx.deps.branch().snapshot()
+    snapshot = reading(ctx).snapshot()
     if snapshot["bundle"] is None:
         raise Problem("Project files are invalid", 422, snapshot["diagnostics"])
     return snapshot
 
 
 def save(ctx, snapshot, bundle, **details):
+    """Save an edit of the open branch, once its user has confirmed it when the conversation holds
+    content of another project or connection settings.
+
+    The confirmation shows every file change in full. An edit whose changes differ from the
+    confirmed ones, for example after the branch changed, needs a new confirmation: one answer
+    never covers another edit.
+    """
     if ctx.deps.writer is None:
         raise Problem("Start an assistant turn before editing", 403)
-    return ctx.deps.writer(ctx.tool_call_id, snapshot, bundle_to_files(bundle), details)
+    files = bundle_to_files(bundle)
+    if ctx.deps.read_outside():
+        proposal = ctx.deps.safe(describe(snapshot["files"], files, every=True))
+        diffs = proposal["diffs"] = proposal.pop("sql_diffs")
+        before = snapshot["files"]
+        changed = {path for path in before.keys() | files.keys() if before.get(path) != files.get(path)}
+        if any(diff["truncated"] for diff in diffs) or {diff["path"] for diff in diffs} != changed:
+            raise Problem("This change is too large to confirm at once. Make it in smaller changes.", 409)
+        confirmed = ctx.deps.confirmed.get(ctx.tool_call_id)
+        # A save that changes no file has nothing to confirm.
+        if confirmed is None and proposal["diffs"]:
+            raise ApprovalRequired(proposal)
+        if confirmed and any(confirmed.get(key) != value for key, value in proposal.items()):
+            raise Problem("This change differs from the confirmed one. Request it again.", 409)
+    return ctx.deps.writer(ctx.tool_call_id, snapshot, files, details)
 
 
 def graph_for(bundle, component):
@@ -65,7 +83,7 @@ def graph_for(bundle, component):
     return bundle["components"][component]
 
 
-@tool(needs="edit", retries=2)
+@tool(needs="write", retries=2)
 def edit_flow(
     ctx: RunContext[Dependencies],
     nodes: list[Annotated[AddNode | UpdateNode | RemoveNode, Field(discriminator="operation")]] | None = None,
@@ -144,7 +162,7 @@ def edit_flow(
     return save(ctx, snapshot, bundle)
 
 
-@tool(needs="edit")
+@tool(needs="write")
 def write_sql(ctx: RunContext[Dependencies], sql: str, node: str = "", template: str = "") -> dict:
     """Replace saved SQL or Python code for a normal node or a project template in one commit.
 
@@ -171,7 +189,7 @@ def write_sql(ctx: RunContext[Dependencies], sql: str, node: str = "", template:
     return save(ctx, snapshot, bundle, **details)
 
 
-@tool(needs="edit", retries=2)
+@tool(needs="write", retries=2)
 def write_documentation(
     ctx: RunContext[Dependencies],
     entry: Annotated[
@@ -204,7 +222,7 @@ def write_documentation(
     return save(ctx, snapshot, bundle)
 
 
-@tool(needs="edit", retries=2)
+@tool(needs="write", retries=2)
 def edit_variable(
     ctx: RunContext[Dependencies],
     change: Annotated[
@@ -260,7 +278,7 @@ def edit_variable(
     return save(ctx, snapshot, bundle)
 
 
-@tool(needs="edit")
+@tool(needs="write")
 def group_nodes(ctx: RunContext[Dependencies], nodes: list[str], name: str, component: str = "") -> dict:
     """Group selected nodes into a reusable component using the same service as the canvas."""
     snapshot = editable(ctx)
@@ -268,7 +286,7 @@ def group_nodes(ctx: RunContext[Dependencies], nodes: list[str], name: str, comp
     return save(ctx, snapshot, bundle, selected=selected)
 
 
-@tool(needs="edit", retries=2)
+@tool(needs="write", retries=2)
 def edit_chart(
     ctx: RunContext[Dependencies],
     change: Annotated[
@@ -321,7 +339,7 @@ def edit_chart(
     bundle["charts"] = charts
     result = save(ctx, snapshot, bundle)
     if isinstance(change, (CreateChart, UpdateChart)) and "error" not in result:
-        columns = ctx.deps.branch().output_columns(bundle, producer, port)
+        columns = reading(ctx).output_columns(bundle, producer, port)
         if columns is not None and (unknown := unknown_fields(change.spec, columns)):
             result["unknown_fields"] = unknown
     return result

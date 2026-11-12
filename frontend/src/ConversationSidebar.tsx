@@ -38,7 +38,6 @@ export default function ConversationSidebar({
           onClick={() => void resume(item)}
         >
           <strong>{item.title}</strong>
-          <small>{item.branch}</small>
         </button>
       ))}
       {nextOffset !== null && (

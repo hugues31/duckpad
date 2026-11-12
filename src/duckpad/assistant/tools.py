@@ -1,7 +1,9 @@
 """Small read-only views over the same services and authorization as the HTTP API.
 
-A turn's `Dependencies` hold who asks and under which instance policy; a `Branch` is one working
-branch a tool call reads with that user's rights: the open one, or another the user can open.
+A conversation is not tied to a page: each turn carries the page context it was sent from. A
+turn's `Dependencies` hold who asks, from which page and under which instance policy; a `Branch`
+is one working branch a tool call reads with that user's rights: the open one, or another the
+user can open.
 """
 
 import dataclasses
@@ -65,11 +67,13 @@ class Dependencies:
     failed: set[str] = dataclasses.field(default_factory=set)
     # Worktree -> the committed files a branch had when the turn first read it, or last saved it.
     snapshots: dict[str, dict] = dataclasses.field(default_factory=dict)
-    # Tool call -> what it read outside the conversation's branch, by worktree or "instance".
-    # Its chat card keeps these reads for later turns.
+    # Tool call -> what it read: branches by worktree, and "instance" for connection details.
+    # Its chat card keeps these reads for later turns, sent from any page.
     reads: dict[str, dict[str, dict]] = dataclasses.field(default_factory=dict)
-    # What earlier turns read outside the conversation's branch (see `recorded_reads`).
+    # What the conversation's earlier turns read (see `recorded_reads`).
     earlier: list[dict] = dataclasses.field(default_factory=list)
+    # Tool call -> the edit its user confirmed, when this response resumes after a confirmation.
+    confirmed: dict[str, dict] = dataclasses.field(default_factory=dict)
 
     def __post_init__(self):
         if self.secrets is None:
@@ -88,18 +92,18 @@ class Dependencies:
             access.worktree(user, worktree, "editor" if write else "reader")
             current = self.services.projects.get(worktree)
             if current["project"] != self.context["project"] or current["branch"] != self.context["branch"]:
-                raise Problem("The conversation branch changed. Start a new conversation.", 409)
+                raise Problem("The open branch changed. Try again.", 409)
             if (
                 write
                 and self.services.projects.git(current["path"], "symbolic-ref", "-q", "HEAD", check=False)
                 != "refs/heads/" + self.context["branch"]
             ):
-                raise Problem("The conversation branch changed. Start a new conversation.", 409)
+                raise Problem("The open branch changed. Try again.", 409)
         elif self.context.get("project"):
             access.require(user, self.context["project"])
         if write and not worktree:
             raise Problem("Open a project branch to edit its content", 403)
-        # What this turn read elsewhere goes back to the provider with its next request.
+        # What this turn read goes back to the provider with its next request.
         for read in {(r.get("instance"), r.get("project")): r for r in self.turn_reads()}.values():
             self.require_read(user, read)
         return user, config
@@ -118,8 +122,7 @@ class Dependencies:
     def branch(self, worktree="", *, call=""):
         """The branch a tool call reads: the open one by default, or another its user can open.
 
-        Access is rechecked on every call. A read outside the conversation's branch is recorded
-        for its tool call.
+        Access is rechecked on every call, and the read is recorded for its tool call.
         """
         user, _ = self.check()
         opened = self.context.get("worktree")
@@ -127,17 +130,16 @@ class Dependencies:
         if not worktree:
             raise Problem("No branch is open on this page. Pass a worktree ID from list_projects.", 422)
         if worktree == opened:
-            return Branch(
-                self, self.context["project"], worktree, self.context["branch"], self.context["environment"]
-            )
-        try:
-            project = self.services.engine.access.worktree(user, worktree)
-        except Problem as error:
-            if error.status != 404:
-                raise
-            # The same answer for a missing branch and for a project its user cannot open.
-            raise Problem("Branch not found. Use a worktree ID from list_projects.", 404) from None
-        name = self.services.projects.get(worktree)["branch"]
+            project, name, environment = (self.context[k] for k in ("project", "branch", "environment"))
+        else:
+            try:
+                project = self.services.engine.access.worktree(user, worktree)
+            except Problem as error:
+                if error.status != 404:
+                    raise
+                # The same answer for a missing branch and for a project its user cannot open.
+                raise Problem("Branch not found. Use a worktree ID from list_projects.", 404) from None
+            name, environment = self.services.projects.get(worktree)["branch"], self.environment()
         scope = self.reads.get(call, {}).get(worktree)
         if scope is None and call:
             scope = self.read(
@@ -148,14 +150,13 @@ class Dependencies:
                 project_name=self.services.store.get("project", project)["name"],
                 branch=name,
             )
-        return Branch(self, project, worktree, name, self.environment(), scope)
+        return Branch(self, project, worktree, name, environment, scope)
 
     def read(self, call, key, **scope):
-        """Record what a tool call reads outside the conversation's branch: another branch, or
-        the instance as its administrator.
+        """Record what a tool call reads: a branch, or the instance as its administrator.
 
-        The author must keep access to it (`require_read`), and a conversation that read outside
-        its project no longer edits (`read_outside`).
+        The author must keep access to it (`require_read`), and an edit of a branch whose project
+        the conversation has read beyond waits for the user's confirmation (`read_outside`).
         """
         return self.reads.setdefault(call, {}).setdefault(key, scope) if call else None
 
@@ -174,11 +175,11 @@ class Dependencies:
             raise Problem(LOST_ACCESS, 409) from None
 
     def read_outside(self):
-        """Whether the conversation holds what the members of its project may not see: content of
-        another project, or connection settings read as an instance administrator.
+        """Whether the conversation holds what the members of the open project may not see:
+        content of another project, or connection settings read as an instance administrator.
 
-        Such a conversation no longer edits: text planted in what it read could otherwise have
-        that content written into the open branch.
+        Text planted in what the conversation read could have that content written into the open
+        branch: an edit then waits for the user's confirmation (see `editing.save`).
         """
         project = self.context.get("project")
         return any(
@@ -193,8 +194,7 @@ class Dependencies:
         return selected if selected in names else names[0]
 
     def recheck_reads(self):
-        """Recheck what earlier turns read outside the conversation's branch, before their results
-        go back to a provider.
+        """Recheck what earlier turns read, before their results go back to a provider.
 
         Results follow the connection grants of their branch. A branch deleted since is skipped
         while its project is still open to the user: its connections are unknown, and refusing it
@@ -230,7 +230,7 @@ class Branch:
     worktree: str
     name: str
     environment: str
-    # The read a tool call records when it names a branch other than the conversation's.
+    # The read its tool call records.
     scope: dict | None = None
 
     def snapshot(self):
@@ -293,8 +293,8 @@ class Branch:
     def require_grants(self, references):
         """Refuse results that come through a connection the branch's project is not granted.
 
-        On the conversation's own branch the refusal ends the turn, as a lost permission does.
-        Elsewhere the tool call reports it and the turn continues.
+        On the open branch the refusal ends the turn, as a lost permission does. Elsewhere the
+        tool call reports it and the turn continues.
         """
         try:
             self.deps.services.engine.access.connections(self.project, references)
@@ -314,7 +314,7 @@ def reading(ctx, worktree=""):
 
 
 def recorded_reads(turns):
-    """What the tool calls of a conversation's turns read outside its branch, each once."""
+    """What the tool calls of a conversation's turns read, each once."""
     reads = {}
     for turn in turns:
         for card in turn.get("tools", []):

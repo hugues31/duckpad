@@ -167,14 +167,17 @@ in the first configured environment on a page that selects none.
 Changes and runs stay on the open branch. From another page or about another
 project, the assistant asks you to open the branch first.
 
-A conversation that has read the content of another project, or connection
-details, no longer edits: the assistant says so and asks you to start a new
-conversation for the change. Project content is not trusted as instructions,
-but a model can be misled by text planted in what it reads; this rule keeps
-such text from having another project's content, or connection settings,
-written into a branch whose members could not otherwise read them. Reading
-another branch of the same project, or the names of projects and connections,
-does not end editing, and runs keep their confirmation.
+Once a conversation has read the content of another project, or connection
+details, each edit waits for your confirmation: its card shows every file
+change in full, with **Apply change** and **Decline**. Project content is not
+trusted as instructions, but a model can be misled by text planted in what it
+reads; the confirmation lets you check that no content of another project, or
+connection setting, is written into a branch whose members could not otherwise
+read it. Nothing is saved before you answer. If the branch changed meanwhile in
+a way that alters the change, nothing is saved either: ask for it again. A
+change too large to show in full is refused, so the assistant makes it in
+smaller steps. Reading another branch of the same project, or the names of
+projects and connections, needs no confirmation.
 
 ## Request a change
 
@@ -219,8 +222,8 @@ normal conflict dialog, and no conflicting content is overwritten. A batch
 undo stops at the first conflict; resolve it, then undo the remaining actions.
 Choosing to keep the current version leaves that action available to undo again.
 
-Undo remains available when you resume a conversation, as long as its original
-branch exists and you still have editing rights. Stopping a response or a
+Undo remains available when you resume a conversation, while the branch of the
+change is open and you still have editing rights. Stopping a response or a
 provider failure does not roll back actions already saved; their cards still
 offer Undo. Deleting the conversation removes its cards, but does not delete
 its commits or undo its changes.
@@ -277,23 +280,26 @@ list hides the buttons. These settings are not stored in project Git files.
 ## Conversations
 
 **Maximize assistant** opens a larger view with your conversations on the left,
-ordered by recent activity. Select one to reopen its original branch and resume.
+ordered by recent activity. Select one to resume it on the page you are on.
 The first message names a conversation unless you renamed it first.
 
+A conversation is not tied to a project or a branch: it follows you from page
+to page. Each message carries the page it is sent from, which tells the
+assistant what “this node” or “this project” means and which branch it may
+change. The changes of a turn belong to the branch its message was sent from:
+open that branch to undo or compare them, or to confirm a run or an edit the
+turn is waiting for. From another page, the turn names that branch and a
+pending request can only be declined.
+
 Conversations are private to their author, including against other instance
-administrators. Sending
-a message after navigating to another project or branch starts a new
-conversation. A conversation continues while the project files have errors, so
-you can ask for help fixing them. Losing project access prevents further
-project-reading turns. The same holds for what a conversation read elsewhere:
-once you lose access to another project whose content it read, the connection
-grant behind results it read there, or the instance administrator role after it
-read connection details, it cannot continue, so that content does not return to
-a provider; start a new conversation. Names of projects, branches and
-connections are not rechecked.
-Deleting the author or the project removes its conversations from SQLite. A
-conversation opened elsewhere keeps the answers it gave about a deleted project
-but cannot continue.
+administrators. A conversation continues while the project files have errors,
+so you can ask for help fixing them. It cannot continue once you lose access to
+a project whose content it read, the connection grant behind results it read,
+or the instance administrator role after it read connection details: that
+content does not return to a provider; start a new conversation. Names of
+projects, branches and connections are not rechecked.
+Deleting the author removes their conversations from SQLite. A conversation
+keeps the answers it gave about a deleted project but cannot continue.
 
 ## Control what leaves the instance
 

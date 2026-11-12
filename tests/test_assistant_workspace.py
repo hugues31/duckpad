@@ -32,15 +32,10 @@ from duckpad.util import Problem
 SETTINGS = {"page": "instanceSettings", "section": "connections"}
 
 
-def scripted(*calls, offered=None):
-    """A model that makes the given tool calls, one per request, then answers.
-
-    `offered` receives the names of the tools of each request.
-    """
+def scripted(*calls):
+    """A model that makes the given tool calls, one per request, then answers."""
 
     async def stream(messages, info):
-        if offered is not None:
-            offered.append({tool.name for tool in info.function_tools})
         answered = 0
         for message in reversed(messages):
             if any(isinstance(part, UserPromptPart) for part in message.parts):
@@ -243,13 +238,12 @@ def test_values_of_another_project_follow_its_grants_and_its_runs(instance):
     assert wait_for_run(ctx, run["id"], 0)["status"] == "success"
     assert compare_run(ctx, run["id"]) == {"run": run["id"], "previous": None}
     assert "origin" in json.dumps(read_run_sql(ctx, run["id"], "source"))
+    # Results, unlike definitions, are rechecked against the branch's grants on later turns.
     read = ctx.deps.reads["call"][sales["id"]]
-    assert read["project_name"] == "Sales" and "results" not in read
+    assert read["project_name"] == "Sales" and read["results"] is True
     preview = preview_output(ctx, "source", worktree=sales["id"])
     assert preview["rows"][0]["values"] == ["Sales"]
     assert read_schemas(ctx, "source", worktree=sales["id"])["items"][0]["columns"][0]["name"] == "origin"
-    # Results, unlike definitions, are rechecked against the branch's grants on later turns.
-    assert read["results"] is True
     # Cancelling is a change: it stays on the open branch.
     with pytest.raises(Problem, match="Only a run of the open branch can be cancelled"):
         cancel_run(ctx, run["id"])
@@ -279,7 +273,7 @@ def test_a_conversation_stops_once_its_author_loses_what_it_read(instance):
     app, admin = instance
     configure(admin)
     files_connection(app.state.services.catalog)
-    sales, _ = project(app, admin, "Sales", ["files"])
+    sales, opened = project(app, admin, "Sales", ["files"])
     feature = admin.post(f"/api/worktrees/{sales['id']}/branches", json={"name": "feature"}).json()
     page = {"page": "projects"}
     access, assistant = app.state.access, app.state.assistant
@@ -294,19 +288,29 @@ def test_a_conversation_stops_once_its_author_loses_what_it_read(instance):
         assert turn(client, identity, page)[-1]["turn"]["status"] == "complete"
         return identity
 
-    with member(app, "analyst", sales["project"]) as (user, analyst):
+    run = app.state.services.engine.launch(sales["id"], "dev")
+    assert join_run(app.state.services.store, run["id"])["status"] == "success"
+    with member(app, "analyst", sales["project"], role="editor") as (user, analyst):
         definitions = asked(analyst, ("read_flow", {"section": "nodes", "worktree": sales["id"]}))
         results = asked(analyst, ("read_schemas", {"worktree": sales["id"]}))
+        inspected = asked(analyst, ("inspect_run", {"run": run["id"]}))
         removed = asked(analyst, ("read_flow", {"section": "nodes", "worktree": feature["id"]}))
+        # An edit is a read too: its result holds diffs and diagnostics of its branch.
+        entry = {"section": "project", "text": "Edited by the analyst"}
+        assistant.configuration.model_override = scripted(("write_documentation", {"entry": entry}))
+        edited = conversation(analyst)
+        assert turn(analyst, edited, opened)[-1]["turn"]["tools"][0]["action"]["status"] == "applied"
         # A revoked connection grant withholds the results read under it, never the definitions.
+        # A run that retention removed since is still a result of its branch.
+        app.state.services.store.delete("run", run["id"])
         access.grant_connections(sales["project"], [])
         assert turn(analyst, definitions, page)[-1]["turn"]["status"] == "complete"
-        assert lost(analyst, results)
+        assert lost(analyst, results) and lost(analyst, inspected)
         access.grant_connections(sales["project"], ["files"])
         assert turn(analyst, results, page)[-1]["turn"]["status"] == "complete"
         # Lost membership of the project it read.
         access.member(sales["project"], user["id"], None)
-        assert lost(analyst, definitions) and lost(analyst, results)
+        assert lost(analyst, definitions) and lost(analyst, results) and lost(analyst, edited)
         access.member(sales["project"], user["id"], "reader")
         assert turn(analyst, definitions, page)[-1]["turn"]["status"] == "complete"
         # A branch deleted since never blocks the conversation while its project stays open.
@@ -349,51 +353,183 @@ def test_a_stopped_call_still_records_what_it_read(instance, monkeypatch):
         assert response.status_code == 409 and response.json()["error"] == LOST_ACCESS
 
 
-def test_a_conversation_that_read_outside_its_project_no_longer_edits(instance):
+def decide(client, identity, pending, approved):
+    """Answer the confirmation a turn waits for; return the turn once its response has ended."""
+    card = next(card for card in pending["tools"] if card["status"] == "awaiting_approval")
+    response = client.post(
+        f"/api/assistant/conversations/{identity}/approvals",
+        json={"turn": pending["id"], "tool": card["id"], "approved": approved},
+    )
+    assert response.status_code == 200, response.text
+    return [json.loads(line) for line in response.text.splitlines()][-1]["turn"]
+
+
+def test_an_edit_after_a_read_elsewhere_waits_for_its_confirmation(instance):
     app, client = instance
     configure(client)
     projects = app.state.services.projects
     mine, context = project(app, client, "Mine")
-    sales, _ = project(app, client, "Sales")
+    sales, elsewhere = project(app, client, "Sales")
     feature = client.post(f"/api/worktrees/{mine['id']}/branches", json={"name": "feature"}).json()
-    texts = iter(range(10))
-    editing = {name for name, spec in TOOLS.items() if spec.needs == "edit"}
+    versions = iter(range(20))
 
-    def ask(*reads):
-        """A turn that reads, then writes the project documentation."""
-        offered = []
-        entry = {"section": "project", "text": f"Version {next(texts)}"}
+    def readme():
+        return projects.snapshot(mine["id"])["files"]["README.md"]
+
+    def ask(*reads, identity=None, size=1):
+        """A turn sent from the branch of Mine that reads, then writes its documentation."""
+        text = f"Version {next(versions)}\n" * size
+        entry = {"section": "project", "text": text}
         calls = (*reads, ("write_documentation", {"entry": entry}))
-        app.state.assistant.configuration.model_override = scripted(*calls, offered=offered)
-        identity = conversation(client, context)
-        return identity, turn(client, identity, context)[-1]["turn"], offered
+        app.state.assistant.configuration.model_override = scripted(*calls)
+        identity = identity or conversation(client)
+        return identity, turn(client, identity, context)[-1]["turn"], text
 
-    # Another branch of the same project is open to the same members: edits continue.
-    before = projects.snapshot(mine["id"])["commit"]
-    _, result, offered = ask(("read_flow", {"section": "nodes", "worktree": feature["id"]}))
-    assert result["tools"][1]["action"]["commit"] != before and editing <= offered[-1]
-    # So do names of projects and connections.
-    _, result, _ = ask(("list_projects", {}), ("read_connections", {}))
-    assert result["tools"][2]["action"]["status"] == "applied"
-    # Content of another project, or connection settings, ends the edits of the turn that read them.
-    for outside in (
-        ("read_flow", {"section": "nodes", "worktree": sales["id"]}),
-        ("read_connections", {"details": True}),
-    ):
-        before = projects.snapshot(mine["id"])["commit"]
-        identity, result, offered = ask(outside)
-        refused = result["tools"][1]
-        assert refused["status"] == "error" and "no longer edits" in refused["summary"]
-        assert "action" not in refused and projects.snapshot(mine["id"])["commit"] == before
-        assert editing <= offered[0]
-        # Later turns are not offered editing tools; runs keep their approval.
-        offered.clear()
-        assert turn(client, identity, context)[-1]["turn"]["status"] == "complete"
-        assert offered[0].isdisjoint(editing) and {"launch_run", "read_flow"} <= offered[0]
+    foreign = ("read_flow", {"section": "nodes", "worktree": sales["id"]})
+    # Another branch of the same project is open to the same members, and names tell nothing.
+    same = ("read_flow", {"section": "nodes", "worktree": feature["id"]})
+    _, result, text = ask(same, ("list_projects", {}), ("read_connections", {}))
+    assert result["status"] == "complete" and result["tools"][-1]["action"]["status"] == "applied"
+    assert readme() == text
+    # After content of another project, or connection settings, the edit shows its exact changes
+    # and waits; nothing is saved meanwhile.
+    for outside in (foreign, ("read_connections", {"details": True})):
+        before = readme()
+        identity, pending, text = ask(outside)
+        approval = pending["tools"][-1]["approval"]
+        assert pending["status"] == "awaiting_approval" and "action" not in pending["tools"][-1]
+        assert (approval["kind"], approval["decision"]) == ("edit", None)
+        assert [d["path"] for d in approval["diffs"]] == ["README.md"]
+        assert f"+{text}" in approval["diffs"][0]["diff"]
+        assert readme() == before
+        assert message(client, identity, context).status_code == 409
+        applied = decide(client, identity, pending, True)
+        assert applied["status"] == "complete" and applied["tools"][-1]["action"]["status"] == "applied"
+        assert readme() == text
+    # An edit too large to be shown in full is not offered for confirmation.
+    before = readme()
+    _, result, _ = ask(foreign, size=5000)
+    assert result["status"] == "complete" and "too large to confirm" in result["tools"][-1]["summary"]
+    assert readme() == before
+    # A declined edit saves nothing, and the conversation continues.
+    before = readme()
+    identity, pending, _ = ask(foreign)
+    declined = decide(client, identity, pending, False)
+    assert declined["status"] == "complete" and declined["tools"][-1]["approval"]["decision"] is False
+    assert readme() == before and "action" not in declined["tools"][-1]
+    # Every later edit of that conversation waits too.
+    _, pending, _ = ask(identity=identity)
+    assert pending["status"] == "awaiting_approval"
+    # A branch that changed since the confirmation gets another change than the confirmed one:
+    # nothing is saved, and the change must be asked again.
+    identity, pending, text = ask(foreign)
+    snapshot = projects.snapshot(mine["id"])
+    projects.write(mine["id"], snapshot["revision"], {**snapshot["files"], "README.md": "Edited meanwhile"})
+    refused = decide(client, identity, pending, True)
+    assert (
+        refused["tools"][-1]["status"] == "error"
+        and "differs from the confirmed" in refused["tools"][-1]["summary"]
+    )
+    assert readme() == "Edited meanwhile"
+    # The page a message is sent from decides: what an earlier turn read on the branch of Sales
+    # is content of another project once the conversation edits Mine.
+    app.state.assistant.configuration.model_override = scripted(("read_flow", {"section": "nodes"}))
+    moved = conversation(client)
+    assert turn(client, moved, elsewhere)[-1]["turn"]["status"] == "complete"
+    _, pending, _ = ask(identity=moved)
+    assert pending["status"] == "awaiting_approval"
+    stayed = conversation(client)
+    assert turn(client, stayed, context)[-1]["turn"]["status"] == "complete"
+    _, result, _ = ask(identity=stayed)
+    assert result["status"] == "complete"
+    # An edit of Sales is a read of Sales: its result holds diffs of that branch.
+    entry = {"section": "project", "text": "Sales documentation"}
+    app.state.assistant.configuration.model_override = scripted(("write_documentation", {"entry": entry}))
+    edited = conversation(client)
+    assert turn(client, edited, elsewhere)[-1]["turn"]["tools"][0]["action"]["status"] == "applied"
+    _, pending, _ = ask(identity=edited)
+    assert pending["status"] == "awaiting_approval"
+
+
+def test_reads_survive_reused_call_ids_and_conversations_started_on_a_branch(instance):
+    app, client = instance
+    configure(client)
+    store = app.state.services.store
+    _, context = project(app, client, "Mine")
+    sales, elsewhere = project(app, client, "Sales")
+    entry = {"section": "project", "text": "After the pause"}
+    steps = [
+        ("read_flow", {"section": "nodes", "worktree": sales["id"]}, "same"),
+        ("write_documentation", {"entry": entry}, "edit"),
+        # After the confirmation, the provider reuses the ID of the first call.
+        ("read_flow", {"section": "nodes"}, "same"),
+    ]
+
+    async def reusing(messages, info):
+        answered = sum(isinstance(p, ToolReturnPart) for m in messages for p in m.parts)
+        if answered < len(steps):
+            name, arguments, call = steps[answered]
+            yield {0: DeltaToolCall(name=name, json_args=json.dumps(arguments), tool_call_id=call)}
+        else:
+            yield "Done."
+
+    app.state.assistant.configuration.model_override = FunctionModel(stream_function=reusing)
+    identity = conversation(client)
+    pending = turn(client, identity, context)[-1]["turn"]
+    resumed = decide(client, identity, pending, True)
+    assert resumed["status"] == "complete", resumed
+    read = next(card for card in resumed["tools"] if card["id"] == "same")
+    assert {r["project_name"] for r in read["reads"]} == {"Sales", "Mine"}
+    # A conversation started while tied to a branch recorded no read: it read that branch.
+    app.state.assistant.configuration.model_override = scripted(("read_flow", {"section": "nodes"}))
+    bound = conversation(client)
+    assert turn(client, bound, elsewhere)[-1]["turn"]["status"] == "complete"
+    record = store.get("assistant_conversation", bound)
+    for card in record["turns"][0]["tools"]:
+        card.pop("reads")
+    record.update(project=sales["project"], worktree=sales["id"], branch="main")
+    store.put("assistant_conversation", bound, record)
+    entry = {"section": "project", "text": "From an earlier conversation"}
+    app.state.assistant.configuration.model_override = scripted(("write_documentation", {"entry": entry}))
+    assert turn(client, bound, context)[-1]["turn"]["status"] == "awaiting_approval"
+    assert {"project", "worktree", "branch"}.isdisjoint(
+        client.get(f"/api/assistant/conversations/{bound}").json()
+    )
+
+
+def test_a_conversation_follows_its_author_and_undoes_on_the_branch_it_edited(instance):
+    app, client = instance
+    configure(client)
+    projects = app.state.services.projects
+    mine, context = project(app, client, "Mine")
+    _, elsewhere = project(app, client, "Sales")
+    entry = {"section": "project", "text": "Written by the assistant"}
+    app.state.assistant.configuration.model_override = scripted(("write_documentation", {"entry": entry}))
+    identity = conversation(client)
+    edited = turn(client, identity, context)[-1]["turn"]
+    assert edited["tools"][0]["action"]["status"] == "applied"
+    # The same conversation continues from other pages.
+    app.state.assistant.configuration.model_override = scripted()
+    for page in (elsewhere, {"page": "instanceSettings", "section": "connections"}):
+        assert turn(client, identity, page)[-1]["turn"]["status"] == "complete"
+
+    def undo(page):
+        return client.post(
+            f"/api/assistant/conversations/{identity}/undo",
+            json={"turn": edited["id"], "action": "", "context": page},
+        )
+
+    # A change is undone from the branch it was made on.
+    for page in (elsewhere, {"page": "projects"}):
+        response = undo(page)
+        assert response.status_code == 409 and "Open the branch of this change" in response.text
+    assert projects.snapshot(mine["id"])["files"]["README.md"] == entry["text"]
+    assert undo(context).status_code == 200
+    assert projects.snapshot(mine["id"])["files"]["README.md"] != entry["text"]
 
 
 def test_only_the_open_branch_is_edited_or_run():
-    writing = {name for name, spec in TOOLS.items() if spec.needs in ("run", "edit")}
+    writing = {name for name, spec in TOOLS.items() if spec.needs == "write"}
     assert writing == {
         "edit_flow",
         "write_sql",
