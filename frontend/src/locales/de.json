@@ -93,7 +93,7 @@
   "duplicateNode": "Knoten duplizieren",
   "newTemplate": "Neue SQL-Vorlage",
   "addToPalette": "Zur Palette hinzufügen",
-  "paletteImport": "Importieren",
+  "paletteImport": "Import",
   "newTemplateHint": "Bearbeiten Sie den Code, um der Palette eine wiederverwendbare SQL-Vorlage hinzuzufügen. Klicken oder ziehen Sie sie dann auf die Arbeitsfläche, um Knoten zu erstellen.",
   "python": "Python",
   "newPythonTemplate": "Neue Python-Vorlage",
