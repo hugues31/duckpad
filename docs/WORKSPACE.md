@@ -40,6 +40,13 @@ view. **Auto-arrange nodes** places dependencies in columns, orders each column 
 avoid crossing links, and lines up linked sockets. Drag a port onto empty space to
 add a compatible connected node.
 
+Connections must form an acyclic graph: a node cannot read its own output or
+the output of one of its descendants. The canvas refuses these connections,
+and the inspector excludes them from the available inputs, including inside
+components. Cycles introduced through project files are reported as validation
+errors; affected nodes cannot run until the cycle is removed. Duckpad does not
+execute feedback loops or iterate a graph until a result converges.
+
 Press **Escape** to clear the selection and close its inspector and results.
 Selecting a node opens both panels again. An open dialog, menu or list of
 suggestions takes Escape first, and the code editor keeps it for itself.

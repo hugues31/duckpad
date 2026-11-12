@@ -348,6 +348,50 @@ describe("containsPython", () => {
 });
 
 describe("connectInput", () => {
+  it.each(["first", "second", "third"])(
+    "refuses %s feeding first without replacing its existing input",
+    (source) => {
+      const graph: Graph = {
+        nodes: [],
+        edges: [
+          edge("source", "first"),
+          edge("first", "second"),
+          edge("second", "third"),
+          edge("source", "independent"),
+        ],
+      };
+      const before = structuredClone(graph);
+      expect(connectInput(graph, edge(source, "first"))).toBe(false);
+      expect(graph).toEqual(before);
+    },
+  );
+
+  it("allows fan-out and reconverging branches without mistaking them for a cycle", () => {
+    const graph: Graph = {
+      nodes: [],
+      edges: [
+        edge("source", "left"),
+        edge("source", "right"),
+        edge("left", "join", "left"),
+      ],
+    };
+    expect(connectInput(graph, edge("right", "join", "right"))).toBe(true);
+    expect(graph.edges).toHaveLength(4);
+  });
+
+  it("can repair a graph imported with a cycle and still rejects cyclic connections", () => {
+    const graph: Graph = {
+      nodes: [],
+      edges: [edge("first", "second"), edge("second", "first")],
+    };
+    expect(connectInput(graph, edge("second", "first"))).toBe(false);
+    expect(connectInput(graph, edge("source", "first"))).toBe(true);
+    expect(graph.edges).toEqual([
+      edge("first", "second"),
+      expect.objectContaining({ source: "source", target: "first" }),
+    ]);
+  });
+
   it("adds the edge with a generated identifier", () => {
     const graph: Graph = { nodes: [], edges: [] };
     connectInput(graph, {

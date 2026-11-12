@@ -1,4 +1,4 @@
-import { nodeInterface } from "./graph";
+import { downstreamNodes, nodeInterface } from "./graph";
 import { nodeLabel, useT } from "./i18n";
 import Select from "./Select";
 import type { FlowEdge, FlowNode, ParsedTemplate, Snapshot } from "./types";
@@ -20,6 +20,7 @@ export default function InputSelectors({
   onInput: (port: string, source: string) => void;
 }) {
   const t = useT();
+  const excluded = downstreamNodes(graphEdges, node.id);
   return (
     <>
       {!!inputs.length && (
@@ -39,7 +40,7 @@ export default function InputSelectors({
                 >
                   <option value="">{t("notConnected")}</option>
                   {graphNodes
-                    .filter((n) => n.id !== node.id)
+                    .filter((n) => !excluded.has(n.id) || n.id === edge?.source)
                     .flatMap((n) => {
                       const source = nodeInterface(
                         n,
@@ -48,7 +49,11 @@ export default function InputSelectors({
                         local,
                       );
                       return source.outputs.map((p) => (
-                        <option key={n.id + ":" + p} value={n.id + ":" + p}>
+                        <option
+                          key={n.id + ":" + p}
+                          value={n.id + ":" + p}
+                          disabled={excluded.has(n.id)}
+                        >
                           {nodeLabel(n, source, t)} · {p}
                         </option>
                       ));

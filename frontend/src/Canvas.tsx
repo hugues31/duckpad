@@ -38,7 +38,7 @@ import { NODE_SHAPE_CENTER, PipelineNode } from "./CanvasNode";
 import { showMinimap } from "./canvasResults";
 import type { CanvasProps, FocusRequest } from "./canvasTypes";
 import ConnectionPalette from "./ConnectionPalette";
-import { DRAG_TYPE, type NodeConnection } from "./graph";
+import { downstreamNodes, DRAG_TYPE, type NodeConnection } from "./graph";
 import { findNodePosition, layoutNodes } from "./graphLayout";
 import { useT } from "./i18n";
 import { SearchField } from "./Search";
@@ -421,6 +421,11 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
             trigger: event.currentTarget as HTMLElement,
           });
         }}
+        isValidConnection={(connection) =>
+          !downstreamNodes(props.edges, connection.target).has(
+            connection.source,
+          )
+        }
         onConnect={
           props.readOnly
             ? undefined

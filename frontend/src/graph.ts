@@ -231,10 +231,31 @@ export function nodeChoices(
   ];
 }
 
-/** Connect an input, replacing its previous source: an input has one source. */
+/** The node and all its descendants, none of which can feed one of its inputs. */
+export function downstreamNodes(edges: FlowEdge[], node: string): Set<string> {
+  const outgoing = new Map<string, string[]>();
+  for (const edge of edges) {
+    const targets = outgoing.get(edge.source) ?? [];
+    targets.push(edge.target);
+    outgoing.set(edge.source, targets);
+  }
+  const visited = new Set<string>();
+  const pending = [node];
+  while (pending.length) {
+    const current = pending.pop()!;
+    if (visited.has(current)) continue;
+    visited.add(current);
+    for (const target of outgoing.get(current) ?? []) pending.push(target);
+  }
+  return visited;
+}
+
+/** Connect an input, replacing its previous source, unless it would create a cycle. */
 export function connectInput(graph: Graph, edge: Omit<FlowEdge, "id">) {
+  if (downstreamNodes(graph.edges, edge.target).has(edge.source)) return false;
   graph.edges = graph.edges.filter(
     (e) => !(e.target === edge.target && e.targetHandle === edge.targetHandle),
   );
   graph.edges.push({ ...edge, id: identifier("edge") });
+  return true;
 }
