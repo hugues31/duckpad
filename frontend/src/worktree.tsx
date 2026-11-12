@@ -63,8 +63,9 @@ export interface Worktree {
   starting: boolean;
   /** Diagnostics revealed by the latest rejected run, scoped to this branch. */
   runDiagnostics: Diagnostic[];
-  /** A run launched here that failed before producing any node result. */
+  /** A run launched here that failed as a whole, with no node result to show its error. */
   runFailure: Run | null;
+  dismissRunFailure(): void;
   /** Changes after Git operations, so Git indicators reload. */
   gitVersion: number;
   /** Reload the snapshot after a change; a failed read is left to polling. */
@@ -174,7 +175,6 @@ export function WorktreeProvider({
   // Undos and redos run one after another, each on the history the last one left.
   const reverts = useRef<Promise<unknown>>(Promise.resolve());
   const [starting, setStarting] = useState(false);
-  const { runFailure, trackRun } = useRunFailure(id, environment);
   const launching = useRef(false);
   const [gitVersion, setGitVersion] = useState(0);
   const {
@@ -191,6 +191,11 @@ export function WorktreeProvider({
       return refreshWorkspace();
     },
   });
+  const { runFailure, trackRun } = useRunFailure(
+    id,
+    environment,
+    statuses.active,
+  );
   // Once connected, an input is only reported again by the next refused run.
   const unresolved = snapshot
     ? validation.diagnostics.filter((item) =>
@@ -477,6 +482,7 @@ export function WorktreeProvider({
       loadError,
       runDiagnostics: validation.worktree === id ? validation.diagnostics : [],
       runFailure,
+      dismissRunFailure: () => trackRun(null),
       canEdit,
       saving: saves > 0,
       starting,

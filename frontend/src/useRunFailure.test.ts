@@ -33,11 +33,13 @@ const advance = (ms = 0) =>
   act(async () => {
     await vi.advanceTimersByTimeAsync(ms);
   });
-const watch = () =>
+/** `active` is the run the status poll reports for the branch. */
+const watch = (active: Run | null = null) =>
   renderHook(
-    ({ worktree, environment }) => useRunFailure(worktree, environment),
+    ({ worktree, environment, active }) =>
+      useRunFailure(worktree, environment, active),
     {
-      initialProps: { worktree: "main", environment: "dev" },
+      initialProps: { worktree: "main", environment: "dev", active },
     },
   );
 
@@ -48,13 +50,15 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it("retains a failure that finishes before the first poll and stops fetching", async () => {
+it("reads the outcome once, after the run left the status poll", async () => {
   const fetch = vi.fn(async () => json(failed));
   vi.stubGlobal("fetch", fetch);
-  const { result } = watch();
-  await advance();
-  expect(fetch).not.toHaveBeenCalled();
+  const { result, rerender } = watch(launched);
   act(() => result.current.trackRun(launched));
+  await advance(10000);
+  expect(fetch).not.toHaveBeenCalled();
+  expect(result.current.runFailure).toBeNull();
+  rerender({ worktree: "main", environment: "dev", active: null });
   await advance();
   expect(result.current.runFailure).toEqual(failed);
   await advance(10000);
@@ -86,11 +90,11 @@ it("scopes failures to the branch and environment and clears them for a retry", 
   act(() => result.current.trackRun(failed));
   expect(result.current.runFailure).toEqual(failed);
   await advance();
-  rerender({ worktree: "other", environment: "dev" });
+  rerender({ worktree: "other", environment: "dev", active: null });
   expect(result.current.runFailure).toBeNull();
-  rerender({ worktree: "main", environment: "prod" });
+  rerender({ worktree: "main", environment: "prod", active: null });
   expect(result.current.runFailure).toBeNull();
-  rerender({ worktree: "main", environment: "dev" });
+  rerender({ worktree: "main", environment: "dev", active: null });
   expect(result.current.runFailure).toEqual(failed);
   act(() => result.current.trackRun(null));
   expect(result.current.runFailure).toBeNull();
@@ -119,6 +123,23 @@ it("ignores a late response from a previous run after a successful retry", async
   await advance();
   await act(async () => finish(json(failed)));
   expect(result.current.runFailure).toBeNull();
+});
+
+it("reports a failure that left every node blocked without an error", async () => {
+  // The engine stopped mid-run: no node result explains it.
+  const interrupted = {
+    ...failed,
+    error: "Worker connection lost",
+    nodes: { query: { status: "blocked" } },
+  };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => json(interrupted)),
+  );
+  const { result } = watch();
+  act(() => result.current.trackRun(launched));
+  await advance();
+  expect(result.current.runFailure).toEqual(interrupted);
 });
 
 it.each([

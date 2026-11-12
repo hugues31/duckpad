@@ -124,11 +124,16 @@ test("a missing extension shows the run failure on Flow with settings and histor
     await page.getByRole("button", { name: "Run all", exact: true }).click();
     return (await response).json();
   };
-  const run = await launch();
+  await launch();
   const notice = page.locator(".run-failure-notice");
   // No node selection or history navigation is needed to discover the failure.
   await expect(notice).toBeVisible();
   await expect(notice).toContainText("Cannot initialize execution worker");
+  await expect(notice).toContainText("Import delta from core");
+  // The notice floats over the graph: it can be put away, and the next failure shows again.
+  await notice.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(notice).toHaveCount(0);
+  const run = await launch();
   await expect(notice).toContainText("Import delta from core");
   const outcome: Run = await (
     await page.request.get(`/api/runs/${run.id}`)

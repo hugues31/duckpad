@@ -618,6 +618,10 @@
   overflow: auto;
   background: var(--surface);
 }
+/* The notice floats over the graph, so it can be put away. */
+.run-failure-notice .icon {
+  margin: -6px -6px -6px auto;
+}
 .nested-flow .run-failure-notice,
 .flow-layout:has(.branch-results-notice) .run-failure-notice {
   top: calc(var(--stage-top) + 90px);

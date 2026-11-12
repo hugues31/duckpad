@@ -126,7 +126,10 @@ describe("extension catalog", () => {
     );
   });
 });
-import { missingFunctionExtension } from "./extensions";
+import {
+  missingFunctionExtension,
+  projectExtensionsFailed,
+} from "./extensions";
 
 it("offers extension setup for missing functions without guessing an extension", () => {
   expect(
@@ -147,4 +150,15 @@ it("offers extension setup for missing functions without guessing an extension",
     missingFunctionExtension("Table with name functions does not exist!"),
   ).toBeNull();
   expect(missingFunctionExtension("Syntax error near SELECT")).toBeNull();
+});
+
+it("recognizes a worker that could not start with the project's extensions", () => {
+  expect(
+    projectExtensionsFailed(
+      "Cannot initialize execution worker: Import delta from core in Instance settings → Extensions. An instance administrator must install a compatible binary first. Project extensions: delta. Check their binaries, server CPU and native dependencies in Instance settings → Extensions.",
+    ),
+  ).toBe(true);
+  expect(projectExtensionsFailed("Resolve conflicts before running prod")).toBe(
+    false,
+  );
 });
