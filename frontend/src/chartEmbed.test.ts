@@ -131,6 +131,7 @@ it.each([
   ["en", ".", ",", "%-m/%-d/%Y"],
   ["fr", ",", " ", "%d/%m/%Y"],
   ["pt", ",", ".", "%d/%m/%Y"],
+  ["de", ",", ".", "%d.%m.%Y"],
 ] as const)(
   "formats numbers and dates in the %s interface language",
   (language, decimal, thousands, date) => {

@@ -371,6 +371,17 @@ test("file nodes offer granted storage connections as locations, custom types in
       "Landing",
       "Finance share",
     ]);
+    // A Delta table is a folder, which no upload holds: its path is typed.
+    await page.getByRole("button", { name: "Load Delta", exact: true }).click();
+    const inspector = page.locator(".inspector");
+    await expect(
+      inspector.getByRole("textbox", { name: /^table/ }),
+    ).toBeVisible();
+    await expect(inspector.getByText(/path of the table folder/)).toBeVisible();
+    await expect(location.locator("option")).toHaveCount(3);
+    await expect(
+      inspector.getByLabel("Upload file", { exact: true }),
+    ).toHaveCount(0);
   } finally {
     await page.request.delete(`/api/projects/${worktree.project}`);
     for (const { id } of connections)

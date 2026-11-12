@@ -85,14 +85,16 @@ export async function verifyAssistantRuns(page: Page) {
     .fill("Run approval example");
   await chat.getByRole("button", { name: "Save changes", exact: true }).click();
   await expect(
-    chat.getByRole("button", { name: "Run approval example main" }),
+    chat.getByRole("button", { name: "Run approval example", exact: true }),
   ).toBeVisible();
   await page.reload();
   await open();
   await chat
     .getByRole("button", { name: "Maximize assistant", exact: true })
     .click();
-  await chat.getByRole("button", { name: "Run approval example main" }).click();
+  await chat
+    .getByRole("button", { name: "Run approval example", exact: true })
+    .click();
   await chat
     .getByRole("button", { name: "Confirm and run", exact: true })
     .click();

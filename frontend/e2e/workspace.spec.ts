@@ -1,5 +1,5 @@
 import fr from "../src/locales/fr.json" with { type: "json" };
-import { signIn } from "./helpers";
+import { createFilterProject, signIn } from "./helpers";
 import { test, expect, type Page } from "@playwright/test";
 
 async function choosePreference(page: Page, name: string) {
@@ -649,6 +649,70 @@ test("selected and pointed nodes show their flow, with filled connected sockets 
   );
   expect(incoming).toHaveLength(1);
   expect(incoming[0].source).toBe(await customers.getAttribute("data-id"));
+});
+
+test("a component is a hexagon: its sockets sit on the outline and the corners of its box stay with the canvas", async ({
+  page,
+}) => {
+  const ports = ["a", "b", "c", "d", "e", "f"];
+  await createFilterProject(page, (bundle) => {
+    // Six ports a side reach the straight sides, the rounded corners and the slanted sides.
+    const [rows, , output] = bundle.flow.nodes;
+    bundle.components.six = {
+      name: "Six",
+      nodes: ports.map((port) => ({ ...output, id: port })),
+      edges: [],
+      inputs: Object.fromEntries(
+        ports.map((port) => [`in_${port}`, { node: port, port: "source" }]),
+      ),
+      outputs: Object.fromEntries(
+        ports.map((port) => [`out_${port}`, { node: port, port: "result" }]),
+      ),
+    };
+    bundle.flow.nodes[0] = {
+      id: "rows",
+      component: "six",
+      params: {},
+      position: rows.position,
+    };
+    bundle.flow.edges[0].sourceHandle = "out_a";
+  });
+  const measured = await page
+    .locator('.react-flow__node[data-id="rows"]')
+    .evaluate((node) => {
+      const box = node.querySelector(".node-shape")!.getBoundingClientRect();
+      const scale = box.width / 96;
+      const outline = node.querySelector<SVGPathElement>(".node-hexagon-body")!;
+      const length = outline.getTotalLength();
+      const points = Array.from({ length: 2000 }, (_, index) =>
+        outline.getPointAtLength((length * index) / 2000),
+      );
+      const offsets = [...node.querySelectorAll(".react-flow__handle")].map(
+        (handle) => {
+          const rect = handle.getBoundingClientRect();
+          const x = (rect.x + rect.width / 2 - box.x) / scale;
+          const y = (rect.y + rect.height / 2 - box.y) / scale;
+          return Math.min(
+            ...points.map((point) => Math.hypot(point.x - x, point.y - y)),
+          );
+        },
+      );
+      const owned = (x: number, y: number) =>
+        document
+          .elementFromPoint(box.x + x * scale, box.y + y * scale)
+          ?.closest(".react-flow__node") === node;
+      return {
+        offsets,
+        center: owned(48, 48),
+        edge: owned(48, 3),
+        corners: [owned(4, 4), owned(92, 4), owned(4, 92), owned(92, 92)],
+      };
+    });
+  expect(measured.offsets).toHaveLength(12);
+  expect(Math.max(...measured.offsets)).toBeLessThan(0.5);
+  expect(measured.center).toBe(true);
+  expect(measured.edge).toBe(true);
+  expect(measured.corners).toEqual([false, false, false, false]);
 });
 
 test("documentation waits for its refreshed revision and preserves edits during a slow save", async ({

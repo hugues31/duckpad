@@ -172,7 +172,7 @@ while you type in a field or editor, or while a dialog is open.
 Use the account menu for **User settings**. Its sections separate **Preferences**
 (language, theme and link style), **Password**, **SSH key for Git** and **API tokens**.
 Each section has its own URL for bookmarks and supports browser back and forward.
-Duckpad supports English, French and Portuguese, with light and dark themes.
+Duckpad supports English, French, Portuguese and German, with light and dark themes.
 **Node links** are curved by default; **Right angles** draws them with vertical
 segments, and links from different outputs never share one.
 Preferences do not change project files. Available actions depend on your

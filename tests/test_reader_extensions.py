@@ -30,6 +30,19 @@ def test_saving_an_xlsx_source_enables_excel_and_preserves_other_requirements(se
     assert added["bundle"]["extensions"]["excel"]["enabled"]
 
 
+def test_a_new_delta_reader_enables_delta_beside_excel():
+    nodes = [{"id": "lake", "template": "load_delta"}, {"id": "sheet", "preset": "load_xlsx"}]
+    files = activate_file_readers({}, {"flow.json": dumps({"nodes": nodes})})
+    assert '"delta": {' in files["extensions.json"] and '"excel": {' in files["extensions.json"]
+    disabled = {**files, "extensions.json": files["extensions.json"].replace("true", "false")}
+    # Unchanged readers keep an explicit disable.
+    assert activate_file_readers(disabled, disabled) == disabled
+    # So does editing a reader that was already there.
+    nodes[0]["params"] = {"table": "lake/orders"}
+    edited = {**disabled, "flow.json": dumps({"nodes": nodes})}
+    assert activate_file_readers(disabled, edited) == edited
+
+
 def test_nested_readers_preserve_malformed_extension_documents():
     files = {"components/group.json": dumps({"nodes": [{"id": "sheet", "preset": "load_xlsx"}]})}
     assert "extensions.json" in activate_file_readers({}, files)
@@ -38,3 +51,8 @@ def test_nested_readers_preserve_malformed_extension_documents():
     assert activate_file_readers({}, {"flow.json": "invalid"}) == {"flow.json": "invalid"}
     malformed_id = {"flow.json": dumps({"nodes": [{"id": [], "template": "load_xlsx"}]})}
     assert activate_file_readers({}, malformed_id) == malformed_id
+    # A template reference that is not a name is reported by validation, and can then be corrected.
+    malformed_template = {"flow.json": dumps({"nodes": [{"id": "lake", "template": ["load_delta"]}]})}
+    assert activate_file_readers({}, malformed_template) == malformed_template
+    corrected = {"flow.json": dumps({"nodes": [{"id": "lake", "template": "load_delta"}]})}
+    assert '"delta": {' in activate_file_readers(malformed_template, corrected)["extensions.json"]
