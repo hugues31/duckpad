@@ -1,5 +1,11 @@
 import { expect, type Page } from "@playwright/test";
-import { closeCode, nodeMenuAction, openCode, replaceCode } from "./helpers";
+import {
+  dragPaletteNode,
+  closeCode,
+  nodeMenuAction,
+  openCode,
+  replaceCode,
+} from "./helpers";
 import type { Snapshot } from "../src/types";
 
 /** Exercise the real UI on a local instance or an authenticated deployed preview. */
@@ -21,10 +27,7 @@ export async function verifyNodeCode(page: Page) {
       .click();
   };
   const add = async () => {
-    await page
-      .locator(".palette-item")
-      .filter({ hasText: /^Filter$/ })
-      .click();
+    await dragPaletteNode(page, "Filter");
     await expect(
       inspector.getByRole("button", { name: "Edit code", exact: true }),
     ).toBeVisible();
@@ -119,7 +122,8 @@ export async function verifyNodeCode(page: Page) {
   expect(snapshot.files[`nodes/${second.id}.sql`]).toBeUndefined();
   await page
     .getByRole("button", { name: "Shared filter", exact: true })
-    .click({ modifiers: ["Alt"] });
+    .click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Add linked", exact: true }).click();
   await expect(
     inspector.getByRole("button", {
       name: "Edit template (2 nodes)",
@@ -186,10 +190,7 @@ export async function verifyNodeCode(page: Page) {
   await expect
     .poll(async () => (await read()).files[`nodes/${duplicate.id}.sql`])
     .toBeUndefined();
-  await page
-    .locator(".palette")
-    .getByRole("button", { name: "SQL", exact: true })
-    .click();
+  await dragPaletteNode(page, "SQL");
   await expect(
     inspector.getByRole("button", { name: "Edit code", exact: true }),
   ).toBeVisible();

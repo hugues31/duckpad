@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   autosaved,
+  dragPaletteNode,
   closeCode,
   openCode,
   openInstanceSettings,
@@ -268,10 +269,7 @@ test("capture the quickstart using the SQL printed in the guide", async ({
     await closeCode(page);
   };
   const add = async (label: string, code: string, count: number) => {
-    await page
-      .locator(".palette")
-      .getByRole("button", { name: "SQL", exact: true })
-      .click();
+    await dragPaletteNode(page, "SQL");
     await expect(page.locator(".react-flow__node")).toHaveCount(count);
     await expect(inspector.getByLabel("Display name")).toHaveValue("");
     await autosaved(page, () =>
@@ -654,7 +652,7 @@ test("capture a file node reading project files", async ({
     data: { revision: snapshot.revision, bundle: snapshot.bundle },
   });
   await page.goto(`/worktrees/${worktree.id}/flow`);
-  await page.getByRole("button", { name: "Load XLSX", exact: true }).click();
+  await dragPaletteNode(page, "Load XLSX");
   const inspector = page.locator(".inspector");
   await expect(
     inspector.getByRole("combobox", { name: "Location", exact: true }),
@@ -770,7 +768,7 @@ test("capture connection setup and environment policies", async ({ page }) => {
       data: { connections: ["finance_share"] },
     });
     await page.goto(`/worktrees/${worktree.id}/flow`);
-    await page.getByRole("button", { name: "Load XLSX", exact: true }).click();
+    await dragPaletteNode(page, "Load XLSX");
     const inspector = page.locator(".inspector");
     await inspector
       .getByRole("combobox", { name: "Location", exact: true })
@@ -864,7 +862,7 @@ test("capture a PostgreSQL connection test and Load table", async ({
       data: { connections: ["sales"] },
     });
     await page.goto(`/worktrees/${worktree.id}/flow`);
-    await page.getByRole("button", { name: "Load table", exact: true }).click();
+    await dragPaletteNode(page, "Load table");
     const inspector = page.locator(".inspector");
     await inspector
       .getByRole("combobox", { name: "connection", exact: true })

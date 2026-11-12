@@ -1,5 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 import {
+  dragPaletteNode,
   closeCode,
   closeEditor,
   codePanel,
@@ -57,10 +58,7 @@ export async function verifyPython(page: Page) {
   await page.keyboard.insertText("# Reusable\n");
   await closeEditor(templateDialog);
   expect((await read()).bundle!.flow.nodes).toHaveLength(0);
-  await page
-    .locator(".palette")
-    .getByRole("button", { name: "Custom Python transform", exact: true })
-    .click();
+  await dragPaletteNode(page, "Custom Python transform");
   const inspector = page.locator(".inspector");
   const panel = await openCode(page);
   // Previews compute SQL only.

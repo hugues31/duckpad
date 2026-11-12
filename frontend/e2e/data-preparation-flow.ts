@@ -1,5 +1,5 @@
 import { expect, type Page } from "@playwright/test";
-import { autosaved } from "./helpers";
+import { dragPaletteNode, autosaved } from "./helpers";
 
 /** The same synthetic form workflow is also used to verify a deployed preview. */
 export async function verifyDataPreparation(page: Page) {
@@ -42,7 +42,7 @@ export async function verifyDataPreparation(page: Page) {
     return (await page.request.get(`/api/runs/${result.id}`)).json();
   };
   const add = async (name: string, source: string) => {
-    await page.getByRole("button", { name, exact: true }).click();
+    await dragPaletteNode(page, name);
     await expect(inspector.locator(".inspector-title")).toContainText(name);
     await inspector
       .getByLabel("source", { exact: true })
@@ -69,7 +69,7 @@ export async function verifyDataPreparation(page: Page) {
     return row;
   };
   await page.goto(`/worktrees/${worktree.id}/flow`);
-  await page.getByRole("button", { name: "Load CSV", exact: true }).click();
+  await dragPaletteNode(page, "Load CSV");
   await inspector.getByLabel("Upload file", { exact: true }).setInputFiles({
     name: "preparation.csv",
     mimeType: "text/csv",

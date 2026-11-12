@@ -30,6 +30,7 @@ import {
   graphAt,
   identifier,
   nodeInterface,
+  nodeChoices,
   pathPrefix,
   reconnectInput,
   resolveNodePath,
@@ -76,6 +77,7 @@ export default function FlowPage() {
   const location = useLocation();
   const sizes = usePanelSizes();
   const canvas = useRef<CanvasHandle>(null);
+  const paletteTrigger = useRef<HTMLButtonElement | null>(null);
   const [selection, setSelection] = useState<string[]>([]);
   const [resultsTab, setResultsTab] = useState<ResultsTab>("data");
   const [failureFocus, setFailureFocus] = useState(0);
@@ -123,6 +125,17 @@ export default function FlowPage() {
     ? nodeInterface(node, snapshot.parsed_templates, bundle?.components, local)
     : undefined;
   const definition = signature?.definition;
+  const paletteChoice = view.paletteNode
+    ? nodeChoices(
+        snapshot.parsed_templates,
+        bundle?.components || {},
+        path.map((part) => part.definition),
+      ).find(
+        (choice) =>
+          choice.kind === view.paletteNode?.kind &&
+          choice.id === view.paletteNode.id,
+      )
+    : undefined;
   const ports = signature?.outputs || [];
   const project = workspace.projects.find(
     (p) => p.id === snapshot.worktree.project,
@@ -132,7 +145,9 @@ export default function FlowPage() {
   const inspected = worktree + fullNode;
   const shownInspector = useRef("");
   const inspectorShown =
-    node && definition && panels.open.inspector ? inspected : "";
+    node && definition && !paletteChoice && panels.open.inspector
+      ? inspected
+      : "";
   useLayoutEffect(() => {
     shownInspector.current = inspectorShown;
     return () => {
@@ -176,6 +191,7 @@ export default function FlowPage() {
     }
     view.change({
       selected: id,
+      paletteNode: null,
       cell: null,
       ...(nextPath ? { path: nextPath } : {}),
       ...(revealed ? { revealed } : {}),
@@ -255,10 +271,11 @@ export default function FlowPage() {
   );
   // Component instances have no code: they keep the inspector.
   const hasCode = !!node && !node.component;
-  const codeShown = view.code && hasCode && !!definition;
+  const codeShown = !paletteChoice && view.code && hasCode && !!definition;
   const shown = {
     palette: panels.open.palette,
-    inspector: panels.open.inspector && !!node && !codeShown,
+    inspector:
+      panels.open.inspector && (!!node || !!paletteChoice) && !codeShown,
     preview: panels.open.preview && !!node,
     code: panels.open.inspector && codeShown,
   };
@@ -267,7 +284,7 @@ export default function FlowPage() {
     const shown = graph.nodes.find((item) => prefix + item.id === target);
     if (shown && !shown.component) {
       if (shown.id !== selected) select(shown.id);
-      view.change({ code: true });
+      view.change({ code: true, paletteNode: null });
       panels.set({ inspector: true });
       // A new key reveals the line again, even when the panel already shows it.
       if (line)
@@ -332,11 +349,21 @@ export default function FlowPage() {
       }
     >
       <NodePalette
-        readOnly={!canEdit || busy}
+        readOnly={!canEdit}
+        busy={busy}
         snapshot={snapshot}
         excludedComponents={path.map((part) => part.definition)}
         hidden={!panels.open.palette}
         onClose={() => panels.set({ palette: false })}
+        inspected={panels.open.inspector ? view.paletteNode : null}
+        onInspect={(kind, id, trigger) => {
+          paletteTrigger.current = trigger;
+          view.change({ paletteNode: { kind, id }, cell: null });
+          panels.set({
+            inspector: true,
+            ...(isWideLayout() ? {} : { palette: false }),
+          });
+        }}
         onAdd={(kind, id, linked) =>
           safe(() => addNode(kind, id, undefined, undefined, linked))
         }
@@ -512,6 +539,12 @@ export default function FlowPage() {
         />
       )}
       <FlowInspector
+        paletteChoice={paletteChoice}
+        onClosePalette={() => {
+          view.change({ paletteNode: null });
+          panels.set({ palette: true });
+          requestAnimationFrame(() => paletteTrigger.current?.focus());
+        }}
         panels={panels}
         busy={busy}
         node={node}

@@ -22,10 +22,11 @@ async function addNode(page: Page, label = "SQL") {
   await page
     .locator(".palette")
     .getByRole("button", {
-      name: label.replace("Add linked: ", ""),
+      name: label,
       exact: true,
     })
-    .click({ modifiers: label.startsWith("Add linked:") ? ["Alt"] : [] });
+    .click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Add linked", exact: true }).click();
   expect((await saved).ok()).toBe(true);
   await expect(page.locator(".react-flow__node")).toHaveCount(before + 1);
   const created = page.locator(".react-flow__node").last();
@@ -66,7 +67,7 @@ async function expectNoOverlap(page: Page) {
   expect(overlaps).toEqual([]);
 }
 
-test("repeated Northstar palette additions avoid existing bounds after pan and zoom", async ({
+test("repeated Northstar linked additions avoid existing bounds after pan and zoom", async ({
   page,
 }) => {
   test.setTimeout(90000);
@@ -88,14 +89,7 @@ test("repeated Northstar palette additions avoid existing bounds after pan and z
   const zoom = () => canvasZoom(page);
   await expect.poll(zoom).not.toBeCloseTo(1, 2);
   const chosen = await zoom();
-  for (const label of [
-    "SQL",
-    "Filter",
-    "Add linked: Filter",
-    "Regional report",
-    "SQL",
-    "Filter",
-  ]) {
+  for (const label of ["SQL", "Filter", "Filter", "Filter", "SQL", "Filter"]) {
     await addNode(page, label);
     await expectNoOverlap(page);
     // Revealing a new node pans the canvas but keeps the user's zoom.

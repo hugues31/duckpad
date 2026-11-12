@@ -75,11 +75,11 @@ parameters are present.
 
 The **SQL** and **Python** buttons at the bottom of the palette create reusable
 templates. Python requires administrator activation in the project settings.
-The template is saved as you edit it and appears in the palette; click or drag
+The template is saved as you edit it and appears in the palette; drag
 the entry to create independent nodes. **Import** copies a reusable definition from
 another project into this palette.
 
-To share a template, Alt+click its palette entry, or right-click it and choose
+To share a template, right-click its palette entry and choose
 **Add linked**. Linked nodes show a badge and template name. **Edit template
 (N nodes)** opens the shared template in the code editor; editing it changes
 every linked instance in the branch. The other actions below are icons under

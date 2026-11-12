@@ -1516,7 +1516,7 @@
   "sourcePathExpression": "Chemin relatif ou expression",
   "searchNodeTypes": "Rechercher un type de nœud…",
   "projectTemplates": "Modèles du projet",
-  "addLinkedHint": "Alt+clic ou clic droit pour ajouter un nœud lié",
+  "addLinkedHint": "Clic droit pour ajouter un nœud lié",
   "nodeActions": "Actions du nœud",
   "connectSource": "Brancher une source",
   "showNode": "Afficher le nœud",
@@ -1654,5 +1654,11 @@
   "codeFixDeclareParameter": "Déclarer le paramètre {name}",
   "codeFixRemoveQuotes": "Retirer les guillemets",
   "codeFixChangeTo": "Remplacer par {text}",
-  "codeFixRemoveArguments": "Retirer les arguments"
+  "codeFixRemoveArguments": "Retirer les arguments",
+  "paletteDetailsHint": "Cliquez pour consulter. Glissez sur le canevas pour ajouter.",
+  "nodeTypeDetails": "Détails du type de nœud",
+  "noNodeDescription": "Aucune description fournie.",
+  "noNodeInputs": "Aucune entrée.",
+  "noNodeOutputs": "Aucune sortie.",
+  "noNodeParameters": "Aucun paramètre."
 }
