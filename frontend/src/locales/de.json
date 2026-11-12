@@ -1527,6 +1527,8 @@
   "askAdministratorHint": "Nur ein Instanzadministrator kann eine Verbindung erstellen und für dieses Projekt autorisieren. Wenden Sie sich an einen der unter Benutzer aufgeführten Projektadministratoren, um sie anzufordern.",
   "sourceConnectionReturnHint": "Die Verbindung, die Sie hier erstellen, wird für dieses Projekt autorisiert; danach kehren Sie zum Flow zurück.",
   "load_json": "JSON laden",
+  "load_delta": "Delta laden",
+  "tableFolderHint": "Der Pfad des Tabellenordners, relativ zum Speicherort, zum Beispiel lake/orders.",
   "dataType": "Datentyp",
   "sourcePathExpression": "Relativer Pfad oder Ausdruck",
   "searchNodeTypes": "Knotentypen suchen…",
