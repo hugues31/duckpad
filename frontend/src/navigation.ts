@@ -1,0 +1,98 @@
+import { useMatches } from "react-router";
+
+export const workspaceTabs = [
+  "flow",
+  "code",
+  "documentation",
+  "variables",
+  "history",
+] as const;
+export type WorkspaceTab = (typeof workspaceTabs)[number];
+export const userSettingsSections = [
+  ["preferences", "preferences"],
+  ["password", "password"],
+  ["ssh-key", "sshKey"],
+  ["api-tokens", "apiTokens"],
+] as const;
+export const userSettingsUrl = (section: string) =>
+  `/user-settings${section === "preferences" ? "" : `/${section}`}`;
+export const settingsSections = [
+  ["users", "usersPermissions"],
+  ["sso", "ssoSettings"],
+  ["assistant", "assistant"],
+  ["git-hosts", "gitHosts"],
+  ["environments", "environments"],
+  ["connections", "connections"],
+  ["extensions", "extensions"],
+  ["sql-resources", "sqlResources"],
+  ["monitoring", "monitoring"],
+] as const;
+export const projectSettingsSections = [
+  ["participants", "participants"],
+  ["connections", "connections"],
+  ["python", "pythonExecution"],
+  ["partitions", "partitions"],
+  ["extensions", "extensions"],
+  ["general", "generalSettings"],
+] as const;
+export type Area =
+  | "home"
+  | "projects"
+  | "jobs"
+  | "pipelines"
+  | "instanceSettings"
+  | "userSettings"
+  | "projectSettings"
+  | "notFound";
+/** The `handle` of each page route, which `routes.tsx` defines. */
+export interface PageHandle {
+  area: Area;
+  tab?: WorkspaceTab;
+  section?: string;
+}
+
+export function usePageRoute() {
+  const match = useMatches().at(-1)!;
+  return {
+    ...(match.handle as PageHandle),
+    worktreeId: match.params.worktreeId,
+    projectId: match.params.projectId,
+  };
+}
+
+export function worktreeUrl(
+  id: string,
+  tab: WorkspaceTab = "flow",
+  environment?: string,
+  /** Extra query parameters, such as the node to reveal in the flow. */
+  search: Record<string, string> = {},
+) {
+  const query = new URLSearchParams({
+    ...(environment ? { environment } : {}),
+    ...search,
+  }).toString();
+  return `/worktrees/${encodeURIComponent(id)}/${tab}${query ? `?${query}` : ""}`;
+}
+
+/** The query parameter of a Code tab URL naming the project file to open. */
+export const CODE_FILE_PARAM = "file";
+
+/** The Code tab of a working branch, opened on one project file. */
+export const codeFileUrl = (id: string, file: string, environment?: string) =>
+  worktreeUrl(id, "code", environment, { [CODE_FILE_PARAM]: file });
+
+export const projectSettingsUrl = (project: string, section?: string) =>
+  `/projects/${encodeURIComponent(project)}/settings${section ? `/${section}` : ""}`;
+
+/** Project pages carry branch context without changing their project-wide scope. */
+export function projectPageUrl(
+  project: string,
+  page: string,
+  worktree: string,
+  environment: string,
+) {
+  const query = new URLSearchParams({ worktree, environment });
+  return `/projects/${encodeURIComponent(project)}/${page}?${query}`;
+}
+
+export const SSO_RETURN_KEY = "duckpad-sign-in-return";
