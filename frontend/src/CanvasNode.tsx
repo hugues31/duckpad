@@ -1,5 +1,4 @@
 import {
-  Handle,
   Position,
   useUpdateNodeInternals,
   type Node,
@@ -23,13 +22,9 @@ import {
   Square,
   type LucideProps,
 } from "lucide-react";
-import {
-  memo,
-  useEffect,
-  type ComponentProps,
-  type CSSProperties,
-} from "react";
+import { memo, useEffect, type CSSProperties } from "react";
 import { PythonIcon } from "./AddIcon";
+import { CanvasPorts, PORT_GROUP_THRESHOLD } from "./CanvasPorts";
 import { WarningBadge } from "./ExecutionMessages";
 import { useT, type Translate } from "./i18n";
 import { NodeProgressFill } from "./NodeProgressFill";
@@ -171,7 +166,6 @@ export function PipelineNodeView({
 }) {
   const t = useT();
   const partition = data.partition;
-  const Port = preview ? PreviewHandle : Handle;
   const square = data.kind === "source" || data.kind === "export";
   const component = data.kind === "component";
   const StatusTag = data.status === "failed" ? "button" : "span";
@@ -202,10 +196,21 @@ export function PipelineNodeView({
         >
           {data.outputs.map((port, index) => {
             const input = portPosition(
-              index < data.inputs.length ? index : 0,
-              data.inputs.length,
+              data.inputs.length >= PORT_GROUP_THRESHOLD
+                ? 0
+                : index < data.inputs.length
+                  ? index
+                  : 0,
+              data.inputs.length >= PORT_GROUP_THRESHOLD
+                ? 1
+                : data.inputs.length,
             );
-            const output = portPosition(index, data.outputs.length);
+            const output = portPosition(
+              data.outputs.length >= PORT_GROUP_THRESHOLD ? 0 : index,
+              data.outputs.length >= PORT_GROUP_THRESHOLD
+                ? 1
+                : data.outputs.length,
+            );
             return (
               <path
                 key={port}
@@ -307,49 +312,48 @@ export function PipelineNodeView({
           </>
         )}
       </div>
-      {data.inputs.map((port: string, i: number) => (
-        <Port
-          key={"in" + port}
-          type="target"
-          position={Position.Left}
-          id={port}
-          style={{
+      <CanvasPorts
+        type="target"
+        inset={portPosition(0, 1).inset}
+        preview={preview}
+        ports={data.inputs.map((port, i) => ({
+          type: "target",
+          position: Position.Left,
+          id: port,
+          style: {
             top: portPosition(i, data.inputs.length).top,
             left: portPosition(i, data.inputs.length).inset,
-          }}
-          // A connected socket is filled; an input still waiting for a source is orange.
-          className={
-            data.missingInputs.includes(port) ? "missing-input" : "is-connected"
-          }
-          title={
-            data.missingInputs.includes(port)
-              ? `${t("connectSource")}: ${port}`
-              : port
-          }
-          aria-label={`${t("inputs")}: ${port}${data.missingInputs.includes(port) ? ` · ${t("connectSource")}` : ""}`}
-        >
-          <span className="handle-label in">{port}</span>
-        </Port>
-      ))}
-      {data.outputs.map((port: string, i: number) => (
-        <Port
-          key={"out" + port}
-          type="source"
-          position={Position.Right}
-          id={port}
-          style={{
+          },
+          className: data.missingInputs.includes(port)
+            ? "missing-input"
+            : "is-connected",
+          title: data.missingInputs.includes(port)
+            ? `${t("connectSource")}: ${port}`
+            : port,
+          "aria-label": `${t("inputs")}: ${port}${data.missingInputs.includes(port) ? ` · ${t("connectSource")}` : ""}`,
+          children: <span className="handle-label in">{port}</span>,
+        }))}
+      />
+      <CanvasPorts
+        type="source"
+        inset={portPosition(0, 1).inset}
+        preview={preview}
+        ports={data.outputs.map((port, i) => ({
+          type: "source",
+          position: Position.Right,
+          id: port,
+          style: {
             top: portPosition(i, data.outputs.length).top,
             right: portPosition(i, data.outputs.length).inset,
-          }}
-          className={
-            data.connectedOutputs.includes(port) ? "is-connected" : undefined
-          }
-          title={port}
-          aria-label={`${t("output")}: ${port}`}
-        >
-          <span className="handle-label out">{port}</span>
-        </Port>
-      ))}
+          },
+          className: data.connectedOutputs.includes(port)
+            ? "is-connected"
+            : undefined,
+          title: port,
+          "aria-label": `${t("output")}: ${port}`,
+          children: <span className="handle-label out">{port}</span>,
+        }))}
+      />
     </div>
   );
 }
@@ -366,21 +370,4 @@ function runningHint(progress: NodeProgress, now: number, t: Translate) {
   return `${elapsed} · ${t(
     overran(progress, now) ? "longerThanPreviousRun" : "previousRunDuration",
   ).replace("{duration}", previous)}`;
-}
-
-/** Drag images have decorative ports, without registering live connections. */
-function PreviewHandle({
-  position,
-  style,
-  className,
-  children,
-}: ComponentProps<typeof Handle>) {
-  return (
-    <span
-      className={`react-flow__handle react-flow__handle-${position} ${className || ""}`}
-      style={style}
-    >
-      {children}
-    </span>
-  );
 }

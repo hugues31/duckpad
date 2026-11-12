@@ -10,6 +10,13 @@ export function useDoubleClickGuard(
     // the pane, another node or a panel: there, it must neither act nor zoom.
     let first: string | null = null;
     const click = (event: MouseEvent) => {
+      if (
+        event.target instanceof Element &&
+        event.target.closest(".node-port-group")
+      ) {
+        first = null;
+        return;
+      }
       const element =
         event.target instanceof Element
           ? event.target.closest(".react-flow__node")
