@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { expect, test } from "@playwright/test";
-import { openInstanceSettings, signIn } from "./helpers";
+import { dragPaletteNode, openInstanceSettings, signIn } from "./helpers";
 
 test("connection IDs stay fixed and duplicate creation preserves the original", async ({
   page,
@@ -362,7 +362,7 @@ test("file nodes offer granted storage connections as locations, custom types in
       ).ok(),
     ).toBeTruthy();
     await page.goto(`/worktrees/${worktree.id}/flow`);
-    await page.getByRole("button", { name: "Load XLSX", exact: true }).click();
+    await dragPaletteNode(page, "Load XLSX");
     const location = page
       .locator(".inspector")
       .getByRole("combobox", { name: "Location", exact: true });
@@ -372,7 +372,7 @@ test("file nodes offer granted storage connections as locations, custom types in
       "Finance share",
     ]);
     // A Delta table is a folder, which no upload holds: its path is typed.
-    await page.getByRole("button", { name: "Load Delta", exact: true }).click();
+    await dragPaletteNode(page, "Load Delta");
     const inspector = page.locator(".inspector");
     await expect(
       inspector.getByRole("textbox", { name: /^table/ }),
@@ -481,7 +481,7 @@ test("database connections are tested from their form and list their tables in L
     ).toBeTruthy();
 
     await page.goto(`/worktrees/${worktree.id}/flow`);
-    await page.getByRole("button", { name: "Load table", exact: true }).click();
+    await dragPaletteNode(page, "Load table");
     const inspector = page.locator(".inspector");
     await inspector
       .getByRole("combobox", { name: "connection", exact: true })

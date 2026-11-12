@@ -19,13 +19,20 @@ async function addNode(page: Page, label = "SQL") {
       response.url().includes("/api/worktrees/") &&
       response.request().method() === "PUT",
   );
+  const linked = label.startsWith("Add linked: ");
   await page
     .locator(".palette")
     .getByRole("button", {
       name: label.replace("Add linked: ", ""),
       exact: true,
     })
-    .click({ modifiers: label.startsWith("Add linked:") ? ["Alt"] : [] });
+    .click({ button: linked ? "right" : "left" });
+  await page
+    .getByRole(linked ? "menuitem" : "button", {
+      name: linked ? "Add linked" : "Add to canvas",
+      exact: true,
+    })
+    .click();
   expect((await saved).ok()).toBe(true);
   await expect(page.locator(".react-flow__node")).toHaveCount(before + 1);
   const created = page.locator(".react-flow__node").last();

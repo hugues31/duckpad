@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { expect, test } from "@playwright/test";
-import { autosaved, signIn } from "./helpers";
+import { dragPaletteNode, autosaved, signIn } from "./helpers";
 
 test.use({ actionTimeout: 10000 });
 
@@ -39,7 +39,7 @@ test("upload a worksheet and export it as project files through the canvas", asy
       ).toBeTruthy();
     }
     await page.goto(`/worktrees/${worktree.id}/flow`);
-    await page.getByRole("button", { name: "Load XLSX", exact: true }).click();
+    await dragPaletteNode(page, "Load XLSX");
     const inspector = page.locator(".inspector");
     const location = inspector.getByRole("combobox", {
       name: "Location",
@@ -65,9 +65,7 @@ test("upload a worksheet and export it as project files through the canvas", asy
     let snapshot = await (await page.request.get(endpoint)).json();
     const source = snapshot.bundle.flow.nodes[0].id;
 
-    await page
-      .getByRole("button", { name: "Export XLSX", exact: true })
-      .click();
+    await dragPaletteNode(page, "Export XLSX");
     await inspector
       .getByLabel("source", { exact: true })
       .selectOption(`${source}:result`);

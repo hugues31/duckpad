@@ -12,6 +12,7 @@ BUILTINS = {
 SELECT * FROM read_csv({{ file }}, delim={{ delimiter }}, header={{ header }}, types={{ types }});
 """,
     "load_parquet": """-- @label Load Parquet
+-- @description Read a Parquet file, keeping its columns and types.
 -- @param connection: connection = ""
 -- @param file: file(connection) = ""
 -- @output result
@@ -50,6 +51,7 @@ SELECT * FROM delta_scan({{ table }});
 SELECT * FROM {{ connection }}.{{ schema }}.{{ table }};
 """,
     "join": """-- @label Join
+-- @description Combine the rows of two inputs that satisfy a condition. In expressions, l is the left input and r the right input.
 -- @input left
 -- @input right
 -- @param join_type: keyword(inner|left|right|full) = "inner"
@@ -59,6 +61,7 @@ SELECT * FROM {{ connection }}.{{ schema }}.{{ table }};
 SELECT {{ columns }} FROM {{ left }} AS l {{ join_type }} JOIN {{ right }} AS r ON {{ condition }};
 """,
     "filter": """-- @label Filter
+-- @description Keep the rows that match a condition.
 -- @input source
 -- @param condition: expression(source) = "amount > 0"
 -- @output result
@@ -79,6 +82,7 @@ SELECT {{ columns }} FROM {{ source }};
 SELECT {{ columns }} FROM {{ source }};
 """,
     "aggregate": """-- @label Aggregate
+-- @description Group the rows and compute one row of measures per group.
 -- @input source
 -- @param groups: expressions = "region"
 -- @param measures: expressions = "SUM(amount) AS revenue, COUNT(*) AS orders"
@@ -86,6 +90,7 @@ SELECT {{ columns }} FROM {{ source }};
 SELECT {{ groups }}, {{ measures }} FROM {{ source }} GROUP BY {{ groups }};
 """,
     "export_csv": """-- @label Export CSV
+-- @description Write a CSV file, replacing the destination on each run.
 -- @input source
 -- @param connection: connection = ""
 -- @param destination: destination(connection) = "export.csv"
@@ -111,6 +116,7 @@ COPY {{ source }} TO {{ destination }} (FORMAT XLSX, SHEET {{ sheet }}, HEADER {
 INSERT INTO {{ connection }}.{{ schema }}.{{ table }} BY NAME SELECT * FROM {{ source }};
 """,
     "export_oracle": """-- @label Export Oracle
+-- @description Insert the selected columns into an existing Oracle table. Nothing is truncated or created.
 -- @input source
 -- @param connection: connection = "oracle"
 -- @param secret: secret(connection) = ""

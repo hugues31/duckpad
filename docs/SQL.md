@@ -7,7 +7,7 @@ node's own code and a shared SQL template. Start with the
 
 ## Create and edit code
 
-Click or drag **SQL** from the palette list onto the canvas, then use
+Drag **SQL** from the palette list onto the canvas, then use
 **Edit code**. The code opens beside the canvas, in place of the inspector, and
 saves as you type; select another node to edit its code, or close the editor to
 return to the inspector. This changes only that node. To share code between

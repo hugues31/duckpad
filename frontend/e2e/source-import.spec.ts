@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { expect, test, type Page } from "@playwright/test";
-import { autosaved, signIn } from "./helpers";
+import { dragPaletteNode, autosaved, signIn } from "./helpers";
 import type { Snapshot } from "../src/types";
 
 async function drop(page: Page, files: { name: string; content: string }[]) {
@@ -96,7 +96,7 @@ test("drop CSV and JSON, preview before a run, edit types and reuse a project fi
           (await (await page.request.get(`/api/runs/${run.id}`)).json()).status,
       )
       .toBe("success");
-    await page.getByRole("button", { name: "Load CSV", exact: true }).click();
+    await dragPaletteNode(page, "Load CSV");
     const file = inspector.getByRole("combobox", { name: /^file/ });
     await expect(file).toHaveValue("");
     await expect(inspector).toContainText("drop files onto the canvas");
@@ -157,7 +157,7 @@ test("Load table gives an administrator a route to create and authorize a connec
   });
   try {
     await page.goto(`/worktrees/${worktree.id}/flow`);
-    await page.getByRole("button", { name: "Load table", exact: true }).click();
+    await dragPaletteNode(page, "Load table");
     const inspector = page.locator(".inspector");
     await expect(inspector).toContainText(
       "No database connection is authorized",
@@ -231,9 +231,7 @@ test("members without connections can find their project administrators", async 
       member.getByRole("navigation", { name: "Workspace", exact: true }),
     ).toBeVisible();
     await member.goto(`/worktrees/${worktree.id}/flow`);
-    await member
-      .getByRole("button", { name: "Load table", exact: true })
-      .click();
+    await dragPaletteNode(member, "Load table");
     const inspector = member.locator(".inspector");
     await expect(
       inspector.getByRole("link", { name: "Create a connection", exact: true }),

@@ -5,6 +5,49 @@ import type { Bundle, Snapshot } from "../src/types";
 /** Administrator password of the disposable instance started by scripts/e2e_server.py. */
 export const PASSWORD = "duckpad-browser-test";
 
+/** Drop a palette definition into the uncovered canvas, including narrow layouts. */
+export async function dragPaletteNode(page: Page, label: string) {
+  const pane = page.locator(".react-flow__pane");
+  const bounds = (await pane.boundingBox())!;
+  const point = await page.locator(".canvas-safe-area").evaluate((element) => {
+    const area = element.getBoundingClientRect();
+    const nodes = Array.from(
+      document.querySelectorAll(".react-flow__node"),
+    ).map((node) => node.getBoundingClientRect());
+    // Each drop has its own space so later steps can select every created node.
+    for (let y = area.bottom - 100; y >= area.top + 70; y -= 70) {
+      for (let x = area.right - 100; x >= area.left + 70; x -= 70) {
+        if (
+          nodes.some(
+            (node) =>
+              node.left < x + 110 &&
+              node.right > x - 70 &&
+              node.top < y + 110 &&
+              node.bottom > y - 70,
+          )
+        )
+          continue;
+        if (
+          document
+            .elementFromPoint(x, y)
+            ?.classList.contains("react-flow__pane")
+        )
+          return { x, y };
+      }
+    }
+    throw new Error("No empty canvas area for the palette drop");
+  });
+  await page
+    .locator(".palette-list")
+    .getByRole("button", { name: label, exact: true })
+    .dragTo(pane, {
+      targetPosition: {
+        x: point.x - bounds.x,
+        y: point.y - bounds.y,
+      },
+    });
+}
+
 type LoginLabels = Pick<typeof en, "password" | "signInAction" | "workspace">;
 
 /** Submit the login form shown in the given language and wait for the workspace. */

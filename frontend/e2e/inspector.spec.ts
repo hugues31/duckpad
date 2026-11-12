@@ -1,5 +1,10 @@
 import { test, expect, type Page } from "@playwright/test";
-import { createFilterProject, deferred, signIn } from "./helpers";
+import {
+  createFilterProject,
+  deferred,
+  dragPaletteNode,
+  signIn,
+} from "./helpers";
 import type { Snapshot } from "../src/types";
 import fr from "../src/locales/fr.json" with { type: "json" };
 
@@ -270,7 +275,7 @@ test("input choices use the names shown on the canvas", async ({ page }) => {
   await page.goto(`/worktrees/${worktree.id}/flow`);
   const nodes = page.locator(".react-flow__node");
   const add = async (label: string) => {
-    await page.getByRole("button", { name: label, exact: true }).click();
+    await dragPaletteNode(page, label);
     return nodes
       .filter({ has: page.getByText(label, { exact: true }) })
       .getAttribute("data-id");

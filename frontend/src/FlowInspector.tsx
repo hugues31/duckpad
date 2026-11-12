@@ -3,10 +3,12 @@ import {
   connectInput,
   graphAt,
   type NodeInterface,
+  type NodeChoice,
   type PathPart,
 } from "./graph";
 import { nodeLabel, useT } from "./i18n";
 import Inspector from "./Inspector";
+import PaletteDetails from "./PaletteDetails";
 import type { ModalState } from "./ModalHost";
 import NodeCodePanel, { type CodeReveal } from "./NodeCodePanel";
 import type { NodeAction } from "./nodeActions";
@@ -27,6 +29,10 @@ import { declarations } from "./variables";
 import type { PanelVisibility } from "./WorkspacePanels";
 
 export default function FlowInspector({
+  paletteChoice,
+  paletteFocus,
+  onClosePalette,
+  onAddPalette,
   panels,
   busy,
   node,
@@ -61,6 +67,10 @@ export default function FlowInspector({
   openModal,
   showResults,
 }: {
+  paletteChoice: NodeChoice | undefined;
+  paletteFocus: boolean;
+  onClosePalette: () => void;
+  onAddPalette: (() => void) | undefined;
   panels: PanelVisibility;
   busy: boolean;
   node: FlowNode | undefined;
@@ -104,7 +114,15 @@ export default function FlowInspector({
       hidden={!panels.open.inspector}
       inert={busy}
     >
-      {node && definition && signature && codeShown ? (
+      {paletteChoice ? (
+        <PaletteDetails
+          key={`${paletteChoice.kind}:${paletteChoice.id}`}
+          choice={paletteChoice}
+          focus={paletteFocus}
+          onClose={onClosePalette}
+          onAdd={onAddPalette}
+        />
+      ) : node && definition && signature && codeShown ? (
         <NodeCodePanel
           key={inspected}
           snapshot={snapshot}
