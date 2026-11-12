@@ -2,6 +2,8 @@
 
 import json
 import shutil
+import subprocess
+import sys
 
 import duckdb
 import pytest
@@ -11,14 +13,24 @@ from duckpad.auth import Auth
 from duckpad.builtin_templates import BUILTINS
 from duckpad.services import Services
 
+INSTALL = """
+import duckdb, sys
+with duckdb.connect(config={"extension_directory": sys.argv[1]}) as db:
+    db.execute("INSTALL delta")
+    db.execute("LOAD delta")
+"""
+
 
 @pytest.fixture(scope="session")
 def delta_cache(tmp_path_factory):
     """An extension cache holding delta, as an instance administrator would install it."""
     cache = tmp_path_factory.mktemp("delta-extensions")
-    with duckdb.connect(config={"extension_directory": str(cache)}) as db:
-        db.execute("INSTALL delta")
-        db.execute("LOAD delta")
+    # The published binary is not linked into any runtime and needs a recent CPU: a first load
+    # in a disposable process keeps an illegal instruction from ending the test session.
+    probe = subprocess.run([sys.executable, "-c", INSTALL, str(cache)], capture_output=True, text=True)
+    if probe.returncode < 0:
+        pytest.skip(f"The published delta extension cannot run on this CPU (signal {-probe.returncode})")
+    assert probe.returncode == 0, probe.stderr
     return cache
 
 

@@ -191,8 +191,10 @@ def activate_file_readers(base, proposal):
                 if not isinstance(node, dict):
                     continue
                 kind = node.get("preset") or node.get("template") or node.get("origin")
-                if kind in READER_EXTENSIONS and isinstance(node.get("id"), str):
-                    found.add((path, node["id"], READER_EXTENSIONS[kind]))
+                # A malformed reference, such as a list, stays editable: it names no reader.
+                extension = READER_EXTENSIONS.get(kind) if isinstance(kind, str) else None
+                if extension and isinstance(node.get("id"), str):
+                    found.add((path, node["id"], extension))
         return found
 
     # Unchanged files hold the same readers on both sides: only edited graphs are parsed.

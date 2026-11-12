@@ -26,6 +26,8 @@ export const isSourceFile = (name: string) =>
 /** Built-in readers whose `file` parameter selects a project file. */
 export const isFileReader = (template?: string) =>
   /^load_(csv|parquet|xlsx|json)$/.test(template || "");
+/** Built-in readers of a table folder: no upload holds one, so its path is typed. */
+export const isFolderReader = (template?: string) => template === "load_delta";
 
 export const sourceFileName = (path: string) =>
   path

@@ -104,14 +104,17 @@ for native format behavior and limits.
 
 **Load Delta** reads the current version of a Delta Lake table with DuckDB's
 `delta` extension. A Delta table is a folder that holds Parquet files and a
-`_delta_log` directory: enter that folder's path, relative to the Location, for
-example `lake/orders`. Choose a granted Server folder or S3 connection as the
-Location, as for Parquet; S3 tables reuse the connection's credentials.
+`_delta_log` directory: enter that folder's path in the `table` field, relative
+to the Location, for example `lake/orders`. An upload is a single file, so the
+field selects no project file: choose a granted Server folder or S3 connection
+as the Location, as for Parquet; S3 tables reuse the connection's credentials.
 
 Adding a Load Delta node enables the project's `delta` extension in the same
 save. An instance administrator must have installed it first; see
-[File formats and extensions](#file-formats-and-extensions). Load Delta only
-reads: Duckpad does not write Delta tables.
+[File formats and extensions](#file-formats-and-extensions). Until then, every
+run of the project fails and asks to import `delta`: disable it in
+**Project settings → Extensions** to keep running the other nodes. Load Delta
+only reads: Duckpad does not write Delta tables.
 
 Tested with DuckDB 2.0.0 and its matching `delta` extension on local folders, in
 embedded and isolated execution. S3, other object stores, time travel and Unity
