@@ -67,8 +67,16 @@ test("auto-arrange saves only the current DAG, preserves selection and frames th
     await page.request.post("/api/example", { data: {} })
   ).json();
   const url = `/api/worktrees/${worktree.id}`;
-  const original: Snapshot = await (await page.request.get(url)).json();
+  const example: Snapshot = await (await page.request.get(url)).json();
+  await openWorktree(page, worktree.id);
+  const original = await arrange(page, url);
   const graph = original.bundle!.flow;
+  // The example opens already arranged; font metrics shift nodes by a few pixels at most.
+  for (const [index, { position }] of graph.nodes.entries()) {
+    const start = example.bundle!.flow.nodes[index].position;
+    expect(Math.abs(position.x - start.x)).toBeLessThanOrEqual(10);
+    expect(Math.abs(position.y - start.y)).toBeLessThanOrEqual(10);
+  }
   graph.nodes.push({
     ...graph.nodes[0],
     id: "disconnected",

@@ -58,7 +58,11 @@ export default function AssistantComposer({
           value={draft}
           disabled={undoing}
           aria-label={t("assistantMessage")}
-          placeholder={t("assistantMessageHint")}
+          placeholder={t(
+            worktree.id
+              ? "assistantMessageHint"
+              : "assistantMessageHintAnywhere",
+          )}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
             if (

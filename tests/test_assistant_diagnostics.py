@@ -76,7 +76,7 @@ def test_failure_logs_redact_saved_draft_and_token_secrets(instance, monkeypatch
     with caplog.at_level(level, logger="duckpad.assistant"):
         if operation == "turn":
             _, context = project(client)
-            result = turn(client, conversation(client, context), context)[-1]["turn"]
+            result = turn(client, conversation(client), context)[-1]["turn"]
             assert result["status"] == "error"
             output = result["error"]
         else:

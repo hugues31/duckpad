@@ -60,19 +60,61 @@ export async function verifyAssistantKnowledge(page: Page) {
       })
     ).ok(),
   ).toBeTruthy();
-  await page.goto(`/worktrees/${worktree.id}/flow`);
+  // From a settings page, the assistant finds a project named in the question.
+  await page.goto("/instance-settings/connections");
   await page
     .getByRole("button", { name: "Open AI assistant", exact: true })
     .click();
   await ask(
+    "Which nodes does the project Assistant variable checks contain? Answer with their IDs.",
+  );
+  const tools = chat.locator(".assistant-tool");
+  await expect(
+    tools.filter({ hasText: "Lists your projects" }),
+  ).not.toHaveCount(0);
+  await expect(
+    tools.filter({ hasText: "Assistant variable checks / main" }),
+  ).not.toHaveCount(0);
+  await expect(chat.locator(".assistant-markdown")).toContainText("source");
+  await chat.getByRole("button", { name: "Close", exact: true }).click();
+  expect(
+    (
+      await page.request.post("/api/projects", {
+        data: { name: "Assistant other project" },
+      })
+    ).ok(),
+  ).toBeTruthy();
+  await page.goto(`/worktrees/${worktree.id}/flow`);
+  await page
+    .getByRole("button", { name: "Open AI assistant", exact: true })
+    .click();
+  // Once the conversation has read another project, an edit shows its changes and waits.
+  await ask(
+    "Which nodes does the project Assistant other project contain? Answer with their IDs.",
+  );
+  await ask(
     "Delete the project variable obsolete. Do not change any other variable or node.",
   );
-  expect((await read()).bundle!.variables).not.toHaveProperty("obsolete");
+  const confirm = chat.getByRole("button", {
+    name: "Apply change",
+    exact: true,
+  });
+  await expect(confirm).toBeVisible();
+  await expect(chat.locator(".assistant-run")).toContainText("obsolete");
+  expect((await read()).bundle!.variables).toHaveProperty("obsolete");
+  await confirm.click();
+  await expect
+    .poll(async () => (await read()).bundle!.variables)
+    .not.toHaveProperty("obsolete");
   await expect(chat.locator(".assistant-changes")).toContainText("obsolete");
   await chat.getByRole("button", { name: "Undo", exact: true }).click();
   await expect
     .poll(async () => (await read()).bundle!.variables)
     .toHaveProperty("obsolete");
+  // A conversation that read this project alone edits it without confirmation.
+  await chat
+    .getByRole("button", { name: "New conversation", exact: true })
+    .click();
 
   const before = (await read()).commit;
   await ask(
