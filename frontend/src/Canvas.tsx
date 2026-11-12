@@ -38,7 +38,12 @@ import { NODE_SHAPE_CENTER, PipelineNode } from "./CanvasNode";
 import { showMinimap } from "./canvasResults";
 import type { CanvasProps, FocusRequest } from "./canvasTypes";
 import ConnectionPalette from "./ConnectionPalette";
-import { downstreamNodes, DRAG_TYPE, type NodeConnection } from "./graph";
+import {
+  edgesNear,
+  planEdgeInsertion,
+  type EdgeInsertion,
+} from "./edgeInsertion";
+import { downstream, DRAG_TYPE, type NodeConnection } from "./graph";
 import { findNodePosition, layoutNodes } from "./graphLayout";
 import { useT } from "./i18n";
 import { SearchField } from "./Search";
@@ -53,6 +58,7 @@ const edgeTypes = { pipeline: PipelineEdge };
 const NO_ENDPOINTS: EdgeEndpoints[] = [];
 // Keep listening through saves and undo so keyup events cannot leave modifiers stuck.
 const DELETE_KEYS = ["Backspace", "Delete"];
+const ENDS = ["source", "sourceHandle", "target", "targetHandle"] as const;
 function CanvasInner({ ref, ...props }: CanvasProps) {
   const t = useT();
   const [context, setContext] = useState<{
@@ -60,7 +66,13 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
     position: { x: number; y: number };
     trigger: HTMLElement;
   } | null>(null);
-  const { getNodes, getInternalNode, screenToFlowPosition } = useReactFlow();
+  const {
+    getNodes,
+    getInternalNode,
+    getZoom,
+    screenToFlowPosition,
+    flowToScreenPosition,
+  } = useReactFlow();
   const initialized = useNodesInitialized();
   const safeArea = useRef<HTMLDivElement>(null);
   const viewportTouched = useRef(false);
@@ -114,7 +126,52 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
     () => setPendingConnection(null),
     [],
   );
+  /** Whether a link would make its target read its own data, which cannot run. */
+  const cyclic = (link: {
+    source: string;
+    sourceHandle?: string | null;
+    target: string;
+    targetHandle?: string | null;
+  }) =>
+    downstream(
+      { nodes: props.nodes, edges: props.edges },
+      props.components,
+      link.target,
+      link.targetHandle ?? "",
+    )(link.source, link.sourceHandle ?? "");
+  const reconnecting = useRef(false);
   const flow = useRef<HTMLDivElement>(null);
+  const [insertionEdge, setInsertionEdge] = useState<string | null>(null);
+  useEffect(() => {
+    const clear = () => setInsertionEdge(null);
+    document.addEventListener("dragend", clear);
+    document.addEventListener("drop", clear);
+    return () => {
+      document.removeEventListener("dragend", clear);
+      document.removeEventListener("drop", clear);
+    };
+  }, []);
+  const insertionAt = (node: FlowNode, point: { x: number; y: number }) => {
+    if (props.readOnly) return;
+    // This runs on every drag frame: only the links under the node are planned.
+    for (const id of edgesNear(flow.current, point, getZoom())) {
+      const edge = props.edges.find((item) => item.id === id);
+      const plan = edge && planEdgeInsertion(props, node, edge);
+      if (plan) return plan;
+    }
+  };
+  const draggedInsertion = (moved: PipelineNode[]) => {
+    if (moved.length !== 1) return;
+    const node = props.nodes.find((item) => item.id === moved[0].id);
+    if (!node) return;
+    return insertionAt(
+      node,
+      flowToScreenPosition({
+        x: moved[0].position.x + NODE_SHAPE_CENTER.x,
+        y: moved[0].position.y + NODE_SHAPE_CENTER.y,
+      }),
+    );
+  };
   useDoubleClickGuard(flow, props.onOpen);
   const displayNodes = useCanvasNodes(props);
   const [nodes, setNodes] = useState<PipelineNode[]>(displayNodes);
@@ -235,7 +292,7 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
     const phases = new Map(
       nodes.map((node) => [node.id, node.data.progress?.phase]),
     );
-    return props.edges.map((e): PipelineEdge => {
+    const drawn = props.edges.map((e): PipelineEdge => {
       const connected = selected.has(e.source) || selected.has(e.target);
       const pointed = hovered === e.source || hovered === e.target;
       const edgeSelected = selectedEdges.has(e.id);
@@ -246,7 +303,12 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
         phases.get(e.source) === "done" &&
         (target === "done" || target === "running");
       const highlighted =
-        edgeSelected || connected || pointed || flowing || travelled;
+        edgeSelected ||
+        connected ||
+        pointed ||
+        flowing ||
+        travelled ||
+        insertionEdge === e.id;
       return {
         ...e,
         selected: edgeSelected,
@@ -259,6 +321,7 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
             pointed && "node-hovered",
             flowing && "is-flowing",
             highlighted && "highlighted",
+            insertionEdge === e.id && "insertion-target",
           ]
             .filter(Boolean)
             .join(" ") || undefined,
@@ -272,10 +335,27 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
           : undefined,
       };
     });
-  }, [props.edges, nodes, hovered, edgeStyle, lanes, selectedEdges]);
+    // Links leaving one output share the spot that drags their end: the
+    // selected link is drawn last, so it is the one that moves.
+    return [
+      ...drawn.filter((edge) => !edge.selected),
+      ...drawn.filter((edge) => edge.selected),
+    ];
+  }, [
+    props.edges,
+    nodes,
+    hovered,
+    edgeStyle,
+    lanes,
+    selectedEdges,
+    insertionEdge,
+  ]);
   const changes = (changes: NodeChange<PipelineNode>[]) =>
     setNodes((current) => applyNodeChanges(changes, current));
-  const persistPositions = async (moved: FlowNode[]) => {
+  const persistPositions = async (
+    moved: FlowNode[],
+    insertion?: EdgeInsertion,
+  ) => {
     const pending = new Map(
       moved.map((node) => [node.id, { position: node.position }]),
     );
@@ -288,7 +368,7 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
       })),
     );
     try {
-      await props.onMove(moved);
+      await props.onMove(moved, insertion);
     } catch {
       // The workspace reports the error and refreshes the saved graph.
     } finally {
@@ -394,6 +474,9 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
         onNodeDragStart={() => {
           viewportTouched.current = true;
         }}
+        onNodeDrag={(_, __, moved) => {
+          setInsertionEdge(draggedInsertion(moved)?.edge.id ?? null);
+        }}
         onNodeClick={(event, node) => {
           setFocus(null);
           if (!event.shiftKey) props.onSelect(node.id);
@@ -421,11 +504,7 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
             trigger: event.currentTarget as HTMLElement,
           });
         }}
-        isValidConnection={(connection) =>
-          !downstreamNodes(props.edges, connection.target).has(
-            connection.source,
-          )
-        }
+        isValidConnection={(connection) => !cyclic(connection)}
         onConnect={
           props.readOnly
             ? undefined
@@ -433,9 +512,57 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
                 props.onConnect(connection as Omit<FlowEdge, "id">)
         }
         onConnectStart={closeConnectionPalette}
+        onReconnectStart={() => {
+          reconnecting.current = true;
+        }}
+        onReconnect={(edge, connection) => {
+          // An end dropped back on its own port changes nothing.
+          const moved = ENDS.some((end) => edge[end] !== connection[end]);
+          if (!props.readOnly && moved)
+            props.onReconnect(edge.id, connection as Omit<FlowEdge, "id">);
+        }}
+        onReconnectEnd={(event, edge, _, connection) => {
+          reconnecting.current = false;
+          // Invalid handles can be transparent to pointer hit testing while dragging.
+          if (props.readOnly || connection.isValid || connection.toHandle)
+            return;
+          const pointer =
+            "changedTouches" in event ? event.changedTouches[0] : event;
+          if (!pointer) return;
+          // Only dropping on empty canvas disconnects a link. Invalid ports,
+          // node bodies and controls keep the saved connection intact.
+          const target = document.elementFromPoint(
+            pointer.clientX,
+            pointer.clientY,
+          );
+          if (!target?.classList.contains("react-flow__pane")) return;
+          // Like a link deleted from the keyboard, Undo restores it unselected.
+          setSelectedEdges((current) => {
+            const next = new Set(current);
+            next.delete(edge.id);
+            return next;
+          });
+          void props.onDelete([], [edge.id]).catch(() => {
+            // The workspace reports the error; edges still use the saved graph.
+          });
+        }}
         onConnectEnd={(event, connection) => {
+          // A new or moved link released on a port that refuses it explains why.
+          const { fromHandle: from, toHandle: to } = connection;
+          if (!connection.isValid && from && to && from.type !== to.type) {
+            const [source, target] =
+              from.type === "source" ? [from, to] : [to, from];
+            const refused = cyclic({
+              source: source.nodeId,
+              sourceHandle: source.id,
+              target: target.nodeId,
+              targetHandle: target.id,
+            });
+            if (refused && !props.readOnly) props.onCycle();
+          }
           if (
             props.readOnly ||
+            reconnecting.current ||
             connection.isValid ||
             !connection.fromNode ||
             !connection.fromHandle?.id
@@ -459,14 +586,17 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
             screen,
           });
         }}
-        onNodeDragStop={(_, __, moved) =>
+        onNodeDragStop={(_, __, moved) => {
+          const insertion = draggedInsertion(moved);
+          setInsertionEdge(null);
           void persistPositions(
             moved.map((n) => ({
               ...props.nodes.find((x) => x.id === n.id)!,
               position: n.position,
             })),
-          )
-        }
+            insertion,
+          );
+        }}
         onBeforeDelete={async () =>
           !props.readOnly &&
           !pendingConnection &&
@@ -486,9 +616,22 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
         }}
         onSelectionChange={selectionChanged}
         onDragOver={(event) => {
+          if (props.readOnly) return;
           event.preventDefault();
           // Files and palette items add nodes: show the copy cursor.
           event.dataTransfer.dropEffect = "copy";
+          const node = dragPreview.node;
+          setInsertionEdge(
+            (node &&
+              insertionAt(node, { x: event.clientX, y: event.clientY })?.edge
+                .id) ??
+              null,
+          );
+        }}
+        onDragLeave={(event) => {
+          // Moving between the canvas's own elements also fires dragleave.
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null))
+            setInsertionEdge(null);
         }}
         onDrop={(event) => {
           if (props.readOnly) return;
@@ -507,10 +650,27 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
               y: event.clientY,
             });
             viewportTouched.current = true;
-            props.onAdd(value.kind, value.id, {
-              x: position.x - NODE_SHAPE_CENTER.x,
-              y: position.y - NODE_SHAPE_CENTER.y,
-            });
+            const insertion = insertionAt(
+              {
+                id: "",
+                params: {},
+                position,
+                ...(value.kind === "component"
+                  ? { component: value.id }
+                  : { template: value.id }),
+              },
+              { x: event.clientX, y: event.clientY },
+            );
+            props.onAdd(
+              value.kind,
+              value.id,
+              {
+                x: position.x - NODE_SHAPE_CENTER.x,
+                y: position.y - NODE_SHAPE_CENTER.y,
+              },
+              undefined,
+              insertion,
+            );
           } catch {
             // Ignore drops that are not palette items.
           }
@@ -525,6 +685,7 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
         minZoom={0.1}
         maxZoom={1.8}
         connectionRadius={28}
+        reconnectRadius={16}
         deleteKeyCode={DELETE_KEYS}
         selectionKeyCode="Shift"
         multiSelectionKeyCode="Shift"

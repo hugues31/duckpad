@@ -1,4 +1,4 @@
-import { downstreamNodes, nodeInterface } from "./graph";
+import { downstream, nodeInterface } from "./graph";
 import { nodeLabel, useT } from "./i18n";
 import Select from "./Select";
 import type { FlowEdge, FlowNode, ParsedTemplate, Snapshot } from "./types";
@@ -20,7 +20,6 @@ export default function InputSelectors({
   onInput: (port: string, source: string) => void;
 }) {
   const t = useT();
-  const excluded = downstreamNodes(graphEdges, node.id);
   return (
     <>
       {!!inputs.length && (
@@ -30,34 +29,41 @@ export default function InputSelectors({
             const edge = graphEdges.find(
               (e) => e.target === node.id && e.targetHandle === port,
             );
+            const current = edge ? `${edge.source}:${edge.sourceHandle}` : "";
+            const cyclic = downstream(
+              { nodes: graphNodes, edges: graphEdges },
+              snapshot.bundle?.components ?? {},
+              node.id,
+              port,
+            );
             return (
               <label className="field" key={port}>
                 <span>{port}</span>
                 <Select
                   aria-label={port}
-                  value={edge ? `${edge.source}:${edge.sourceHandle}` : ""}
+                  value={current}
                   onChange={(e) => onInput(port, e.target.value)}
                 >
                   <option value="">{t("notConnected")}</option>
-                  {graphNodes
-                    .filter((n) => !excluded.has(n.id) || n.id === edge?.source)
-                    .flatMap((n) => {
-                      const source = nodeInterface(
-                        n,
-                        snapshot.parsed_templates,
-                        snapshot.bundle?.components,
-                        local,
-                      );
-                      return source.outputs.map((p) => (
-                        <option
-                          key={n.id + ":" + p}
-                          value={n.id + ":" + p}
-                          disabled={excluded.has(n.id)}
-                        >
+                  {graphNodes.flatMap((n) => {
+                    const source = nodeInterface(
+                      n,
+                      snapshot.parsed_templates,
+                      snapshot.bundle?.components,
+                      local,
+                    );
+                    return source.outputs.flatMap((p) => {
+                      const value = n.id + ":" + p;
+                      const refused = cyclic(n.id, p);
+                      // A cycle saved in the project files shows until it is replaced.
+                      if (refused && value !== current) return [];
+                      return [
+                        <option key={value} value={value} disabled={refused}>
                           {nodeLabel(n, source, t)} · {p}
-                        </option>
-                      ));
-                    })}
+                        </option>,
+                      ];
+                    });
+                  })}
                 </Select>
               </label>
             );

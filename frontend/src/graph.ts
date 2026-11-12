@@ -231,31 +231,87 @@ export function nodeChoices(
   ];
 }
 
-/** The node and all its descendants, none of which can feed one of its inputs. */
-export function downstreamNodes(edges: FlowEdge[], node: string): Set<string> {
-  const outgoing = new Map<string, string[]>();
-  for (const edge of edges) {
-    const targets = outgoing.get(edge.source) ?? [];
-    targets.push(edge.target);
-    outgoing.set(edge.source, targets);
+type Feeds = (node: string, output: string) => boolean;
+
+/**
+ * The outputs computed from an input, by its node and those it feeds:
+ * connecting one of them to that input would create a cycle, which Duckpad
+ * cannot run. A component only links the inputs and outputs its definition
+ * connects, so one instance may sit both before and after another node.
+ */
+export function downstream(
+  graph: Graph,
+  components: Record<string, ComponentDefinition>,
+  node: string,
+  port: string,
+  known = new Map<string, boolean>(),
+): Feeds {
+  const nodes = new Map(graph.nodes.map((item) => [item.id, item]));
+  const outgoing = new Map<string, FlowEdge[]>();
+  for (const edge of graph.edges) {
+    if (!outgoing.has(edge.source)) outgoing.set(edge.source, []);
+    outgoing.get(edge.source)!.push(edge);
   }
-  const visited = new Set<string>();
-  const pending = [node];
+  /** Whether a node computes this output from this input: always, unless a component tells. */
+  const linked = (id: string, input: string, output: string) => {
+    const component = nodes.get(id)?.component ?? "";
+    const definition = components[component];
+    const from = definition?.inputs?.[input];
+    const to = definition?.outputs?.[output];
+    if (!from || !to) return true;
+    const key = [component, input, output].join("\n");
+    if (!known.has(key)) {
+      // A definition that contains itself is invalid: its instances stay opaque.
+      known.set(key, true);
+      known.set(
+        key,
+        downstream(
+          definition,
+          components,
+          from.node,
+          from.port,
+          known,
+        )(to.node, to.port),
+      );
+    }
+    return known.get(key)!;
+  };
+  const reached = new Map<string, Set<string>>();
+  const pending = [[node, port]];
   while (pending.length) {
-    const current = pending.pop()!;
-    if (visited.has(current)) continue;
-    visited.add(current);
-    for (const target of outgoing.get(current) ?? []) pending.push(target);
+    const [id, input] = pending.pop()!;
+    if (!reached.has(id)) reached.set(id, new Set());
+    if (reached.get(id)!.has(input)) continue;
+    reached.get(id)!.add(input);
+    for (const edge of outgoing.get(id) ?? [])
+      if (linked(id, input, edge.sourceHandle))
+        pending.push([edge.target, edge.targetHandle]);
   }
-  return visited;
+  return (id, output) =>
+    [...(reached.get(id) ?? [])].some((input) => linked(id, input, output));
 }
 
-/** Connect an input, replacing its previous source, unless it would create a cycle. */
+/** Connect an input, replacing its previous source: an input has one source. */
 export function connectInput(graph: Graph, edge: Omit<FlowEdge, "id">) {
-  if (downstreamNodes(graph.edges, edge.target).has(edge.source)) return false;
   graph.edges = graph.edges.filter(
     (e) => !(e.target === edge.target && e.targetHandle === edge.targetHandle),
   );
   graph.edges.push({ ...edge, id: identifier("edge") });
-  return true;
+}
+
+/** Move a link without changing its identity, replacing an occupied input. */
+export function reconnectInput(
+  graph: Graph,
+  id: string,
+  connection: Omit<FlowEdge, "id">,
+) {
+  if (!graph.edges.some((edge) => edge.id === id)) return;
+  graph.edges = graph.edges
+    .filter(
+      (edge) =>
+        edge.id === id ||
+        edge.target !== connection.target ||
+        edge.targetHandle !== connection.targetHandle,
+    )
+    .map((edge) => (edge.id === id ? { ...edge, ...connection } : edge));
 }

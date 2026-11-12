@@ -1,5 +1,6 @@
 import { type Ref } from "react";
 import { type ActionItem } from "./ActionMenu";
+import type { EdgeInsertion } from "./edgeInsertion";
 import type { NodeKind } from "./graph";
 import { type NodeConnection } from "./graph";
 import { type NodeNames } from "./nodeNames";
@@ -42,8 +43,11 @@ export interface CanvasProps {
   selected: string | null;
   focusRequest?: FocusRequest | null;
   onSelect: (id: string | null) => void;
-  onMove: (nodes: FlowNode[]) => Promise<void>;
+  onMove: (nodes: FlowNode[], insertion?: EdgeInsertion) => Promise<void>;
   onConnect: (edge: Omit<FlowEdge, "id">) => void;
+  onReconnect: (id: string, edge: Omit<FlowEdge, "id">) => void;
+  /** A link was refused because it would make a node read its own data. */
+  onCycle: () => void;
   /** Resolve once the deletion is saved; reject if it failed. */
   onDelete: (nodes: string[], edges: string[]) => Promise<void>;
   onAdd: (
@@ -51,6 +55,7 @@ export interface CanvasProps {
     id: string,
     position?: { x: number; y: number },
     connection?: NodeConnection,
+    insertion?: EdgeInsertion,
   ) => void;
   onFiles?: (files: File[], position: { x: number; y: number }) => void;
   actionsFor: (id: string) => ActionItem[];

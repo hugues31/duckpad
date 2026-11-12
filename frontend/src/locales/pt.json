@@ -1484,6 +1484,7 @@
   "branchOneNode": "{count} nó",
   "changeRedone": "Alteração refeita",
   "nothingPasted": "Estes nós não podem ser colados neste fluxo.",
+  "connectionCycle": "Esta conexão criaria um ciclo: um nó não pode ler o seu próprio resultado.",
   "nothingToUndo": "Nada para desfazer",
   "changeUndone": "Alteração desfeita",
   "editorAutosaveHint": "As alterações são salvas após uma breve pausa. Ctrl+S ou ⌘S salva imediatamente.",

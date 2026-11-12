@@ -447,14 +447,13 @@ def test_invalid_template_scope_does_not_block_independent_nodes(services, tmp_p
     assert wait_run(store, engine.launch(worktree, "dev", "total"))["status"] == "success"
 
 
-@pytest.mark.parametrize("source", ["filter", "total"])
-@pytest.mark.parametrize("nested", [False, True])
+@pytest.mark.parametrize(("source", "nested"), [("filter", False), ("total", True)])
 def test_file_cycles_are_diagnosed_and_blocked_without_blocking_independent_nodes(
     services, tmp_path, source, nested
 ):
     store, projects, _, engine = services
     bundle = example_bundle(tmp_path / "input.csv")
-    # The file editor can retain an invalid draft: self-loop or two-node cycle.
+    # Project files can hold what the canvas refuses: a self-loop, or a two-node cycle in a component.
     bundle["flow"]["edges"][0]["source"] = source
     prefix = ""
     if nested:

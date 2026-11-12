@@ -1484,6 +1484,7 @@
   "branchOneNode": "{count} nœud",
   "changeRedone": "Modification rétablie",
   "nothingPasted": "Ces nœuds ne peuvent pas être collés dans ce flux.",
+  "connectionCycle": "Ce lien créerait un cycle : un nœud ne peut pas lire son propre résultat.",
   "nothingToUndo": "Rien à annuler",
   "changeUndone": "Modification annulée",
   "editorAutosaveHint": "Les modifications sont enregistrées après une courte pause. Ctrl+S ou ⌘S enregistre tout de suite.",

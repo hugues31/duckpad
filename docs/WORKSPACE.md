@@ -27,7 +27,12 @@ upstream output in the node's inspector. Connected sockets are filled, unused
 outputs stay hollow, and an input without a source is orange on the node until
 you connect it. Point at a node or a link to highlight it. Click a link to select
 it, then press Delete or Backspace to disconnect it. Shift-click selects multiple
-links; Ctrl/Cmd+Z undoes a deletion. Select a node for
+links; Ctrl/Cmd+Z undoes a deletion. Drag either end of a link to another port to
+reconnect it, or drop it onto empty canvas to disconnect it. Reconnecting to an
+occupied input replaces its previous link. When several links leave the same
+output, select the one to move first. Dropping on a node body, an invalid port or
+outside the canvas keeps the link. These edits save automatically and
+can be undone with Ctrl/Cmd+Z. Select a node for
 its parameters on the right and its [results](RESULTS.md) below. Double-click a
 SQL or Python node to edit its code; a linked node opens its shared template.
 **Edit code** at the top of the inspector does the same. The icons under it run
@@ -40,12 +45,22 @@ view. **Auto-arrange nodes** places dependencies in columns, orders each column 
 avoid crossing links, and lines up linked sockets. Drag a port onto empty space to
 add a compatible connected node.
 
-Connections must form an acyclic graph: a node cannot read its own output or
-the output of one of its descendants. The canvas refuses these connections,
-and the inspector excludes them from the available inputs, including inside
-components. Cycles introduced through project files are reported as validation
-errors; affected nodes cannot run until the cycle is removed. Duckpad does not
-execute feedback loops or iterate a graph until a result converges.
+Drop a node onto a link to insert it between the two connected nodes. The link
+becomes a thicker dashed line while it passes under the node and can accept it.
+This works for a node already on the canvas or dragged from the palette. The node
+needs exactly one input, still unconnected, and one output, and the insertion must
+not create a cycle. Inputs exposed by an opened component are reserved for external
+connections. Other drops keep existing links intact, and moving several selected
+nodes does not insert them. Ctrl/Cmd+Z undoes the placement and both connections
+together.
+
+Links must form an acyclic graph: a node cannot read its own output or the
+output of a node it feeds. The canvas refuses such a link and says why, and
+the inspector leaves it out of the available inputs. A component can sit both
+before and after a node as long as the ports involved are independent inside
+it. Cycles introduced through project files are reported as validation errors;
+affected nodes cannot run until the cycle is removed. Duckpad does not execute
+feedback loops or iterate a graph until a result converges.
 
 Press **Escape** to clear the selection and close its inspector and results.
 Selecting a node opens both panels again. An open dialog, menu or list of

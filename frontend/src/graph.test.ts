@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   connectInput,
   containsPython,
+  downstream,
   formatValue,
   graphAt,
   identifier,
@@ -347,51 +348,98 @@ describe("containsPython", () => {
   });
 });
 
-describe("connectInput", () => {
-  it.each(["first", "second", "third"])(
-    "refuses %s feeding first without replacing its existing input",
-    (source) => {
-      const graph: Graph = {
-        nodes: [],
-        edges: [
-          edge("source", "first"),
-          edge("first", "second"),
-          edge("second", "third"),
-          edge("source", "independent"),
-        ],
-      };
-      const before = structuredClone(graph);
-      expect(connectInput(graph, edge(source, "first"))).toBe(false);
-      expect(graph).toEqual(before);
+describe("downstream", () => {
+  it("finds the outputs of a node and of its descendants only", () => {
+    const graph: Graph = {
+      nodes: ["source", "first", "second", "third", "other"].map((id) =>
+        node(id),
+      ),
+      edges: [
+        edge("source", "first"),
+        edge("first", "second"),
+        edge("second", "third"),
+        edge("source", "other"),
+      ],
+    };
+    const fed = downstream(graph, {}, "first", "input");
+    expect(graph.nodes.filter((item) => fed(item.id, "output"))).toEqual(
+      ["first", "second", "third"].map((id) => node(id)),
+    );
+  });
+
+  it("ends on a cycle saved in the project files", () => {
+    const graph: Graph = {
+      nodes: [node("source"), node("first"), node("second")],
+      edges: [edge("first", "second"), edge("second", "first")],
+    };
+    const fed = downstream(graph, {}, "first", "input");
+    expect(fed("second", "output")).toBe(true);
+    expect(fed("source", "output")).toBe(false);
+  });
+
+  // Two independent halves: rows it loads, and a total of the input it reads.
+  const halves: ComponentDefinition = {
+    nodes: [node("rows"), node("total")],
+    edges: [],
+    inputs: { input: { node: "total", port: "input" } },
+    outputs: {
+      rows: { node: "rows", port: "output" },
+      total: { node: "total", port: "output" },
+    },
+  };
+  const exposing = (child: string): ComponentDefinition => ({
+    nodes: [node("inner", { component: child })],
+    edges: [],
+    inputs: { input: { node: "inner", port: "input" } },
+    outputs: {
+      rows: { node: "inner", port: "rows" },
+      total: { node: "inner", port: "total" },
+    },
+  });
+  const around = (definition: string): Graph => ({
+    nodes: [node("instance", { component: definition }), node("filter")],
+    edges: [{ ...edge("instance", "filter"), sourceHandle: "rows" }],
+  });
+
+  it.each(["halves", "nested"])(
+    "lets a %s component sit before and after a node, through the ports it connects",
+    (definition) => {
+      const components = { halves, nested: exposing("halves") };
+      const graph = around(definition);
+      const input = downstream(graph, components, "instance", "input");
+      expect(input("filter", "output")).toBe(false);
+      expect(input("instance", "rows")).toBe(false);
+      expect(input("instance", "total")).toBe(true);
+      graph.edges.push(edge("filter", "instance"));
+      const filter = downstream(graph, components, "filter", "input");
+      expect(filter("instance", "rows")).toBe(false);
+      expect(filter("instance", "total")).toBe(true);
     },
   );
 
-  it("allows fan-out and reconverging branches without mistaking them for a cycle", () => {
-    const graph: Graph = {
-      nodes: [],
-      edges: [
-        edge("source", "left"),
-        edge("source", "right"),
-        edge("left", "join", "left"),
-      ],
-    };
-    expect(connectInput(graph, edge("right", "join", "right"))).toBe(true);
-    expect(graph.edges).toHaveLength(4);
+  it("keeps an instance opaque when its definition is missing, recursive or lacks the port", () => {
+    const components = { recursive: exposing("recursive"), halves };
+    for (const definition of ["missing", "recursive"])
+      expect(
+        downstream(
+          around(definition),
+          components,
+          "instance",
+          "input",
+        )("filter", "output"),
+      ).toBe(true);
+    expect(
+      downstream(
+        around("halves"),
+        components,
+        "instance",
+        "removed",
+      )("filter", "output"),
+    ).toBe(true);
   });
+});
 
-  it("can repair a graph imported with a cycle and still rejects cyclic connections", () => {
-    const graph: Graph = {
-      nodes: [],
-      edges: [edge("first", "second"), edge("second", "first")],
-    };
-    expect(connectInput(graph, edge("second", "first"))).toBe(false);
-    expect(connectInput(graph, edge("source", "first"))).toBe(true);
-    expect(graph.edges).toEqual([
-      edge("first", "second"),
-      expect.objectContaining({ source: "source", target: "first" }),
-    ]);
-  });
-
+describe("connectInput", () => {
   it("adds the edge with a generated identifier", () => {
     const graph: Graph = { nodes: [], edges: [] };
     connectInput(graph, {

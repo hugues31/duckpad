@@ -1484,6 +1484,7 @@
   "branchOneNode": "{count} node",
   "changeRedone": "Change redone",
   "nothingPasted": "These nodes cannot be pasted in this flow.",
+  "connectionCycle": "This link would create a cycle: a node cannot read its own result.",
   "nothingToUndo": "Nothing to undo",
   "changeUndone": "Change undone",
   "editorAutosaveHint": "Changes are saved after a short pause. Ctrl+S or ⌘S saves now.",
