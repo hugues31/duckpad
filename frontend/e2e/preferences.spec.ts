@@ -2,16 +2,17 @@ import { test, expect } from "@playwright/test";
 import en from "../src/locales/en.json" with { type: "json" };
 import fr from "../src/locales/fr.json" with { type: "json" };
 import pt from "../src/locales/pt.json" with { type: "json" };
+import de from "../src/locales/de.json" with { type: "json" };
 import { submitLogin } from "./helpers";
 
-const catalogs = { en, fr, pt };
+const catalogs = { en, fr, pt, de };
 /** Each language's name in its own catalog, as the account menu lists it. */
 const nativeNames = { en: "English", fr: "Français" };
 
 for (const scenario of [
   { locale: "fr-CA", colorScheme: "dark", language: "fr", theme: "dark" },
   {
-    locale: "de-DE",
+    locale: "es-ES",
     colorScheme: "no-preference",
     language: "en",
     theme: "light",
@@ -67,7 +68,8 @@ for (const scenario of [
 }
 
 for (const scenario of [
-  { languages: ["de-DE", "pt-PT", "fr-FR"], expected: "pt" },
+  { languages: ["es-ES", "pt-PT", "fr-FR"], expected: "pt" },
+  { languages: ["es-ES", "de-AT", "fr-FR"], expected: "de" },
   { languages: [], expected: "fr" },
 ] as const) {
   test(`uses ordered browser languages ${JSON.stringify(scenario.languages)} and ignores invalid saved values`, async ({
@@ -102,6 +104,7 @@ test.describe("manual preferences", () => {
     await page.goto("/");
     await page.getByTitle(fr.language, { exact: true }).click();
     await page.getByTitle(pt.language, { exact: true }).click();
+    await page.getByTitle(de.language, { exact: true }).click();
     await page.getByTitle(en.light, { exact: true }).click();
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute("lang", "en");
@@ -136,6 +139,8 @@ test.describe("preference controls", () => {
       page.getByRole("button", { name: pt.signInAction, exact: true }),
     ).toBeVisible();
     await page.getByTitle(pt.language, { exact: true }).click();
+    await expect(page.locator("html")).toHaveAttribute("lang", "de");
+    await page.getByTitle(de.language, { exact: true }).click();
     await expect(page.locator("html")).toHaveAttribute("lang", "en");
     await submitLogin(page, en);
 
@@ -154,6 +159,7 @@ test.describe("preference controls", () => {
       "English",
       "French",
       "Portuguese",
+      "German",
     ]);
     await expect(options(en, "theme")).toHaveText([en.light, en.dark]);
     await expect(options(en, "edgeStyle")).toHaveText([
@@ -170,6 +176,7 @@ test.describe("preference controls", () => {
       "Anglais",
       "Français",
       "Portugais",
+      "Allemand",
     ]);
     await expect(options(fr, "theme")).toHaveText([fr.light, fr.dark]);
     await expect(options(fr, "edgeStyle")).toHaveText([
@@ -186,6 +193,7 @@ test.describe("preference controls", () => {
       "Anglais",
       "Français",
       "Portugais",
+      "Allemand",
     ]);
     await expect(language).toHaveValue("fr");
     await expect(theme.locator("option")).toHaveText([fr.light, fr.dark]);
@@ -212,11 +220,11 @@ test.describe("preference controls", () => {
     ).toBeVisible();
     await expect(
       page.getByLabel(pt.language, { exact: true }).locator("option"),
-    ).toHaveText(["Inglês", "Francês", "Português"]);
+    ).toHaveText(["Inglês", "Francês", "Português", "Alemão"]);
     await page.getByLabel(pt.language, { exact: true }).selectOption("en");
     await expect(page.locator("html")).toHaveAttribute("lang", "en");
     await expect(
       page.getByLabel(en.language, { exact: true }).locator("option"),
-    ).toHaveText(["English", "French", "Portuguese"]);
+    ).toHaveText(["English", "French", "Portuguese", "German"]);
   });
 });

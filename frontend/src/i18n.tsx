@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext } from "react";
 import type { NodeInterface } from "./graph";
 import type { FlowNode } from "./types";
+import de from "./locales/de.json";
 import en from "./locales/en.json";
 import fr from "./locales/fr.json";
 import pt from "./locales/pt.json";
@@ -8,7 +9,7 @@ import pt from "./locales/pt.json";
 /** A key of the translation catalogs. */
 export type TranslationKey = keyof typeof en;
 // Every catalog defines every key.
-const locales = { en, fr, pt } satisfies Record<
+const locales = { en, fr, pt, de } satisfies Record<
   string,
   Record<TranslationKey, string>
 >;
@@ -60,6 +61,7 @@ export function useTranslateValue() {
 const builtinLabels = {
   load_csv: "Load CSV",
   load_json: "Load JSON",
+  load_delta: "Load Delta",
   load_parquet: "Load Parquet",
   load_xlsx: "Load XLSX",
   load_table: "Load table",

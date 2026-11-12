@@ -782,7 +782,13 @@ fieldset.palette-bottom {
   width: 100%;
   height: 100%;
   overflow: visible;
+}
+/* Only the hexagon catches pointers: the corners of its box stay with the canvas. */
+.react-flow__node-pipeline .pipeline-node.component > .node-shape {
   pointer-events: none;
+}
+.react-flow__node-pipeline .node-hexagon-body {
+  pointer-events: auto;
 }
 .node-hexagon-body {
   fill: var(--surface);
@@ -801,8 +807,18 @@ fieldset.palette-bottom {
 .node-hexagon-ring {
   stroke-width: 8;
 }
-.pipeline-node:is(.is-selected, .is-running) .node-hexagon-ring {
+.pipeline-node.is-selected .node-hexagon-ring {
   opacity: 0.24;
+}
+/* Running glows like the other shapes: a fainter ring over a soft halo. */
+.pipeline-node.is-running:not(.is-selected) .node-hexagon-ring {
+  stroke-width: 6;
+  opacity: 0.16;
+}
+.pipeline-node.is-running:not(.is-selected) .node-hexagon-body {
+  filter: drop-shadow(
+    0 6px 22px color-mix(in srgb, var(--accent) 26%, transparent)
+  );
 }
 .pipeline-node:is(.is-selected, .is-running, :hover) .node-hexagon-body {
   stroke: var(--accent);
@@ -829,7 +845,7 @@ fieldset.palette-bottom {
 .pipeline-node:has(.node-progress[data-paused]) .node-hexagon-pulse {
   animation-play-state: paused;
 }
-.component .node-progress {
+.pipeline-node.component .node-progress {
   clip-path: var(--node-hexagon-path);
 }
 .node-title {

@@ -1,6 +1,8 @@
+import deNumbers from "d3-format/locale/de-DE";
 import enNumbers from "d3-format/locale/en-US";
 import frNumbers from "d3-format/locale/fr-FR";
 import ptNumbers from "d3-format/locale/pt-BR";
+import deDates from "d3-time-format/locale/de-DE";
 import enDates from "d3-time-format/locale/en-US";
 import frDates from "d3-time-format/locale/fr-FR";
 import ptDates from "d3-time-format/locale/pt-BR";
@@ -19,6 +21,7 @@ const LOCALES = {
   en: { formatLocale: enNumbers, timeFormatLocale: enDates },
   fr: { formatLocale: frNumbers, timeFormatLocale: frDates },
   pt: { formatLocale: ptNumbers, timeFormatLocale: ptDates },
+  de: { formatLocale: deNumbers, timeFormatLocale: deDates },
 } satisfies Record<
   Language,
   Pick<EmbedOptions, "formatLocale" | "timeFormatLocale">

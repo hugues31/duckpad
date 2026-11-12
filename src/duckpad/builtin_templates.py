@@ -34,6 +34,13 @@ SELECT * FROM read_xlsx({{ file }}, sheet={{ sheet }}, header={{ header }}, all_
 -- @output result
 SELECT * FROM read_json_auto({{ file }});
 """,
+    "load_delta": """-- @label Load Delta
+-- @description Read the current version of a Delta Lake table folder with DuckDB's delta extension.
+-- @param connection: connection = ""
+-- @param table: file(connection) = ""
+-- @output result
+SELECT * FROM delta_scan({{ table }});
+""",
     "load_table": """-- @label Load table
 -- @description Read a table or view of a database connection.
 -- @param connection: connection = ""

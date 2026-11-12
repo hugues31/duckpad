@@ -35,7 +35,7 @@ def run_model(args=None, count=1):
 
 def request_run(app, client, context, args=None, count=1):
     app.state.assistant.configuration.model_override = run_model(args, count)
-    identity = conversation(client, context)
+    identity = conversation(client)
     result = turn(client, identity, context, "Run the flow")[-1]["turn"]
     assert result["status"] == "awaiting_approval", result
     assert client.get(f"/api/runs?worktree={context['worktree']}").json() == []
@@ -308,7 +308,7 @@ def test_debug_respects_data_policy_and_historical_connection_grants(instance):
         app.state.assistant.configuration.get()["revision"],
         context,
     )
-    ctx = SimpleNamespace(deps=deps)
+    ctx = SimpleNamespace(deps=deps, tool_call_id="call")
     assert inspect_run(ctx, "run_after")["error"] == "private value"
     assert read_run_sql(ctx, "run_after", "source")["items"][0]["sql"] == "SELECT 'private value'"
     assert compare_run(ctx, "run_after")["previous"] == "run_before"
@@ -372,7 +372,7 @@ def test_failed_run_lookup_does_not_block_the_next_turn(instance):
             yield {0: DeltaToolCall(name="inspect_run", json_args='{"run":"latest"}', tool_call_id="missing")}
 
     app.state.assistant.configuration.model_override = FunctionModel(stream_function=stream)
-    identity = conversation(client, context)
+    identity = conversation(client)
     first = turn(client, identity, context)[-1]["turn"]
     assert first["tools"][0]["status"] == "error"
     assert first["status"] == "complete"
@@ -525,7 +525,7 @@ def test_follow_up_after_an_inspected_run_expired(instance):
             yield {0: DeltaToolCall(name="inspect_run", json_args='{"run":"run_old"}', tool_call_id="read")}
 
     app.state.assistant.configuration.model_override = FunctionModel(stream_function=stream)
-    identity = conversation(client, context)
+    identity = conversation(client)
     first = turn(client, identity, context)[-1]["turn"]
     assert first["tools"][0]["status"] == "complete", first["tools"][0]["summary"]
     # Retention removes old runs; the conversation that read one must stay usable.

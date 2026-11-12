@@ -1,3 +1,4 @@
+import { useT } from "./i18n";
 import { applyParameterChange } from "./nodeParameters";
 import ParameterField from "./ParameterField";
 import { typeArgument } from "./parameterType";
@@ -35,6 +36,7 @@ export default function InspectorParameters({
   nodeProblems,
   update,
   fileSource,
+  folderSource,
   listedConnection,
   listedSchema,
   listedTable,
@@ -62,6 +64,8 @@ export default function InspectorParameters({
   nodeProblems: Diagnostic[];
   update: (change: (current: FlowNode) => FlowNode) => void;
   fileSource: boolean;
+  /** The node reads a table folder: its path is typed, never picked among uploads. */
+  folderSource?: boolean;
   listedConnection: string | undefined;
   listedSchema: string | undefined;
   listedTable: string | undefined;
@@ -79,6 +83,7 @@ export default function InspectorParameters({
   inputColumns: Record<string, Column[]>;
   schemas: Record<string, string[]>;
 }) {
+  const t = useT();
   return (
     <>
       {parameters
@@ -90,11 +95,16 @@ export default function InspectorParameters({
           const variableType = bindable ? variableTypeFor(type) : null;
           // Column parameters name the input port they choose from.
           const port = typeArgument(parameter.type);
+          const folder = !!folderSource && type.startsWith("file");
           return (
             <ParameterField
               key={parameter.name}
               worktree={snapshot.worktree.id}
-              parameter={parameter}
+              parameter={
+                folder
+                  ? { ...parameter, description: t("tableFolderHint") }
+                  : parameter
+              }
               value={value}
               variable={
                 variableType || reference
@@ -165,7 +175,7 @@ export default function InspectorParameters({
               }
               connections={connections}
               location={type === "connection" && locations.has(parameter.name)}
-              projectFile={type.startsWith("file") && !valueOf(port)}
+              projectFile={type.startsWith("file") && !valueOf(port) && !folder}
               csv={csvSource}
               objects={objectNames(parameter)}
               columns={port ? inputColumns[port] : undefined}

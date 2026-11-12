@@ -299,6 +299,8 @@ class AssistantConversation(SQLModel, table=True):
     __table_args__ = (Index("assistant_owner_updated", "user", "updated"),)
     id: str = Field(primary_key=True)
     user: str = Field(foreign_key="user.id", ondelete="CASCADE")
+    # Set by conversations started while they were tied to a branch; empty since. Removed with
+    # the next baseline.
     project: str | None = Field(default=None, foreign_key="project.id", ondelete="CASCADE")
     branch: str
     worktree: str

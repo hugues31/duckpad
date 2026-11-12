@@ -14,21 +14,25 @@ from test_assistant_editing import change, seed
 from duckpad.assistant.arguments import DeleteVariable
 from duckpad.assistant.editing import edit_variable
 from duckpad.assistant.knowledge import GUIDES, checkout_guides, guide_text, read_guide
+from duckpad.assistant.registry import TOOLS
 from duckpad.assistant.service import guarded
 from duckpad.assistant.tools import read_variables
 from duckpad.util import Problem
+
+READING = {name for name, spec in TOOLS.items() if spec.needs == "read"}
 
 
 def test_manual_is_available_without_a_project_and_instructions_reach_each_turn(instance):
     app, client = instance
     configure(client, allow_data=False)
     context = {"page": "projects"}
-    identity = conversation(client, context)
+    identity = conversation(client)
     received = []
 
     async def stream(messages, info):
         received.append(info.instructions)
-        assert {t.name for t in info.function_tools} == {"read_guide"}
+        # No branch is open: every reading tool is offered, none that returns values or edits.
+        assert {t.name for t in info.function_tools} == READING
         if not any(isinstance(p, ToolReturnPart) for p in messages[-1].parts):
             yield {0: DeltaToolCall(name="read_guide", json_args='{"topic":"sql"}', tool_call_id="manual")}
         else:

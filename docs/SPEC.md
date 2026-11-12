@@ -87,13 +87,18 @@ caller-supplied variable overrides remain unimplemented. See [Jobs](JOBS.md),
 
 The assistant is disabled until an instance administrator configures it. Tools
 recheck access, edits use normal versioned saves with Undo, and runs require
-explicit approval bound to the proposed configuration. Conversations are private
+explicit approval bound to the proposed configuration. On every page, tools read
+any branch the user can open and the connections the user can see; edits and
+runs apply to the open branch only, and an edit that follows a read of another
+project's content or of connection details waits for the user's confirmation.
+Conversations are tied to no page: each message carries its own. They are private
 to their author, including against other instance administrators. The
 assistant's instructions limit it to Duckpad, project content and data or
 software development topics; it declines unrelated requests.
 
 The provider receives instructions, tool schemas, the question, validated page
-context, conversation history and requested tool results:
+context, conversation history and requested tool results. Project rows apply to
+the open branch and to every other branch the user can open:
 
 | Content | Data reading disabled | Data reading enabled |
 | --- | --- | --- |
@@ -108,9 +113,12 @@ context, conversation history and requested tool results:
 | Output preview values and filters | Tool absent | Bounded existing output rows |
 | Value lineage: selected value, SQL/expression, contributing values, source/schema metadata and limitations | Tool absent | Bounded contribution pages |
 | Search excerpts from saved project definitions | Yes | Yes |
-| Current-branch Git commit metadata (including authors, messages and hashes) | Yes | Yes |
+| Git commit metadata of a branch read (including authors, messages and hashes) | Yes | Yes |
 | Requested write arguments and resulting change summaries, SQL diffs and commit IDs | For project editors/admins | For project editors/admins |
-| Provider keys, OAuth2 client secrets and tokens, resolved connection secrets, instance users, sessions, other projects and unsaved editor drafts | Never | Never |
+| Names, IDs and branches of the projects the user can open, with the user's role | Yes | Yes |
+| Connections granted to those projects: names, families, capabilities and granted projects | Yes | Yes |
+| Every connection's name, and on request its connector type and parameter values by environment | Instance administrators only; secrets masked | Same |
+| Provider keys, OAuth2 client secrets and tokens, connection secrets, instance users, sessions, projects the user cannot open and unsaved editor drafts | Never | Never |
 
 The data-reading switch governs result access, not secrets embedded in
 user-authored text. Questions, code, variables and commit messages can contain

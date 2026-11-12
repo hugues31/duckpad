@@ -22,7 +22,7 @@ import QueryBuilder from "./QueryBuilder";
 import type { ResultsTab } from "./results";
 import ResultSummary from "./ResultSummary";
 import { useWorkspace } from "./shell";
-import { isFileReader } from "./SourceFileField";
+import { isFileReader, isFolderReader } from "./SourceFileField";
 import SourcePreview from "./SourcePreview";
 import type {
   Documentation,
@@ -389,6 +389,7 @@ export default function Inspector({
               nodeProblems={nodeProblems}
               update={update}
               fileSource={fileSource}
+              folderSource={isFolderReader(sourceKind)}
               listedConnection={listedConnection}
               listedSchema={listedSchema}
               listedTable={listedTable}
