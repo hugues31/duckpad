@@ -10,6 +10,7 @@ import {
 import type { CanvasProps } from "./canvasTypes";
 import { nodeInterface, type NodeKind } from "./graph";
 import { nodeLabel, useT } from "./i18n";
+import type { FlowNode } from "./types";
 
 // A browser drag image is a snapshot that cannot change during the drag.
 // The page draws the preview instead, so it can show where drops are refused.
@@ -23,7 +24,7 @@ export function useNodeDragPreview({ parsed, components }: CanvasProps) {
   const { getZoom } = useReactFlow();
   const element = useRef<HTMLDivElement>(null);
   const [preview, setPreview] = useState<{
-    node: Parameters<typeof nodeInterface>[0];
+    node: FlowNode;
     data: PipelineNode["data"];
     zoom: number;
   } | null>(null);
@@ -53,7 +54,7 @@ export function useNodeDragPreview({ parsed, components }: CanvasProps) {
         document.body,
       ),
     previewDrag(kind: NodeKind, id: string, transfer: DataTransfer) {
-      const node = {
+      const node: FlowNode = {
         id: "",
         params: {},
         position: { x: 0, y: 0 },

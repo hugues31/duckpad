@@ -39,7 +39,7 @@ import { showMinimap } from "./canvasResults";
 import type { CanvasProps, FocusRequest } from "./canvasTypes";
 import ConnectionPalette from "./ConnectionPalette";
 import {
-  edgeAtPoint,
+  edgesNear,
   planEdgeInsertion,
   type EdgeInsertion,
 } from "./edgeInsertion";
@@ -68,6 +68,7 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
   const {
     getNodes,
     getInternalNode,
+    getZoom,
     screenToFlowPosition,
     flowToScreenPosition,
   } = useReactFlow();
@@ -137,12 +138,12 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
   }, []);
   const insertionAt = (node: FlowNode, point: { x: number; y: number }) => {
     if (props.readOnly) return;
-    const candidates = new Map<string, EdgeInsertion>();
-    for (const edge of props.edges) {
-      const plan = planEdgeInsertion(props, node, edge);
-      if (plan) candidates.set(edge.id, plan);
+    // This runs on every drag frame: only the links under the node are planned.
+    for (const id of edgesNear(flow.current, point, getZoom())) {
+      const edge = props.edges.find((item) => item.id === id);
+      const plan = edge && planEdgeInsertion(props, node, edge);
+      if (plan) return plan;
     }
-    return edgeAtPoint(flow.current, point, candidates);
   };
   const draggedInsertion = (moved: PipelineNode[]) => {
     if (moved.length !== 1) return;
@@ -518,7 +519,6 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
         onNodeDragStop={(_, __, moved) => {
           const insertion = draggedInsertion(moved);
           setInsertionEdge(null);
-          if (props.readOnly) return;
           void persistPositions(
             moved.map((n) => ({
               ...props.nodes.find((x) => x.id === n.id)!,
@@ -552,20 +552,17 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
           event.dataTransfer.dropEffect = "copy";
           const node = dragPreview.node;
           setInsertionEdge(
-            node
-              ? (insertionAt(
-                  {
-                    ...node,
-                    id: "",
-                    params: {},
-                    position: { x: 0, y: 0 },
-                  },
-                  { x: event.clientX, y: event.clientY },
-                )?.edge.id ?? null)
-              : null,
+            (node &&
+              insertionAt(node, { x: event.clientX, y: event.clientY })?.edge
+                .id) ??
+              null,
           );
         }}
-        onDragLeave={() => setInsertionEdge(null)}
+        onDragLeave={(event) => {
+          // Moving between the canvas's own elements also fires dragleave.
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null))
+            setInsertionEdge(null);
+        }}
         onDrop={(event) => {
           if (props.readOnly) return;
           event.preventDefault();

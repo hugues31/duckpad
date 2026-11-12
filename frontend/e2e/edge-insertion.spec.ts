@@ -1,10 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
-import { createFilterProject } from "./helpers";
+import { canvasZoom, createFilterProject } from "./helpers";
 
-async function prepare(page: Page) {
+async function prepare(page: Page, outputY = 120) {
   return createFilterProject(page, (bundle) => {
     bundle.flow.nodes[1].position = { x: 350, y: 260 };
-    bundle.flow.nodes[2].position = { x: 700, y: 120 };
+    bundle.flow.nodes[2].position = { x: 700, y: outputY };
     bundle.flow.edges = [
       {
         id: "direct",
@@ -19,6 +19,10 @@ async function prepare(page: Page) {
 
 async function edgePoint(page: Page, id = "direct") {
   await page.getByRole("button", { name: "Fit view", exact: true }).click();
+  return pathPoint(page, id);
+}
+
+async function pathPoint(page: Page, id = "direct") {
   const path = page.locator(
     `.react-flow__edge[data-id="${id}"] .react-flow__edge-path`,
   );
@@ -101,6 +105,57 @@ for (const style of ["curved", "orthogonal"]) {
   });
 }
 
+test("a link under the dragged shape accepts it on a full-size canvas", async ({
+  page,
+}) => {
+  // A straight link: the shape's vertical offset is its distance to the link.
+  const { read } = await prepare(page, 0);
+  await edgePoint(page);
+  expect(await canvasZoom(page)).toBeLessThan(1);
+  // Without the panels, the three nodes fit at full size.
+  await page.keyboard.press("Escape");
+  await expect
+    .poll(async () => {
+      await page.getByRole("button", { name: "Fit view", exact: true }).click();
+      return canvasZoom(page);
+    })
+    .toBe(1);
+  const shape = page.locator(
+    '.react-flow__node[data-id="filtered"] .node-shape',
+  );
+  const center = async () => {
+    const bounds = (await shape.boundingBox())!;
+    return {
+      x: bounds.x + bounds.width / 2,
+      y: bounds.y + bounds.height / 2,
+    };
+  };
+  const pointer = await center();
+  await page.mouse.move(pointer.x, pointer.y);
+  await page.mouse.down();
+  // A started drag stops the canvas from refitting: measure from here.
+  await page.mouse.move(pointer.x, pointer.y - 10, { steps: 3 });
+  const link = await pathPoint(page);
+  const dragged = await center();
+  const target = page.locator(".react-flow__edge.insertion-target");
+  const place = (below: number) =>
+    page.mouse.move(
+      pointer.x + link.x - dragged.x,
+      pointer.y - 10 + link.y + below - dragged.y,
+      { steps: 6 },
+    );
+  // The link passes just outside the 48px-radius shape, then well inside it.
+  await place(52);
+  await expect.poll(async () => (await center()).y - link.y).toBeCloseTo(52, 0);
+  await expect(target).toHaveCount(0);
+  await place(30);
+  await expect(target).toHaveCount(1);
+  await page.mouse.up();
+  await expect
+    .poll(async () => (await read()).bundle!.flow.edges.length)
+    .toBe(2);
+});
+
 test("palette insertion saves the new node and both links together", async ({
   page,
 }) => {
@@ -142,6 +197,11 @@ test("palette insertion saves the new node and both links together", async ({
         target: "output",
       }),
     ]),
+  );
+  // Undo is ignored until the addition settles, which selects the new node.
+  await expect(page.locator(".react-flow__node.selected")).toHaveAttribute(
+    "data-id",
+    created.id,
   );
   await page.keyboard.press("Escape");
   await page.keyboard.press("ControlOrMeta+z");
