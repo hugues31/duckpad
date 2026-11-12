@@ -29,6 +29,10 @@ export function missingFunctionExtension(message: string) {
     : null;
 }
 
+/** Whether a run could not start its worker with the project's extensions, which the server then lists. */
+export const projectExtensionsFailed = (message: string) =>
+  /\bProject extensions: /.test(message);
+
 /** DuckDB's official lists, to browse in a new tab. */
 export const extensionLists = {
   core: "https://duckdb.org/docs/stable/core_extensions/overview",

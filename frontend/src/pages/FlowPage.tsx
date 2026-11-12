@@ -18,6 +18,7 @@ import LineagePanel from "../LineagePanel";
 import { type CodeReveal } from "../NodeCodePanel";
 import NodePalette from "../NodePalette";
 import ResultsPanel from "../ResultsPanel";
+import RunFailureNotice from "../RunFailureNotice";
 import {
   isWideLayout,
   PanelResizeHandles,
@@ -361,6 +362,7 @@ export default function FlowPage() {
         </div>
       )}
       <main className="canvas-column" inert={busy}>
+        <RunFailureNotice />
         {/* Components show their own notice in this place. */}
         {!path.length && <BranchResultsNotice />}
         <CanvasHeader

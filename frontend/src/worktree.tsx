@@ -35,6 +35,7 @@ import type {
   Statuses,
 } from "./types";
 import { useApiResource } from "./useApiResource";
+import { useRunFailure } from "./useRunFailure";
 import { useWorktreeSnapshot } from "./useWorktreeSnapshot";
 import { rememberChange, revertChange, type History } from "./worktreeHistory";
 
@@ -62,6 +63,9 @@ export interface Worktree {
   starting: boolean;
   /** Diagnostics revealed by the latest rejected run, scoped to this branch. */
   runDiagnostics: Diagnostic[];
+  /** A run launched here that failed as a whole, with no node result to show its error. */
+  runFailure: Run | null;
+  dismissRunFailure(): void;
   /** Changes after Git operations, so Git indicators reload. */
   gitVersion: number;
   /** Reload the snapshot after a change; a failed read is left to polling. */
@@ -187,6 +191,11 @@ export function WorktreeProvider({
       return refreshWorkspace();
     },
   });
+  const { runFailure, trackRun } = useRunFailure(
+    id,
+    environment,
+    statuses.active,
+  );
   // Once connected, an input is only reported again by the next refused run.
   const unresolved = snapshot
     ? validation.diagnostics.filter((item) =>
@@ -406,6 +415,7 @@ export function WorktreeProvider({
       if (launching.current) return;
       launching.current = true;
       setStarting(true);
+      trackRun(null);
       try {
         await settle();
         const run = await api<Run>(
@@ -413,6 +423,7 @@ export function WorktreeProvider({
           send({ environment, node, entry_point: "ui", confirmed, ...options }),
         );
         setActive(id, run);
+        trackRun(run);
         setValidation({ worktree: id, diagnostics: [] });
       } catch (error) {
         const missing = refusedInputs(error);
@@ -470,6 +481,8 @@ export function WorktreeProvider({
       statusesLoaded,
       loadError,
       runDiagnostics: validation.worktree === id ? validation.diagnostics : [],
+      runFailure,
+      dismissRunFailure: () => trackRun(null),
       canEdit,
       saving: saves > 0,
       starting,
@@ -554,6 +567,8 @@ export function WorktreeProvider({
     statusesLoaded,
     loadError,
     validation,
+    runFailure,
+    trackRun,
     saves,
     gitVersion,
     gitChanged,
