@@ -29,8 +29,9 @@ you connect it. Point at a node or a link to highlight it. Click a link to selec
 it, then press Delete or Backspace to disconnect it. Shift-click selects multiple
 links; Ctrl/Cmd+Z undoes a deletion. Drag either end of a link to another port to
 reconnect it, or drop it onto empty canvas to disconnect it. Reconnecting to an
-occupied input replaces its previous link. Dropping on a node body, an invalid
-port or outside the canvas keeps the link. These edits save automatically and
+occupied input replaces its previous link. When several links leave the same
+output, select the one to move first. Dropping on a node body, an invalid port or
+outside the canvas keeps the link. These edits save automatically and
 can be undone with Ctrl/Cmd+Z. Select a node for
 its parameters on the right and its [results](RESULTS.md) below. Double-click a
 SQL or Python node to edit its code; a linked node opens its shared template.

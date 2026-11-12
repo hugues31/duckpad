@@ -53,6 +53,7 @@ const edgeTypes = { pipeline: PipelineEdge };
 const NO_ENDPOINTS: EdgeEndpoints[] = [];
 // Keep listening through saves and undo so keyup events cannot leave modifiers stuck.
 const DELETE_KEYS = ["Backspace", "Delete"];
+const ENDS = ["source", "sourceHandle", "target", "targetHandle"] as const;
 function CanvasInner({ ref, ...props }: CanvasProps) {
   const t = useT();
   const [context, setContext] = useState<{
@@ -236,7 +237,7 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
     const phases = new Map(
       nodes.map((node) => [node.id, node.data.progress?.phase]),
     );
-    return props.edges.map((e): PipelineEdge => {
+    const drawn = props.edges.map((e): PipelineEdge => {
       const connected = selected.has(e.source) || selected.has(e.target);
       const pointed = hovered === e.source || hovered === e.target;
       const edgeSelected = selectedEdges.has(e.id);
@@ -273,6 +274,12 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
           : undefined,
       };
     });
+    // Links leaving one output share the spot that drags their end: the
+    // selected link is drawn last, so it is the one that moves.
+    return [
+      ...drawn.filter((edge) => !edge.selected),
+      ...drawn.filter((edge) => edge.selected),
+    ];
   }, [props.edges, nodes, hovered, edgeStyle, lanes, selectedEdges]);
   const changes = (changes: NodeChange<PipelineNode>[]) =>
     setNodes((current) => applyNodeChanges(changes, current));
@@ -433,7 +440,9 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
           reconnecting.current = true;
         }}
         onReconnect={(edge, connection) => {
-          if (!props.readOnly)
+          // An end dropped back on its own port changes nothing.
+          const moved = ENDS.some((end) => edge[end] !== connection[end]);
+          if (!props.readOnly && moved)
             props.onReconnect(edge.id, connection as Omit<FlowEdge, "id">);
         }}
         onReconnectEnd={(event, edge, _, connection) => {
@@ -451,6 +460,12 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
             pointer.clientY,
           );
           if (!target?.classList.contains("react-flow__pane")) return;
+          // Like a link deleted from the keyboard, Undo restores it unselected.
+          setSelectedEdges((current) => {
+            const next = new Set(current);
+            next.delete(edge.id);
+            return next;
+          });
           void props.onDelete([], [edge.id]).catch(() => {
             // The workspace reports the error; edges still use the saved graph.
           });

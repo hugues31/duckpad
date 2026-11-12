@@ -150,8 +150,39 @@ test("clicking an endpoint and dropping on invalid targets leave the graph uncha
   }
   expect((await read()).bundle).toEqual(before.bundle);
   expect((await read()).commit).toBe(before.commit);
-  // Dropping back on the same port may run the save path, but creates no change.
-  expect(saves.length).toBeLessThanOrEqual(1);
+  expect(saves).toEqual([]);
+});
+
+test("the selected link moves from an output shared by several links and is restored unselected", async ({
+  page,
+}) => {
+  const { read } = await createFilterProject(page, (bundle) => {
+    // Lower, so the link to it does not pass behind the middle node.
+    bundle.flow.nodes[2].position = { x: 700, y: 250 };
+    bundle.flow.edges = [
+      {
+        id: "third",
+        source: "rows",
+        sourceHandle: "result",
+        target: "output",
+        targetHandle: "source",
+      },
+      bundle.flow.edges[0],
+    ];
+  });
+  const before = (await read()).bundle!.flow;
+  expect(before.edges.map((item) => item.id)).toEqual(["third", "first"]);
+  // The link drawn first lies under the other one at their shared end.
+  await edge(page, "third").locator(".react-flow__edge-interaction").click();
+  await expect(edge(page, "third")).toContainClass("selected");
+  await autosaved(page, async () => {
+    await dragEnd(page, "third", "source", await emptySpace(page));
+  });
+  expect((await read()).bundle!.flow.edges).toEqual([before.edges[1]]);
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect.poll(async () => (await read()).bundle!.flow).toEqual(before);
+  await expect(edge(page, "third")).toBeVisible();
+  await expect(edge(page, "third")).not.toContainClass("selected");
 });
 
 test("failed reconnect and disconnect saves keep the original links", async ({
