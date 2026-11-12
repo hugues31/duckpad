@@ -95,7 +95,16 @@ export type PipelineNode = Node<PipelineData, "pipeline">;
 
 /** Center of the 96px shape inside the 150px node (see flow.css). */
 export const NODE_SHAPE_CENTER = { x: 75, y: 48 };
-const HEXAGON_POINTS = "24,0 72,0 96,48 72,96 24,96 0,48";
+// A regular hexagon inscribed in the same 48px radius as circular nodes.
+const HEXAGON_HALF_WIDTH = 24 * Math.sqrt(3);
+const HEXAGON_POINTS = [
+  "48,0",
+  `${48 + HEXAGON_HALF_WIDTH},24`,
+  `${48 + HEXAGON_HALF_WIDTH},72`,
+  "48,96",
+  `${48 - HEXAGON_HALF_WIDTH},72`,
+  `${48 - HEXAGON_HALF_WIDTH},24`,
+].join(" ");
 
 export const PipelineNode = memo(function PipelineNode({
   id,
@@ -138,7 +147,7 @@ export function PipelineNodeView({
     const inset = square
       ? 27
       : component
-        ? 27 + Math.abs(top - 48) / 2
+        ? 75 - Math.sqrt(3) * Math.min(24, 48 - Math.abs(top - 48))
         : 75 - Math.sqrt(48 ** 2 - (top - 48) ** 2);
     return { top, inset };
   };
