@@ -1,0 +1,70 @@
+/* Documentation tab. */
+.documentation-page h1 {
+  margin-top: 12px;
+}
+.project-documentation {
+  display: block;
+  width: 100%;
+  min-height: 50vh;
+  padding: 24px;
+  font-size: 13px;
+  line-height: 1.9;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  resize: vertical;
+  font-family: monospace;
+}
+.documentation-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-block: 20px 16px;
+}
+.documentation-actions .segmented {
+  margin: 0;
+}
+.markdown-editor {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+/* The frame shows the focus: it clips the editor's own outline. */
+.markdown-editor:has(.project-documentation:focus-visible) {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.markdown-editor .project-documentation:focus-visible {
+  outline: none;
+}
+.markdown-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-alt);
+}
+.documentation-preview,
+.generated-documentation {
+  overflow-wrap: anywhere;
+  overflow-x: auto;
+  margin-block: 16px;
+}
+.documentation-preview pre {
+  overflow-x: auto;
+}
+.documentation-preview table,
+.generated-documentation table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.documentation-preview th,
+.documentation-preview td,
+.generated-documentation th,
+.generated-documentation td {
+  padding: 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
