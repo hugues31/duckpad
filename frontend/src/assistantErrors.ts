@@ -17,9 +17,10 @@ const errors: Record<string, TranslationKey> = {
     "assistantErrorTokenRefused",
   "Provide a token URL, client ID and client secret for OAuth2":
     "assistantOAuthRequired",
-  "Answer the pending run confirmation before sending another message":
+  "Answer the pending confirmation before sending another message":
     "assistantAnswerConfirmation",
-  "This run request has already been answered": "assistantErrorApprovalUsed",
+  "This request has already been answered": "assistantErrorApprovalUsed",
+  "The open branch changed. Try again.": "assistantErrorBranchChanged",
   "The run configuration changed. Request a new run and review its confirmation.":
     "assistantErrorRunChanged",
   "The provider refused the API key. Ask an instance administrator to check it.":
@@ -36,6 +37,8 @@ const errors: Record<string, TranslationKey> = {
   "Data reading is now disabled. Start a new conversation to keep previous values private.":
     "assistantErrorPolicy",
   "Assistant settings changed. Start a new turn.": "assistantErrorChanged",
+  "This conversation read content you can no longer open. Start a new conversation.":
+    "assistantErrorLostAccess",
   "The assistant is disabled": "assistantErrorDisabled",
   "Choose an allowed assistant model": "assistantErrorChooseModel",
   "Provide an API key for this provider": "assistantErrorProvideKey",
@@ -43,8 +46,7 @@ const errors: Record<string, TranslationKey> = {
   "Resolve the pending project conflict before editing":
     "assistantErrorConflict",
   "Wait for the assistant response before undoing": "assistantErrorWait",
-  "Open the conversation's original branch before undoing":
-    "assistantErrorUndoBranch",
+  "Open the branch of this change before undoing": "assistantErrorUndoBranch",
 };
 
 export function useAssistantError() {

@@ -8,7 +8,6 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router";
 import { api, send } from "./api";
 import { DEBUG_ASSISTANT_EVENT, type DebugRequest } from "./AskAssistant";
 import AssistantComposer from "./AssistantComposer";
@@ -32,7 +31,7 @@ import ConversationSidebar from "./ConversationSidebar";
 import { resolveNodePath } from "./graph";
 import { useT } from "./i18n";
 import { trapFocus } from "./modals";
-import { projectSettingsUrl, usePageRoute, worktreeUrl } from "./navigation";
+import { usePageRoute } from "./navigation";
 import { useShell } from "./shell";
 import { useAssistantStream } from "./useAssistantStream";
 import { useConversations } from "./useConversations";
@@ -46,7 +45,6 @@ export default function AssistantChat() {
   const { workspace, environment, drafts, openModal } = useShell();
   const worktree = useWorktree();
   const route = usePageRoute();
-  const navigate = useNavigate();
   const options = workspace?.assistant;
   const [open, setOpen] = useState(false);
   const [maximized, setMaximized] = useState(false);
@@ -98,11 +96,12 @@ export default function AssistantChat() {
   const selectedKey = selected
     ? JSON.stringify([selected.provider, selected.model])
     : "";
-  const bound =
-    !conversation ||
-    (conversation.worktree === context.worktree &&
-      conversation.project === context.project &&
-      conversation.branch === context.branch);
+  // A turn edits and runs the branch its message was sent from: its changes are undone,
+  // compared and confirmed while that branch is the open one.
+  const here = (turn: AssistantTurn) =>
+    !!turn.context.worktree &&
+    turn.context.worktree === context.worktree &&
+    turn.context.branch === context.branch;
   const {
     busy,
     error,
@@ -119,7 +118,6 @@ export default function AssistantChat() {
     setConversation,
     setTitle,
     list,
-    bound,
     worktree,
     drafts,
     context,
@@ -181,16 +179,12 @@ export default function AssistantChat() {
       setTitle(value.title);
       setPending(null);
       setError("");
-      if (value.worktree)
-        void navigate(worktreeUrl(value.worktree, "flow", environment));
-      else if (value.project) void navigate(projectSettingsUrl(value.project));
-      else void navigate("/projects");
     } catch (e) {
       setError((e as Error).message);
     }
   }
   async function undo(turn: AssistantTurn, action = "") {
-    if (!conversation || !turn.id || busy || undoing || !bound) return;
+    if (!conversation || !turn.id || busy || undoing || !here(turn)) return;
     setUndoing(true);
     setError("");
     try {
@@ -213,11 +207,12 @@ export default function AssistantChat() {
     }
   }
   const actionControls = (turn: AssistantTurn): ActionControls => ({
-    canCancel: bound && worktree.canEdit,
-    canApprove: !busy && !undoing && bound && worktree.canEdit,
-    canUndo: !busy && !undoing && bound && worktree.canEdit,
+    here: here(turn),
+    canCancel: here(turn) && worktree.canEdit,
+    canApprove: !busy && !undoing && here(turn) && worktree.canEdit,
+    canUndo: !busy && !undoing && here(turn) && worktree.canEdit,
     onUndo: (action) => void undo(turn, action),
-    onCompare: bound
+    onCompare: here(turn)
       ? (action) =>
           openModal({
             kind: "git",
@@ -226,7 +221,7 @@ export default function AssistantChat() {
           })
       : undefined,
     onConflict:
-      bound && !busy && !undoing
+      here(turn) && !busy && !undoing
         ? (conflict) =>
             openModal({
               kind: "conflict",
@@ -401,11 +396,6 @@ export default function AssistantChat() {
                   </button>
                 </form>
               )}
-              {!bound && (
-                <p className="assistant-notice">
-                  {t("assistantDifferentBranch")}
-                </p>
-              )}
               {context.worktree && worktree.snapshot && !worktree.canEdit && (
                 <p className="assistant-notice">{t("assistantReadOnly")}</p>
               )}
@@ -427,6 +417,7 @@ export default function AssistantChat() {
                       undoing={undoing}
                       selected={selected}
                       submit={submit}
+                      branchOpen={!!context.worktree}
                     />
                   )}
                   {conversation?.turns.map((turn, index) => (
@@ -436,10 +427,7 @@ export default function AssistantChat() {
                       thinking={busy && !!turn.id && turn.id === continuing}
                       {...actionControls(turn)}
                       onDecision={
-                        !busy &&
-                        !undoing &&
-                        bound &&
-                        turn.status === "awaiting_approval"
+                        !busy && !undoing && turn.status === "awaiting_approval"
                           ? (tool, approved) =>
                               void handleDecision(turn, tool, approved)
                           : undefined

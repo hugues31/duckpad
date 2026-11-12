@@ -299,6 +299,21 @@ result tools also check connection grants. Writes use the project writer and
 inverse merges for Undo. Runs require persisted approval bound to the proposed
 configuration. There is no arbitrary SQL or network tool.
 
+Each tool is a function registered with `@tool` (`assistant/registry.py`); its
+options alone decide when a response offers it. `needs` is `read` (every page),
+`data` (the instance's data-reading policy) or `write` (an open branch its user
+can edit); `approval` defers every call to the user. A conversation is tied to
+no page: each turn carries the page context it was sent from, and its
+`Dependencies` hold who asks, from which page and under which policy. A reading
+tool resolves the `Branch` it reads on every call, the open one or another the
+user can open, so no tool reaches a branch without that check; editing and run
+tools take no branch and act on the open one. Each tool call records what it
+read on its chat card: later turns recheck those reads before earlier results
+return to a provider. Once a conversation holds content of another project than
+the open one, or connection details, an editing tool defers its save until the
+user confirms its exact file changes, so planted text cannot move that content
+into the open branch unseen.
+
 Conversations belong to their author, without an administrator read override.
 They store Pydantic AI message history in SQLite; simultaneous turns return 409.
 Provider errors omit SDK response bodies. Tests disable real model requests.

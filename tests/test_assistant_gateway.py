@@ -233,7 +233,7 @@ def test_gateway_tools_approval_and_token_reuse_across_turns(instance, remote, s
     remote.split = split
     assert configure(client, providers=[{**PROVIDER, "streaming": streaming}]).status_code == 200
     _, context = project(client)
-    identity = conversation(client, context)
+    identity = conversation(client)
     result = turn(client, identity, context)[-1]["turn"]
     assert result["status"] == "complete", result
     preamble = "I will inspect the flow.\n\n" if split else ""
@@ -268,7 +268,7 @@ def test_unreadable_gateway_reply_has_its_own_error_and_warning(instance, remote
     _, client = instance
     remote.invalid = True
     _, context = project(client)
-    result = turn(client, conversation(client, context), context)[-1]["turn"]
+    result = turn(client, conversation(client), context)[-1]["turn"]
     assert result["status"] == "error"
     assert result["error"] == (
         "The provider returned a response the assistant could not read. Check the server logs."
@@ -418,7 +418,7 @@ def test_secret_redaction_covers_tools_and_fragmented_streams(instance):
             yield char
 
     app.state.assistant.configuration.model_override = FunctionModel(stream_function=stream)
-    identity = conversation(client, context)
+    identity = conversation(client)
     events = turn(client, identity, context)
     assert events[-1]["turn"]["text"] == "echo [redacted] end"
     assert "gateway-secret" not in "".join(e.get("text", "") for e in events)

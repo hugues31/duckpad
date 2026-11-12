@@ -8,6 +8,7 @@ import {
   Undo2,
   type LucideIcon,
 } from "lucide-react";
+import { Link } from "react-router";
 import { useAssistantError } from "./assistantErrors";
 import { AssistantRun, type RunControls } from "./AssistantRun";
 import type {
@@ -17,6 +18,7 @@ import type {
 } from "./assistantTypes";
 import { useT, type TranslationKey } from "./i18n";
 import MarkdownText from "./MarkdownText";
+import { worktreeUrl } from "./navigation";
 
 const toolLabels: Record<string, TranslationKey> = {
   read_flow: "assistantReadFlow",
@@ -24,6 +26,8 @@ const toolLabels: Record<string, TranslationKey> = {
   read_sql: "assistantReadSql",
   read_documentation: "assistantReadDocs",
   read_guide: "assistantReadGuide",
+  list_projects: "assistantListProjects",
+  read_connections: "assistantReadConnections",
   read_variables: "assistantReadVariables",
   read_schemas: "assistantReadSchemas",
   read_runs: "assistantReadRuns",
@@ -49,20 +53,81 @@ const statusIcons: Partial<Record<TranslationKey, LucideIcon>> = {
   assistantRunConfirmation: CirclePause,
   assistantRunApproved: CircleCheck,
   assistantRunDeclined: CircleX,
+  assistantEditConfirmation: CirclePause,
+  assistantEditDeclined: CircleX,
   assistantReading: LoaderCircle,
   assistantComplete: CircleCheck,
   assistantStopped: CircleX,
 };
 
 export interface ActionControls extends RunControls {
+  /** Whether the branch the turn was sent from is the open one. */
+  here?: boolean;
   canUndo?: boolean;
   onUndo?: (action?: string) => void;
   onCompare?: (action: AssistantAction) => void;
   onConflict?: (conflict: string) => void;
 }
 
+/** The exact file changes of an edit that waits for its confirmation, or its answer. */
+function EditConfirmation({
+  tool,
+  canApprove,
+  onDecision,
+}: { tool: AssistantTool } & RunControls) {
+  const t = useT();
+  const explainError = useAssistantError();
+  const approval = tool.approval!;
+  if (approval.error)
+    return <p className="notice error">{explainError(approval.error)}</p>;
+  if (approval.decision !== null)
+    return tool.status === "error" ? (
+      <pre>{tool.summary}</pre>
+    ) : (
+      <p className="muted">
+        {t(
+          !approval.decision
+            ? "assistantEditDeclined"
+            : tool.status === "approved"
+              ? "assistantEditConfirmed"
+              : "assistantEditNotApplied",
+        )}
+      </p>
+    );
+  return (
+    <div className="assistant-run">
+      <p className="notice">{t("assistantEditReason")}</p>
+      {(approval.diffs ?? []).map((diff) => (
+        <div key={diff.path}>
+          <code>{diff.path}</code>
+          <pre>{diff.diff}</pre>
+        </div>
+      ))}
+      <div className="assistant-action-buttons">
+        <button
+          type="button"
+          className="button primary small"
+          disabled={!canApprove}
+          onClick={() => onDecision?.(tool.id, true)}
+        >
+          {t("assistantConfirmEdit")}
+        </button>
+        <button
+          type="button"
+          className="button secondary small"
+          disabled={!onDecision}
+          onClick={() => onDecision?.(tool.id, false)}
+        >
+          {t("assistantDeclineEdit")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ToolCard({
   tool,
+  worktree,
   canUndo,
   onUndo,
   onCompare,
@@ -70,9 +135,14 @@ function ToolCard({
   canApprove,
   canCancel,
   onDecision,
-}: { tool: AssistantTool } & ActionControls) {
+}: {
+  tool: AssistantTool;
+  /** The branch the turn was sent from. */
+  worktree: string;
+} & ActionControls) {
   const t = useT();
   const action = tool.action;
+  const edit = tool.approval?.kind === "edit";
   // Tools with operation-specific models nest their arguments in one object.
   const nested = (tool.args.change ?? tool.args.entry) as
     { node?: unknown; section?: unknown } | undefined;
@@ -83,21 +153,38 @@ function ToolCard({
     tool.args.template ||
     tool.args.section ||
     nested?.section ||
+    tool.args.connection ||
     "";
+  // A read outside the branch the turn was sent from names its project and branch; the
+  // internal checkout of a Job has no branch to name.
+  const origin = (tool.reads ?? [])
+    .filter((read) => read.project_name && read.worktree !== worktree)
+    .map((read) =>
+      read.branch && !read.branch.startsWith("job:")
+        ? `${read.project_name} / ${read.branch}`
+        : read.project_name,
+    )
+    .join(", ");
   const status =
     tool.approval?.decision === null
-      ? "assistantRunConfirmation"
-      : tool.status === "approved"
-        ? "assistantRunApproved"
-        : tool.status === "denied"
-          ? "assistantRunDeclined"
-          : tool.status === "running"
-            ? "assistantReading"
-            : tool.status === "complete"
-              ? "assistantComplete"
-              : tool.status === "stopped"
-                ? "assistantStopped"
-                : "assistantFailed";
+      ? edit
+        ? "assistantEditConfirmation"
+        : "assistantRunConfirmation"
+      : edit && tool.approval?.decision === false
+        ? "assistantEditDeclined"
+        : tool.status === "approved"
+          ? edit
+            ? "assistantEditConfirmed"
+            : "assistantRunApproved"
+          : tool.status === "denied"
+            ? "assistantRunDeclined"
+            : tool.status === "running"
+              ? "assistantReading"
+              : tool.status === "complete"
+                ? "assistantComplete"
+                : tool.status === "stopped"
+                  ? "assistantStopped"
+                  : "assistantFailed";
   const Icon = statusIcons[status] || CircleAlert;
   return (
     <div className="assistant-tool">
@@ -111,6 +198,7 @@ function ToolCard({
           </span>
           <span className="assistant-tool-label">
             {t(toolLabels[tool.name] || "assistantReadFlow")}
+            {origin ? ` · ${origin}` : ""}
             {target ? ` · ${String(target)}` : ""}
           </span>
           <small>
@@ -124,11 +212,17 @@ function ToolCard({
           </small>
           <ChevronRight size={14} className="assistant-tool-chevron" />
         </summary>
-        {tool.approval ? (
+        {tool.approval && !edit ? (
           <AssistantRun
             tool={tool}
             canApprove={canApprove}
             canCancel={canCancel}
+            onDecision={onDecision}
+          />
+        ) : edit && (!action || tool.approval?.decision === null) ? (
+          <EditConfirmation
+            tool={tool}
+            canApprove={canApprove}
             onDecision={onDecision}
           />
         ) : action ? (
@@ -225,13 +319,46 @@ export function AssistantMessage({
   const remaining = turn.tools.filter(
     (tool) => tool.action?.commit && tool.action.status === "applied",
   ).length;
+  // Changes and confirmations belong to the branch the turn was sent from.
+  const elsewhere =
+    !controls.here &&
+    !!turn.context.worktree &&
+    turn.tools.some((tool) => tool.action?.commit || tool.approval);
+  // The notice names that branch as a link to it.
+  const [before, after] = t(
+    turn.status === "awaiting_approval"
+      ? "assistantPendingElsewhere"
+      : "assistantElsewhere",
+  ).split("{branch}");
   return (
     <article className={`assistant-turn${entering ? " entering" : ""}`}>
       <p className="assistant-question">{turn.user}</p>
       <div className="assistant-answer">
         {turn.tools.map((tool) => (
-          <ToolCard key={tool.id} tool={tool} {...controls} />
+          <ToolCard
+            key={tool.id}
+            tool={tool}
+            worktree={turn.context.worktree}
+            {...controls}
+          />
         ))}
+        {elsewhere && (
+          <p className="assistant-notice">
+            {before}
+            <Link
+              to={worktreeUrl(
+                turn.context.worktree,
+                "flow",
+                turn.context.environment,
+              )}
+            >
+              {[turn.context.project_name, turn.context.branch]
+                .filter(Boolean)
+                .join(" / ")}
+            </Link>
+            {after}
+          </p>
+        )}
         {remaining > 1 && (
           <button
             className="button secondary small"

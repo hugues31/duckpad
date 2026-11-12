@@ -19,14 +19,16 @@ from test_assistant import instance as instance
 from test_project_save_atomicity import observe_after_quiet_period
 
 from duckpad.assistant.arguments import AddNode, ConnectEdge, DisconnectEdge, RemoveNode, UpdateNode
-from duckpad.assistant.editing import WRITE_TOOLS, edit_flow
-from duckpad.assistant.runs import RUN_TOOLS
+from duckpad.assistant.editing import edit_flow
+from duckpad.assistant.registry import TOOLS
 from duckpad.bundle import bundle_to_files
 from duckpad.git.command import GitTimeout
 from duckpad.util import Problem
 from duckpad.validation import validate
 
 SQL = "-- @output result\nSELECT 1 AS value;\n"
+# The tools that change or run the open branch.
+WRITING = {name for name, spec in TOOLS.items() if spec.needs == "write"}
 BAR = {"mark": "bar", "encoding": {"x": {"field": "value", "type": "quantitative"}}}
 CONSUMER = "-- @input input\n-- @output result\nSELECT * FROM {{ input }};"
 LINE = {"mark": "line", "encoding": {"y": {"field": "value", "type": "quantitative"}}}
@@ -87,7 +89,7 @@ def documentation(**entry):
 
 
 def write_turn(app, client, context, calls, **options):
-    identity = conversation(client, context)
+    identity = conversation(client)
     scripted(app, calls, **options)
     events = turn(client, identity, context, "Make the requested change")
     result = events[-1]["turn"]
@@ -205,7 +207,7 @@ def test_a_project_write_never_delays_other_conversations(instance, monkeypatch)
 
     monkeypatch.setattr(projects, "write", slow)
     app.state.assistant.configuration.model_override = FunctionModel(stream_function=stream)
-    writer, reader = conversation(client, context), conversation(client, context)
+    writer, reader = conversation(client), conversation(client)
 
     async def scenario():
         headers = {"authorization": "Bearer " + client.cookies["duckpad_session"]}
@@ -481,7 +483,7 @@ def test_three_rejected_calls_in_a_row_end_the_turn_without_saving(instance, bad
     app, client = instance
     worktree, context = seed(app, client)
     before = app.state.services.projects.snapshot(worktree["id"])
-    identity = conversation(client, context)
+    identity = conversation(client)
     scripted(app, [bad, bad, bad, good])
     result = turn(client, identity, context, "Make the requested change")[-1]["turn"]
     assert result["status"] == "error", result
@@ -501,7 +503,7 @@ def test_losing_edit_rights_after_a_rejected_call_aborts_the_turn(instance, bad,
     before = projects.snapshot(context["worktree"])
     with TestClient(app) as client:
         client.post("/api/login", json={"username": "editor", "password": "editor-password-123"})
-        identity = conversation(client, context)
+        identity = conversation(client)
 
         def demote(index):
             if index == 1:
@@ -864,7 +866,7 @@ def test_every_provider_receives_each_operation_with_only_its_own_fields(
         "api_key": "test-key",
         "base_url": "http://localhost:1/v1" if kind == "custom" else "",
     }
-    function = next(t for t in WRITE_TOOLS if t.__name__ == tool)
+    function = TOOLS[tool].function
 
     async def render():
         async with app.state.assistant.configuration.model(provider, "test-model") as model:
@@ -1140,7 +1142,7 @@ def test_editors_are_told_charts_are_vega_lite_even_without_data_reading(instanc
     _, context = seed(app, client)
     configure(client, allow_data=False)
     app.state.assistant.configuration.model_override = TestModel(call_tools=[], custom_output_text="Ready")
-    turn(client, conversation(client, context), context)
+    turn(client, conversation(client), context)
     available = app.state.assistant.configuration.model_override.last_model_request_parameters.function_tools
     tool = next(t for t in available if t.name == "edit_chart")
     models = tool.parameters_json_schema["$defs"]
@@ -1161,12 +1163,12 @@ def test_reader_has_no_write_tools_and_forced_write_or_undo_is_denied(instance):
         app.state.assistant.configuration.model_override = TestModel(
             call_tools=[], custom_output_text="Read only"
         )
-        identity = conversation(reader, context)
+        identity = conversation(reader)
         result = turn(reader, identity, context)[-1]["turn"]
         available = (
             app.state.assistant.configuration.model_override.last_model_request_parameters.function_tools
         )
-        assert {t.name for t in available}.isdisjoint(t.__name__ for t in WRITE_TOOLS)
+        assert {t.name for t in available}.isdisjoint(WRITING)
         for edit in (
             AddNode(operation="add", id="forbidden"),
             UpdateNode(operation="update", id="keep.rows", label="Forbidden"),
@@ -1206,9 +1208,9 @@ def test_job_results_offer_no_write_or_run_tools_to_project_admins(instance):
     app.state.assistant.configuration.model_override = TestModel(
         call_tools=[], custom_output_text="Read only"
     )
-    turn(admin, conversation(admin, context), context)
+    turn(admin, conversation(admin), context)
     available = app.state.assistant.configuration.model_override.last_model_request_parameters.function_tools
-    assert {t.name for t in available}.isdisjoint(t.__name__ for t in [*WRITE_TOOLS, *RUN_TOOLS])
+    assert {t.name for t in available}.isdisjoint(WRITING)
 
 
 def test_undo_preserves_later_node_edits_beyond_base_cache(instance):
@@ -1430,7 +1432,7 @@ def test_multiple_calls_in_one_model_response_are_sequential_and_restart_undoabl
 
     app, client = instance
     worktree, context = seed(app, client)
-    identity = conversation(client, context)
+    identity = conversation(client)
 
     async def stream(messages, info):
         if any(isinstance(p, ToolReturnPart) for p in messages[-1].parts):
