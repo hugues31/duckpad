@@ -396,7 +396,12 @@ test("readers cannot open a connection palette or change the graph", async ({
     ).ok(),
   ).toBe(true);
   await page.reload();
-  await expect(page.locator(".palette-item").first()).toBeDisabled();
+  await expect(page.locator(".palette-item").first()).toHaveAttribute(
+    "draggable",
+    "false",
+  );
+  await page.locator(".palette-item").first().click();
+  await expect(page.locator(".palette-details")).toBeVisible();
   await handle(page, "source", "source", "second").dragTo(
     page.locator(".react-flow__pane"),
     { targetPosition: { x: 600, y: 400 } },

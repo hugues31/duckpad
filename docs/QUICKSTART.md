@@ -47,7 +47,7 @@ You are in **Flow**, the visual canvas. A few concepts will help:
 
 ## 3. Create your first SQL node · 3 minutes
 
-Click **SQL** in the palette's **Transformations** list. Set its
+Drag **SQL** from the palette's **Transformations** list onto the canvas. Set its
 **Display name** to **Sample orders**, then choose **Edit code** in the
 inspector. Replace the entire default code, including its `-- @input source`
 line, with:

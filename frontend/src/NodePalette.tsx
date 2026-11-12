@@ -1,4 +1,4 @@
-import { Plus, Search, X } from "lucide-react";
+import { Info, Search, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { ActionMenu } from "./ActionMenu";
 import AddIcon from "./AddIcon";
@@ -17,21 +17,27 @@ const CATEGORIES = [
 
 export default function NodePalette({
   readOnly,
+  busy,
   snapshot,
   excludedComponents,
   hidden,
   onClose,
+  inspected,
+  onInspect,
   onAdd,
   onDragStart,
   onNewTemplate,
   onLibrary,
 }: {
   readOnly: boolean;
+  busy: boolean;
   snapshot: Snapshot;
   /** The opened component definitions, which the graph cannot contain. */
   excludedComponents: string[];
   hidden: boolean;
   onClose: () => void;
+  inspected: { kind: NodeKind; id: string } | null;
+  onInspect: (kind: NodeKind, id: string, trigger: HTMLButtonElement) => void;
   onAdd: (kind: NodeKind, id: string, linked?: boolean) => void;
   onDragStart: (kind: NodeKind, id: string, transfer: DataTransfer) => void;
   onNewTemplate: (language: "sql" | "python") => void;
@@ -100,11 +106,15 @@ export default function NodePalette({
             {items
               .filter((item) => item.category === category)
               .map((item) => (
-                <div className="palette-entry" key={item.id}>
+                <div className="palette-entry" key={`${item.kind}:${item.id}`}>
                   <button
                     className="palette-item"
-                    draggable={!readOnly}
-                    disabled={readOnly}
+                    draggable={!readOnly && !busy}
+                    disabled={busy}
+                    aria-pressed={
+                      inspected?.kind === item.kind && inspected.id === item.id
+                    }
+                    aria-controls="node-inspector"
                     onDragStart={(e) => {
                       e.dataTransfer.setData(
                         DRAG_TYPE,
@@ -114,14 +124,10 @@ export default function NodePalette({
                       onDragStart(item.kind, item.id, e.dataTransfer);
                     }}
                     onClick={(event) =>
-                      onAdd(
-                        item.kind,
-                        item.id,
-                        item.kind === "template" && event.altKey,
-                      )
+                      onInspect(item.kind, item.id, event.currentTarget)
                     }
                     onContextMenu={(event) => {
-                      if (readOnly || item.kind !== "template") return;
+                      if (readOnly || busy || item.kind !== "template") return;
                       event.preventDefault();
                       setContext({
                         id: item.id,
@@ -131,6 +137,7 @@ export default function NodePalette({
                     }}
                     title={[
                       item.description,
+                      t("paletteDetailsHint"),
                       item.kind === "template" ? t("addLinkedHint") : "",
                     ]
                       .filter(Boolean)
@@ -143,14 +150,19 @@ export default function NodePalette({
                       />
                     </span>
                     <span>{item.label}</span>
-                    <Plus size={12} className="palette-plus" />
+                    <Info
+                      size={14}
+                      className="palette-info"
+                      aria-hidden="true"
+                    />
                   </button>
                 </div>
               ))}
           </section>
         ))}
       </div>
-      {context && !readOnly && (
+      <p className="palette-hint">{t("paletteDetailsHint")}</p>
+      {context && !readOnly && !busy && (
         <ActionMenu
           label={t("addLinked")}
           position={context.position}
@@ -169,7 +181,7 @@ export default function NodePalette({
       )}
       <fieldset
         className="palette-bottom"
-        disabled={readOnly}
+        disabled={readOnly || busy}
         aria-label={t("addToPalette")}
       >
         <div className="palette-actions">

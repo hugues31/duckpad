@@ -1,3 +1,4 @@
+import { dragPaletteNode } from "./helpers";
 import { expect, type Page } from "@playwright/test";
 import type { Snapshot } from "../src/types";
 import en from "../src/locales/en.json" with { type: "json" };
@@ -39,7 +40,7 @@ export async function verifyNodeCreation(page: Page) {
   await page.goto(`/worktrees/${id}/flow`);
   const palette = page.locator(".palette");
   const inspector = page.locator(".inspector");
-  await palette.getByRole("button", { name: "SQL", exact: true }).click();
+  await dragPaletteNode(page, "SQL");
   await expect(page.locator(".react-flow__node")).toHaveCount(2);
   const created = (await read()).bundle!.flow.nodes.at(-1)!;
   const sql = page.locator(`.react-flow__node[data-id="${created.id}"]`);

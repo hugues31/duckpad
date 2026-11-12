@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { PathPart } from "./graph";
+import type { NodeKind, PathPart } from "./graph";
 import type { Cell } from "./lineageGraph";
 
 export interface FlowLocation {
@@ -13,6 +13,8 @@ export interface FlowLocation {
   cell: Cell | null;
   /** Whether the code of the selected node replaces the inspector. */
   code: boolean;
+  /** The palette definition being inspected, without creating an instance. */
+  paletteNode: { kind: NodeKind; id: string } | null;
 }
 
 /**
@@ -29,6 +31,7 @@ export function useFlowView(worktree: string, environment: string) {
     revealed: "",
     cell: null,
     code: false,
+    paletteNode: null,
   };
   const [view, setView] = useState(empty);
   if (view.worktree !== worktree) setView(empty);

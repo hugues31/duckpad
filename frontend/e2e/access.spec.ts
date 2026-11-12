@@ -71,7 +71,12 @@ test("manage instance accounts, project users and live reader access", async ({
   await expect(
     readerPage.getByRole("button", { name: "New working branch", exact: true }),
   ).toBeDisabled();
-  await expect(readerPage.locator(".palette-item").first()).toBeDisabled();
+  await expect(readerPage.locator(".palette-item").first()).toHaveAttribute(
+    "draggable",
+    "false",
+  );
+  await readerPage.locator(".palette-item").first().click();
+  await expect(readerPage.locator(".palette-details")).toBeVisible();
   for (const name of [
     "New SQL template",
     "New Python template",

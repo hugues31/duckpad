@@ -298,7 +298,8 @@
   font-size: 12px;
   border-radius: 11px;
 }
-.palette-item:hover {
+.palette-item:hover,
+.palette-item[aria-pressed="true"] {
   background: var(--surface-alt);
 }
 .palette-item > span:nth-child(2) {
@@ -327,11 +328,13 @@
 .palette-icon.components {
   color: light-dark(#6b589c, #d0bcff);
 }
-.palette-plus {
+.palette-info {
   opacity: 0;
   color: var(--muted);
 }
-.palette-item:hover .palette-plus {
+.palette-item:hover .palette-info,
+.palette-item:focus-visible .palette-info,
+.palette-item[aria-pressed="true"] .palette-info {
   opacity: 1;
 }
 .palette-bottom {
@@ -1069,4 +1072,11 @@ fieldset.palette-bottom {
 .node-action-menu button:hover,
 .node-action-menu button:focus-visible {
   background: var(--surface-alt);
+}
+
+.palette-hint {
+  margin: 0;
+  padding: 10px 15px;
+  font-size: 11px;
+  color: var(--muted);
 }

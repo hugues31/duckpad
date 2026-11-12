@@ -5,6 +5,22 @@ import type { Bundle, Snapshot } from "../src/types";
 /** Administrator password of the disposable instance started by scripts/e2e_server.py. */
 export const PASSWORD = "duckpad-browser-test";
 
+/** Drop a palette definition into the uncovered canvas, including narrow layouts. */
+export async function dragPaletteNode(page: Page, label: string) {
+  const area = (await page.locator(".canvas-safe-area").boundingBox())!;
+  const pane = page.locator(".react-flow__pane");
+  const bounds = (await pane.boundingBox())!;
+  await page
+    .locator(".palette-list")
+    .getByRole("button", { name: label, exact: true })
+    .dragTo(pane, {
+      targetPosition: {
+        x: area.x - bounds.x + area.width * 0.7,
+        y: area.y - bounds.y + area.height * 0.6,
+      },
+    });
+}
+
 type LoginLabels = Pick<typeof en, "password" | "signInAction" | "workspace">;
 
 /** Submit the login form shown in the given language and wait for the workspace. */

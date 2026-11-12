@@ -1516,7 +1516,7 @@
   "sourcePathExpression": "Relative path or expression",
   "searchNodeTypes": "Search node types…",
   "projectTemplates": "Project templates",
-  "addLinkedHint": "Alt+click or right-click to add linked",
+  "addLinkedHint": "Right-click to add linked",
   "nodeActions": "Node actions",
   "connectSource": "Connect a source",
   "showNode": "Show node",
@@ -1654,5 +1654,11 @@
   "codeFixDeclareParameter": "Declare the parameter {name}",
   "codeFixRemoveQuotes": "Remove the quotes",
   "codeFixChangeTo": "Change to {text}",
-  "codeFixRemoveArguments": "Remove the arguments"
+  "codeFixRemoveArguments": "Remove the arguments",
+  "paletteDetailsHint": "Click to inspect. Drag onto the canvas to add.",
+  "nodeTypeDetails": "Node type details",
+  "noNodeDescription": "No description provided.",
+  "noNodeInputs": "No inputs.",
+  "noNodeOutputs": "No outputs.",
+  "noNodeParameters": "No parameters."
 }

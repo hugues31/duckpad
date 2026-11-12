@@ -1516,7 +1516,7 @@
   "sourcePathExpression": "Caminho relativo ou expressão",
   "searchNodeTypes": "Pesquisar um tipo de nó…",
   "projectTemplates": "Modelos do projeto",
-  "addLinkedHint": "Alt+clique ou clique direito para adicionar um nó vinculado",
+  "addLinkedHint": "Clique com o botão direito para adicionar vinculado",
   "nodeActions": "Ações do nó",
   "connectSource": "Conectar uma fonte",
   "showNode": "Mostrar nó",
@@ -1654,5 +1654,11 @@
   "codeFixDeclareParameter": "Declarar o parâmetro {name}",
   "codeFixRemoveQuotes": "Remover as aspas",
   "codeFixChangeTo": "Trocar por {text}",
-  "codeFixRemoveArguments": "Remover os argumentos"
+  "codeFixRemoveArguments": "Remover os argumentos",
+  "paletteDetailsHint": "Clique para consultar. Arraste para a tela para adicionar.",
+  "nodeTypeDetails": "Detalhes do tipo de nó",
+  "noNodeDescription": "Nenhuma descrição disponível.",
+  "noNodeInputs": "Nenhuma entrada.",
+  "noNodeOutputs": "Nenhuma saída.",
+  "noNodeParameters": "Nenhum parâmetro."
 }

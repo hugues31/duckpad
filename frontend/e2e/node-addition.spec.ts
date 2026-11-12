@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { signIn } from "./helpers";
+import { dragPaletteNode, signIn } from "./helpers";
 import type { Snapshot } from "../src/types";
 
 async function prepare(page: Page) {
@@ -87,7 +87,7 @@ async function expectPending(page: Page) {
 }
 
 const additions = [
-  { name: "SQL node", button: "SQL" },
+  { name: "SQL node", button: "SQL", drop: true },
   { name: "dropped template", button: "Filter", drop: true },
   {
     name: "duplicated node",
@@ -153,10 +153,7 @@ test("a failed addition restores the inspector and allows retrying", async ({
 }) => {
   const { endpoint, existing } = await prepare(page);
   const { writes, release } = await delaySave(page, endpoint, true);
-  await page
-    .locator(".palette")
-    .getByRole("button", { name: "SQL", exact: true })
-    .click();
+  await dragPaletteNode(page, "SQL");
   try {
     await expectPending(page);
   } finally {
@@ -171,10 +168,7 @@ test("a failed addition restores the inspector and allows retrying", async ({
   await expect(page.locator(".react-flow__node")).toHaveCount(1);
   const after: Snapshot = await (await page.request.get(endpoint)).json();
   expect(after.bundle!.flow.nodes).toEqual([existing]);
-  await page
-    .locator(".palette")
-    .getByRole("button", { name: "SQL", exact: true })
-    .click();
+  await dragPaletteNode(page, "SQL");
   await expect(page.locator(".react-flow__node")).toHaveCount(2);
   await expect(displayName(page)).toBeEditable();
   await expect(displayName(page)).toHaveValue("");

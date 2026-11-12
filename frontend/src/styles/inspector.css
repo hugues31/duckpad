@@ -1,4 +1,45 @@
 /* Node inspector panel and its controls. */
+.palette-details .inspector-body {
+  overflow-wrap: anywhere;
+}
+.palette-description {
+  white-space: pre-wrap;
+  font-size: 12px;
+}
+.palette-ports {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  list-style: none;
+  padding: 0;
+}
+.palette-ports li {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface-alt);
+  font-size: 11px;
+}
+.palette-parameters {
+  margin: 0;
+  font-size: 11px;
+}
+.palette-parameters > div {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.palette-parameters dt {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.palette-parameters dd {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+}
+.palette-parameters dd strong {
+  display: block;
+}
 .inspector-layer {
   display: contents;
 }

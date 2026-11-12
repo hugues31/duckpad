@@ -1,5 +1,5 @@
 import { expect, type Page } from "@playwright/test";
-import { closeCode, closeEditor, openCode } from "./helpers";
+import { dragPaletteNode, closeCode, closeEditor, openCode } from "./helpers";
 import type { Snapshot } from "../src/types";
 
 /** Exercise palette authoring against a local instance or an authenticated preview. */
@@ -88,6 +88,9 @@ export async function verifyPalette(
   expect(created[0].endsWith(".py")).toBe(python);
   await page.reload();
   await template.click();
+  await expect(page.locator(".palette-details")).toBeVisible();
+  await expect(page.locator(".react-flow__node")).toHaveCount(0);
+  await dragPaletteNode(page, name);
   await expect(page.locator(".react-flow__node")).toHaveCount(1);
   // Python entries and nodes show the Python logo, SQL ones keep the code icon.
   for (const icon of [
@@ -111,7 +114,8 @@ export async function verifyPalette(
   // Linked instances reopen the shared definition in the matching language editor.
   await palette
     .getByRole("button", { name, exact: true })
-    .click({ modifiers: ["Alt"] });
+    .click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Add linked", exact: true }).click();
   await expect(page.locator(".react-flow__node")).toHaveCount(3);
   const shared = await openCode(page, "Edit template (1 node)");
   await expect(shared).toContainText("Shared template, 1 node");
@@ -141,6 +145,9 @@ export async function verifyPalette(
   expect(imported.bundle!.flow.nodes).toHaveLength(0);
   expect(Object.values(imported.bundle!.templates)).toContain(code);
   await template.click();
+  await expect(page.locator(".palette-details")).toBeVisible();
+  await expect(page.locator(".react-flow__node")).toHaveCount(0);
+  await dragPaletteNode(page, name);
   await expect(page.locator(".react-flow__node")).toHaveCount(1);
   return { project, destination };
 }
