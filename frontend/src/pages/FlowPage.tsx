@@ -434,6 +434,7 @@ export default function FlowPage() {
             onReconnect={(id, connection) =>
               safe(() => updateGraph((g) => reconnectInput(g, id, connection)))
             }
+            onCycle={() => notify(t("connectionCycle"), true)}
             onDelete={(nodes, edges) => reported(removeNodes(nodes, edges))}
             onFiles={(files, position) =>
               safe(() => dropFiles(files, position))

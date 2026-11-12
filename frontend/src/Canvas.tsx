@@ -43,7 +43,7 @@ import {
   planEdgeInsertion,
   type EdgeInsertion,
 } from "./edgeInsertion";
-import { DRAG_TYPE, type NodeConnection } from "./graph";
+import { downstream, DRAG_TYPE, type NodeConnection } from "./graph";
 import { findNodePosition, layoutNodes } from "./graphLayout";
 import { useT } from "./i18n";
 import { SearchField } from "./Search";
@@ -126,6 +126,19 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
     () => setPendingConnection(null),
     [],
   );
+  /** Whether a link would make its target read its own data, which cannot run. */
+  const cyclic = (link: {
+    source: string;
+    sourceHandle?: string | null;
+    target: string;
+    targetHandle?: string | null;
+  }) =>
+    downstream(
+      { nodes: props.nodes, edges: props.edges },
+      props.components,
+      link.target,
+      link.targetHandle ?? "",
+    )(link.source, link.sourceHandle ?? "");
   const reconnecting = useRef(false);
   const flow = useRef<HTMLDivElement>(null);
   const [insertionEdge, setInsertionEdge] = useState<string | null>(null);
@@ -491,6 +504,7 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
             trigger: event.currentTarget as HTMLElement,
           });
         }}
+        isValidConnection={(connection) => !cyclic(connection)}
         onConnect={
           props.readOnly
             ? undefined
@@ -533,6 +547,19 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
           });
         }}
         onConnectEnd={(event, connection) => {
+          // A new or moved link released on a port that refuses it explains why.
+          const { fromHandle: from, toHandle: to } = connection;
+          if (!connection.isValid && from && to && from.type !== to.type) {
+            const [source, target] =
+              from.type === "source" ? [from, to] : [to, from];
+            const refused = cyclic({
+              source: source.nodeId,
+              sourceHandle: source.id,
+              target: target.nodeId,
+              targetHandle: target.id,
+            });
+            if (refused && !props.readOnly) props.onCycle();
+          }
           if (
             props.readOnly ||
             reconnecting.current ||

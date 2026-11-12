@@ -54,6 +54,14 @@ connections. Other drops keep existing links intact, and moving several selected
 nodes does not insert them. Ctrl/Cmd+Z undoes the placement and both connections
 together.
 
+Links must form an acyclic graph: a node cannot read its own output or the
+output of a node it feeds. The canvas refuses such a link and says why, and
+the inspector leaves it out of the available inputs. A component can sit both
+before and after a node as long as the ports involved are independent inside
+it. Cycles introduced through project files are reported as validation errors;
+affected nodes cannot run until the cycle is removed. Duckpad does not execute
+feedback loops or iterate a graph until a result converges.
+
 Press **Escape** to clear the selection and close its inspector and results.
 Selecting a node opens both panels again. An open dialog, menu or list of
 suggestions takes Escape first, and the code editor keeps it for itself.

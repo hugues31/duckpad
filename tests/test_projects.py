@@ -447,6 +447,29 @@ def test_invalid_template_scope_does_not_block_independent_nodes(services, tmp_p
     assert wait_run(store, engine.launch(worktree, "dev", "total"))["status"] == "success"
 
 
+@pytest.mark.parametrize(("source", "nested"), [("filter", False), ("total", True)])
+def test_file_cycles_are_diagnosed_and_blocked_without_blocking_independent_nodes(
+    services, tmp_path, source, nested
+):
+    store, projects, _, engine = services
+    bundle = example_bundle(tmp_path / "input.csv")
+    # Project files can hold what the canvas refuses: a self-loop, or a two-node cycle in a component.
+    bundle["flow"]["edges"][0]["source"] = source
+    prefix = ""
+    if nested:
+        bundle, instance = group(bundle, ["filter", "total"], "Cyclic component")
+        prefix = instance + "::"
+    worktree = projects.create("File cycle", bundle)["id"]
+    snapshot = projects.snapshot(worktree)
+    assert any("cycle" in error["message"] for error in snapshot["diagnostics"])
+    result = wait_run(store, engine.launch(worktree, "dev"))
+    assert result["status"] == "partial_failure"
+    assert result["nodes"]["source"]["status"] == "success"
+    for key in ("filter", "total"):
+        assert result["nodes"][prefix + key]["status"] == "blocked"
+        assert not result["nodes"][prefix + key].get("statements")
+
+
 def test_invalid_template_keeps_only_its_declared_ports(tmp_path):
     bundle = example_bundle(tmp_path / "input.csv")
     bundle["templates"]["total"] = (

@@ -1,4 +1,4 @@
-import { identifier, nodeInterface } from "./graph";
+import { downstream, identifier, nodeInterface } from "./graph";
 import type {
   ComponentDefinition,
   ComponentPort,
@@ -67,22 +67,7 @@ function canInsert(graph: Graph, id: string, plan: EdgeInsertion) {
   )
     return false;
   // Nothing feeds the node yet, so only its own consumers can close a cycle.
-  const consumers = new Map<string, string[]>();
-  for (const link of graph.edges) {
-    const targets = consumers.get(link.source);
-    if (targets) targets.push(link.target);
-    else consumers.set(link.source, [link.target]);
-  }
-  const pending = [id];
-  const seen = new Set<string>();
-  while (pending.length) {
-    const current = pending.pop()!;
-    if (current === edge.source) return false;
-    if (seen.has(current)) continue;
-    seen.add(current);
-    pending.push(...(consumers.get(current) || []));
-  }
-  return true;
+  return !downstream(graph, {}, id, plan.input)(edge.source, edge.sourceHandle);
 }
 
 /** Replace one link with two, preserving both original endpoint ports. */

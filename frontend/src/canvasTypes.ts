@@ -46,6 +46,8 @@ export interface CanvasProps {
   onMove: (nodes: FlowNode[], insertion?: EdgeInsertion) => Promise<void>;
   onConnect: (edge: Omit<FlowEdge, "id">) => void;
   onReconnect: (id: string, edge: Omit<FlowEdge, "id">) => void;
+  /** A link was refused because it would make a node read its own data. */
+  onCycle: () => void;
   /** Resolve once the deletion is saved; reject if it failed. */
   onDelete: (nodes: string[], edges: string[]) => Promise<void>;
   onAdd: (

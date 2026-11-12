@@ -153,6 +153,85 @@ test("clicking an endpoint and dropping on invalid targets leave the graph uncha
   expect(saves).toEqual([]);
 });
 
+test("links that would create a cycle are refused with a notice, except between ports a component keeps apart", async ({
+  page,
+}) => {
+  const { read } = await createFilterProject(page, (bundle) => {
+    // Two independent halves: the rows it loads, and the output of its input.
+    const [rows, , output] = bundle.flow.nodes;
+    bundle.components.halves = {
+      name: "Halves",
+      nodes: [rows, { ...output, id: "total" }],
+      edges: [],
+      inputs: { input: { node: "total", port: "source" } },
+      outputs: {
+        rows: { node: "rows", port: "result" },
+        total: { node: "total", port: "result" },
+      },
+    };
+    bundle.flow.nodes[0] = {
+      id: "rows",
+      component: "halves",
+      params: {},
+      position: rows.position,
+    };
+    bundle.flow.edges[0].sourceHandle = "rows";
+  });
+  const before = await read();
+  const saves: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "PUT") saves.push(request.url());
+  });
+  const input = page
+    .locator(".inspector")
+    .getByLabel("source", { exact: true });
+  const choices = () =>
+    input
+      .locator("option")
+      .evaluateAll((options) =>
+        options.map((option) => (option as HTMLOptionElement).value),
+      );
+  expect(await choices()).toEqual(["", "rows:rows", "rows:total"]);
+  const notice = page.locator(".toast");
+  const filterInput = handle(page, "filtered", "target", "source");
+  const outputResult = handle(page, "output", "source", "result");
+  const connect = async (from: Locator, to: Locator) => {
+    const start = await center(from);
+    const end = await center(to);
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await page.mouse.move(end.x, end.y, { steps: 12 });
+    await page.mouse.up();
+  };
+  for (const attempt of [
+    () => connect(handle(page, "filtered", "source", "result"), filterInput),
+    () => connect(outputResult, filterInput),
+    () => connect(filterInput, outputResult),
+    async () => dragEnd(page, "first", "source", await center(outputResult)),
+    async () => dragEnd(page, "second", "target", await center(filterInput)),
+  ]) {
+    await attempt();
+    await expect(notice).toHaveText(
+      "This link would create a cycle: a node cannot read its own result.",
+    );
+    await notice.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(palette(page)).toHaveCount(0);
+  }
+  expect((await read()).bundle).toEqual(before.bundle);
+  expect(saves).toEqual([]);
+
+  // The component reads the filter it feeds: only its fed output closes a loop.
+  await autosaved(page, () =>
+    connect(outputResult, handle(page, "rows", "target", "input")),
+  );
+  await expect(notice).toHaveCount(0);
+  expect((await read()).diagnostics).toEqual([]);
+  expect(await choices()).toEqual(["", "rows:rows"]);
+  await connect(handle(page, "rows", "source", "total"), filterInput);
+  await expect(notice).toBeVisible();
+  expect(saves).toHaveLength(1);
+});
+
 test("the selected link moves from an output shared by several links and is restored unselected", async ({
   page,
 }) => {

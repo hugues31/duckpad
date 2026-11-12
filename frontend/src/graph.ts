@@ -231,6 +231,66 @@ export function nodeChoices(
   ];
 }
 
+type Feeds = (node: string, output: string) => boolean;
+
+/**
+ * The outputs computed from an input, by its node and those it feeds:
+ * connecting one of them to that input would create a cycle, which Duckpad
+ * cannot run. A component only links the inputs and outputs its definition
+ * connects, so one instance may sit both before and after another node.
+ */
+export function downstream(
+  graph: Graph,
+  components: Record<string, ComponentDefinition>,
+  node: string,
+  port: string,
+  known = new Map<string, boolean>(),
+): Feeds {
+  const nodes = new Map(graph.nodes.map((item) => [item.id, item]));
+  const outgoing = new Map<string, FlowEdge[]>();
+  for (const edge of graph.edges) {
+    if (!outgoing.has(edge.source)) outgoing.set(edge.source, []);
+    outgoing.get(edge.source)!.push(edge);
+  }
+  /** Whether a node computes this output from this input: always, unless a component tells. */
+  const linked = (id: string, input: string, output: string) => {
+    const component = nodes.get(id)?.component ?? "";
+    const definition = components[component];
+    const from = definition?.inputs?.[input];
+    const to = definition?.outputs?.[output];
+    if (!from || !to) return true;
+    const key = [component, input, output].join("\n");
+    if (!known.has(key)) {
+      // A definition that contains itself is invalid: its instances stay opaque.
+      known.set(key, true);
+      known.set(
+        key,
+        downstream(
+          definition,
+          components,
+          from.node,
+          from.port,
+          known,
+        )(to.node, to.port),
+      );
+    }
+    return known.get(key)!;
+  };
+  const reached = new Map<string, Set<string>>();
+  const pending = [[node, port]];
+  while (pending.length) {
+    const [id, input] = pending.pop()!;
+    if (!reached.has(id)) reached.set(id, new Set());
+    if (reached.get(id)!.has(input)) continue;
+    reached.get(id)!.add(input);
+    for (const edge of outgoing.get(id) ?? [])
+      if (linked(id, input, edge.sourceHandle))
+        pending.push([edge.target, edge.targetHandle]);
+  }
+  return (id, output) =>
+    [...(reached.get(id) ?? [])].some((input) => linked(id, input, output));
+}
+
 /** Connect an input, replacing its previous source: an input has one source. */
 export function connectInput(graph: Graph, edge: Omit<FlowEdge, "id">) {
   graph.edges = graph.edges.filter(
