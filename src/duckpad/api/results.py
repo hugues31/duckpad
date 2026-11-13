@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from starlette.background import BackgroundTask
 
-from .. import schemas, table_lineage
+from .. import column_impact, schemas, table_lineage
 from ..artifacts import CHUNK_SIZE
 from ..execution.launch import launch_worktree
 from ..execution.samples import Sample
@@ -77,6 +77,39 @@ def router(ctx: Context) -> APIRouter:
         environment: str = "dev",
     ) -> Record:
         return engine.column_lineage.describe(worktree, environment, node, port, column)
+
+    @api.get(
+        "/api/worktrees/{worktree}/lineage/impact",
+        response_model=None,
+        dependencies=[Depends(worktree_role("reader"))],
+    )
+    def column_impact_plan(
+        worktree: str,
+        node: str,
+        port: str,
+        column: str,
+        environment: str = "dev",
+        name: str | None = None,
+    ) -> Record:
+        return column_impact.inspect(engine, worktree, environment, node, port, column, new_name=name)[0]
+
+    @api.post(
+        "/api/worktrees/{worktree}/lineage/rename",
+        response_model=None,
+        dependencies=[Depends(worktree_role("editor"))],
+    )
+    def rename_column(worktree: str, data: schemas.ColumnRename) -> Record:
+        return column_impact.rename(
+            engine,
+            worktree,
+            data.environment,
+            data.node,
+            data.port,
+            data.column,
+            data.name,
+            data.revision,
+            data.token,
+        )
 
     @api.post(
         "/api/worktrees/{worktree}/lineage/rows",

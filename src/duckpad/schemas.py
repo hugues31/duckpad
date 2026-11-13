@@ -312,6 +312,16 @@ class VariableRename(BaseModel):
     name: str = Field(max_length=200)
 
 
+class ColumnRename(BaseModel):
+    environment: str = "dev"
+    node: str
+    port: str
+    column: str
+    name: str = Field(min_length=1, max_length=200)
+    revision: str
+    token: str
+
+
 class Import(BaseModel):
     revision: str
     source_worktree: str

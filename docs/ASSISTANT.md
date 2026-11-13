@@ -315,6 +315,11 @@ withheld because they can contain values. A conversation created with data
 reading enabled cannot resume while the option is disabled: start a new one so
 its previous values are not resent.
 
+Column origins and column impact remain available with data reading disabled.
+Ask what renaming a column would affect: `column_impact` lists references to
+edit, automatic name propagation, derived columns, exports and manual checks
+from saved definitions and schemas. It does not read rows or apply a rename.
+
 Even with data reading disabled, your questions, saved code and its literal
 values, documentation, variable declarations and values, flow parameters, output
 schemas, status metadata and branch commit metadata can reach the selected

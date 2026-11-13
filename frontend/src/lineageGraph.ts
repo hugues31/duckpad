@@ -260,9 +260,7 @@ export function readLineageTarget(
     port: params.get("output") || undefined,
     column: !cell ? column || undefined : undefined,
     direction:
-      !cell && !column && params.get("direction") === "impact"
-        ? "impact"
-        : "origin",
+      !cell && params.get("direction") === "impact" ? "impact" : "origin",
     cell,
   };
 }

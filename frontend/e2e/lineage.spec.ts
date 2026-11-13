@@ -134,7 +134,7 @@ test("column origins connect Columns, table and value levels with a shareable pa
   ).toContainText("ƒ net_amount");
   await expect(
     panel.getByRole("button", { name: "Impact", exact: true }),
-  ).toBeDisabled();
+  ).toBeEnabled();
   const url = page.url();
   await page.reload();
   await expect(panel.locator(".lineage-column-summary")).toContainText(
@@ -510,3 +510,115 @@ test("the panel translates its controls and copies execution evidence", async ({
     await expect(translated.locator(".lineage-step.root")).toBeVisible();
   }
 });
+
+test("column impact previews a single save, reruns and supports Undo", async ({
+  page,
+}) => {
+  const worktree = await example(page);
+  const read = async () =>
+    (await page.request.get(`/api/worktrees/${worktree}`)).json();
+  await page.goto(
+    `/worktrees/${worktree}/flow?lineage=orders&output=result&column=amount&direction=impact`,
+  );
+  const panel = page.getByRole("complementary", {
+    name: "Lineage",
+    exact: true,
+  });
+  await expect(panel.locator(".impact-edit")).toContainText("amount_positive");
+  await expect(panel.locator(".impact-edit")).toContainText(
+    "large_order_review",
+  );
+  await expect(panel.locator(".impact-edit")).toContainText("Orders to review");
+  await expect(panel.locator(".impact-derived")).toContainText("net_share");
+  await expect(panel.locator(".impact-exports")).toContainText(
+    "Export revenue",
+  );
+  await expect(panel.locator(".impact-unaffected")).toContainText(
+    "Reporting period",
+  );
+  await panel.getByRole("button", { name: "Rename…" }).click();
+  await expect(panel).toContainText(
+    "The source file or table must provide the new column name",
+  );
+  await page.reload();
+  await expect(panel.locator(".impact-edit")).toContainText("amount_positive");
+  await page.goto(
+    `/worktrees/${worktree}/flow?lineage=net&output=result&column=net_amount&direction=impact`,
+  );
+  await panel.getByRole("button", { name: "Rename…" }).click();
+  const before = await read();
+  await panel.getByLabel("New column name").fill("amount");
+  await panel
+    .getByRole("button", { name: "Preview changes", exact: true })
+    .click();
+  await expect(panel.getByRole("alert")).toContainText("already exists");
+  expect((await read()).revision).toBe(before.revision);
+  await panel.getByLabel("New column name").fill("net_value");
+  await panel
+    .getByRole("button", { name: "Preview changes", exact: true })
+    .click();
+  await expect(panel.locator(".impact-file")).not.toHaveCount(0);
+  const files = await panel.locator(".impact-file summary").allTextContents();
+  const accessibility = await new AxeBuilder({ page })
+    .include(".lineage-panel")
+    .analyze();
+  expect(accessibility.violations).toEqual([]);
+  const saved = page.waitForResponse((response) =>
+    response.url().includes("/lineage/rename"),
+  );
+  await panel
+    .getByRole("button", { name: "Apply rename", exact: true })
+    .click();
+  expect((await saved).ok()).toBe(true);
+  const after = await read();
+  const changed = Object.keys({ ...before.files, ...after.files }).filter(
+    (key) => before.files[key] !== after.files[key],
+  );
+  expect(changed.sort()).toEqual(files.sort());
+  const run = await (
+    await page.request.post(`/api/worktrees/${worktree}/runs`, {
+      data: { environment: "dev" },
+    })
+  ).json();
+  await expect
+    .poll(
+      async () =>
+        (await (await page.request.get(`/api/runs/${run.id}`)).json()).status,
+      { timeout: 30000 },
+    )
+    .toBe("success");
+  const columns = await (
+    await page.request.get(
+      `/api/worktrees/${worktree}/lineage/columns?node=net&port=result&environment=dev`,
+    )
+  ).json();
+  expect(
+    columns.outputs[0].columns.map((c: { name: string }) => c.name),
+  ).toContain("net_value");
+  await panel.getByRole("button", { name: "Close", exact: true }).click();
+  await page.keyboard.press("ControlOrMeta+Z");
+  await expect(page.locator(".toast")).toContainText("Change undone");
+  expect((await read()).files).toEqual(before.files);
+});
+
+for (const [language, labels] of [
+  ["fr", fr],
+  ["pt", pt],
+] as const) {
+  test(`column impact labels in ${language}`, async ({ page }) => {
+    const worktree = await example(page);
+    await page.evaluate(
+      (language) => localStorage.setItem("duckpad-language", language),
+      language,
+    );
+    await page.goto(
+      `/worktrees/${worktree}/flow?lineage=orders&output=result&column=amount&direction=impact`,
+    );
+    await expect(
+      page.getByText(labels.impactEdit, { exact: false }).first(),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: labels.impactRename, exact: true }),
+    ).toBeVisible();
+  });
+}

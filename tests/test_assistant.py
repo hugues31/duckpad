@@ -301,12 +301,13 @@ def test_policy_change_does_not_resend_previous_values(instance):
     tools = app.state.assistant.configuration.model_override.last_model_request_parameters.function_tools
     assert {t.name for t in tools}.isdisjoint({"preview_output", "explain_value"})
     assert "explain_column" in {t.name for t in tools}
+    assert "column_impact" in {t.name for t in tools}
 
 
 def test_column_origin_tool_without_data_access(instance):
     from helpers import join_run
 
-    from duckpad.assistant.tools import explain_column
+    from duckpad.assistant.tools import column_impact, explain_column
 
     app, client = instance
     configure(client, allow_data=False)
@@ -327,6 +328,10 @@ def test_column_origin_tool_without_data_access(instance):
     assert {step["node"] for step in result["items"] if step["kind"] == "source"} == {"orders", "fees"}
     assert "value" not in result["items"][0]
     assert len(result["items"]) <= 20
+    impact = column_impact(dependencies(app, client, context), "orders", "amount")
+    assert impact["complete"]
+    assert {entry["label"] for entry in impact["edit"]["items"]} >= {"amount_positive", "Orders to review"}
+    assert all("value" not in entry for entry in impact["exports"]["items"])
 
 
 def test_a_deleted_project_ends_the_conversations_that_read_it(instance):
