@@ -26,9 +26,14 @@ the preview uses the node's shape and the canvas zoom, and is crossed out where
 a drop does nothing; release to place the center of the shape at the pointer.
 **Search node types…** filters the palette, and **Project templates** lists the
 templates created in the project. Connect an output to an input, or choose the
-upstream output in the node's inspector. Connected sockets are filled, unused
-outputs stay hollow, and an input without a source is orange on the node until
-you connect it. Point at a node or a link to highlight it. Click a link to select
+upstream output in the node's inspector. A side with five or more ports folds into
+an oval showing the port count. Approach the oval, focus it with Tab, or tap it to
+reveal the individual sockets vertically. Choose a named socket to connect it;
+the oval itself does not choose a port. Move away to fold the list, or press Escape
+when it has focus. Existing links keep their ports while the list is folded.
+Connected sockets are filled, unused outputs stay hollow, and an input without a
+source is orange on the node until you connect it. Point at a node or a link to
+highlight it. Click a link to select
 it, then press Delete or Backspace to disconnect it. Shift-click selects multiple
 links; Ctrl/Cmd+Z undoes a deletion. Drag either end of a link to another port to
 reconnect it, or drop it onto empty canvas to disconnect it. Reconnecting to an
