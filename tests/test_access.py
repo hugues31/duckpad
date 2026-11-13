@@ -90,6 +90,7 @@ ROUTE_ACCESS = {
         "GET /api/worktrees/{worktree}/lineage/columns",
         "GET /api/worktrees/{worktree}/lineage/impact",
         "POST /api/worktrees/{worktree}/lineage/rows",
+        "POST /api/worktrees/{worktree}/lineage/row-impact",
         "GET /api/worktrees/{worktree}/git/reviews/{review}/data",
         "POST /api/worktrees/{worktree}/git/reviews/{review}/data",
         "GET /api/runs/{run}",

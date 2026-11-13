@@ -206,6 +206,72 @@
 .lineage-dimmed {
   opacity: 0.22;
 }
+.row-impact-step {
+  border-left: 3px solid var(--success);
+  margin: 8px 0;
+}
+.row-impact-discarded {
+  border-left-color: var(--danger);
+}
+.row-impact-unreached {
+  opacity: 0.5;
+  border-left: 2px dashed var(--muted);
+}
+.row-impact-unknown {
+  border-left-color: var(--muted);
+}
+.row-impact-state {
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--success);
+}
+.row-impact-discarded .row-impact-state {
+  color: var(--danger);
+}
+.row-impact-unreached .row-impact-state,
+.row-impact-unknown .row-impact-state {
+  color: var(--muted);
+}
+.row-impact-reason {
+  padding: 8px;
+  margin-top: 5px;
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  border-radius: 6px;
+}
+.row-impact-step code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.row-impact-pages {
+  display: flex;
+  gap: 12px;
+}
+.row-impact-rows .lineage-value {
+  display: block;
+  width: 100%;
+  margin: 4px 0;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.row-impact-travelled .node-shape {
+  box-shadow: 0 0 0 2px var(--success);
+}
+.row-impact-stopped .node-shape {
+  box-shadow: 0 0 0 2px var(--danger);
+}
+.row-impact-travelled .node-lineage-value {
+  color: var(--success);
+  border-color: var(--success);
+}
+.row-impact-stopped .node-lineage-value {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.react-flow__edge-pipeline.row-impact-travelled.highlighted
+  .react-flow__edge-path {
+  stroke: var(--success);
+}
 .lineage-traced .node-shape,
 .lineage-hovered .node-shape {
   box-shadow: 0 0 0 2px var(--accent);

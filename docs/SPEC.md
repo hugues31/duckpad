@@ -113,6 +113,7 @@ the open branch and to every other branch the user can open:
 | Run proposals, approval/refusal and launched run metadata | For project editors/admins; always explicitly approved | Same |
 | Output preview values and filters | Tool absent | Bounded existing output rows |
 | Value lineage: selected value, SQL/expression, contributing values, source/schema metadata and limitations | Tool absent | Bounded contribution pages |
+| Downstream row impact: verdict, evaluated predicates, group keys and produced rows | Tool absent | Bounded step pages and produced rows |
 | Search excerpts from saved project definitions | Yes | Yes |
 | Git commit metadata of a branch read (including authors, messages and hashes) | Yes | Yes |
 | Requested write arguments and resulting change summaries, SQL diffs and commit IDs | For project editors/admins | For project editors/admins |

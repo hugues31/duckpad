@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from starlette.background import BackgroundTask
 
-from .. import column_impact, schemas, table_lineage
+from .. import column_impact, row_impact, schemas, table_lineage
 from ..artifacts import CHUNK_SIZE
 from ..execution.launch import launch_worktree
 from ..execution.samples import Sample
@@ -110,6 +110,14 @@ def router(ctx: Context) -> APIRouter:
             data.revision,
             data.token,
         )
+
+    @api.post(
+        "/api/worktrees/{worktree}/lineage/row-impact",
+        response_model=None,
+        dependencies=[Depends(worktree_role("reader"))],
+    )
+    def row_impact_trace(worktree: str, data: schemas.RowImpact) -> Record:
+        return row_impact.trace(engine, worktree, **data.model_dump())
 
     @api.post(
         "/api/worktrees/{worktree}/lineage/rows",

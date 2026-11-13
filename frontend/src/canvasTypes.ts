@@ -27,7 +27,7 @@ export interface FocusRequest {
 }
 
 export interface CanvasProps {
-  lineage?: Record<string, { value?: unknown }> | null;
+  lineage?: import("./LineageSteps").LineageMap | null;
   lineageHover?: string | null;
   names?: NodeNames;
   ref?: Ref<CanvasHandle>;

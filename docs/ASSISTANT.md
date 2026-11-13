@@ -269,6 +269,12 @@ SQL to explain the calculation. With data reading disabled, error/message text,
 test values and executed SQL are withheld; the assistant can still discuss code
 and execution status metadata.
 
+For “why is order 9 missing from the report?”, the assistant locates the source
+row with `preview_output`, then uses `trace_row` to follow it downstream. The
+answer includes the stopping condition with captured values, or the outputs
+reached, and states any mapping limits. This tool requires data reading to be
+enabled and never reruns a source, transformation or export.
+
 ## Quick prompts
 
 New conversations offer buttons such as **Optimize the flow**, **Debug the latest

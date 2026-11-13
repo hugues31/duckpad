@@ -306,10 +306,11 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
       const traced =
         props.lineage &&
         [e.source, e.target].every((id) =>
-          Object.keys(props.lineage!).some(
-            (key) =>
-              key === props.prefix + id ||
-              key.startsWith(props.prefix + id + "::"),
+          Object.entries(props.lineage!).some(
+            ([key, item]) =>
+              !["unreached", "unknown"].includes(item.state || "") &&
+              (key === props.prefix + id ||
+                key.startsWith(props.prefix + id + "::")),
           ),
         );
       const highlighted =
@@ -320,6 +321,8 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
         flowing ||
         travelled ||
         insertionEdge === e.id;
+      const rowImpact =
+        traced && Object.values(props.lineage || {}).some((item) => item.state);
       return {
         ...e,
         selected: edgeSelected,
@@ -328,7 +331,12 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
         animated: connected || flowing,
         className:
           [
-            props.lineage && (traced ? "lineage-traced" : "lineage-dimmed"),
+            props.lineage &&
+              (traced
+                ? rowImpact
+                  ? "row-impact-travelled"
+                  : "lineage-traced"
+                : "lineage-dimmed"),
             connected && "node-connected",
             pointed && "node-hovered",
             flowing && "is-flowing",
@@ -340,7 +348,7 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
         markerEnd: highlighted
           ? {
               type: MarkerType.ArrowClosed,
-              color: "var(--accent)",
+              color: rowImpact ? "var(--success)" : "var(--accent)",
               width: 14,
               height: 14,
             }

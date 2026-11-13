@@ -299,9 +299,39 @@ def test_policy_change_does_not_resend_previous_values(instance):
     new = conversation(client)
     assert turn(client, new, context)[-1]["turn"]["status"] == "complete"
     tools = app.state.assistant.configuration.model_override.last_model_request_parameters.function_tools
-    assert {t.name for t in tools}.isdisjoint({"preview_output", "explain_value"})
+    assert {t.name for t in tools}.isdisjoint({"preview_output", "explain_value", "trace_row"})
     assert "explain_column" in {t.name for t in tools}
     assert "column_impact" in {t.name for t in tools}
+
+
+def test_row_impact_tool_explains_missing_order_and_obeys_data_permission(instance):
+    from helpers import join_run
+
+    from duckpad.assistant.tools import preview_output, trace_row
+
+    app, client = instance
+    configure(client, max_rows=5)
+    services = app.state.services
+    worktree = client.post("/api/example", json={}).json()
+    run = services.engine.launch(worktree["id"], "dev")
+    assert join_run(services.store, run["id"])["status"] == "success"
+    context = {
+        "page": "pipelines",
+        "tab": "flow",
+        "project": worktree["project"],
+        "branch": "main",
+        "worktree": worktree["id"],
+        "environment": "dev",
+    }
+    ctx = dependencies(app, client, context)
+    source = preview_output(ctx, "orders", filter="order_id = 9")
+    result = trace_row(ctx, source["id"], source["rows"][0]["id"])
+    assert "Stops at Paid orders" in result["verdict"]
+    assert "'refunded' = 'paid' is false" in result["verdict"]
+    assert sum(len(s.get("rows", [])) for s in result["items"]) <= 5
+    configure(client, allow_data=False)
+    with pytest.raises(Problem, match="cannot read data"):
+        trace_row(dependencies(app, client, context), source["id"], source["rows"][0]["id"])
 
 
 def test_column_origin_tool_without_data_access(instance):

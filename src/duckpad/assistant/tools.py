@@ -732,6 +732,43 @@ def column_impact(
 
 
 @tool(needs="data")
+def trace_row(
+    ctx: RunContext[Dependencies],
+    dataset: str,
+    row: int,
+    offset: int = 0,
+    worktree: str = "",
+) -> dict:
+    """Follow a captured row downstream to explain why it is missing from an output.
+
+    First find the source row with preview_output and its filter, then copy id and rows[].id.
+    Returns a verdict, kept/discarded/grouped/duplicated/written steps and explicit limits.
+    Only one produced row is followed at each step. Never runs the pipeline or reads external sources.
+    Follow next_offset for remaining steps. Requires the assistant's data-reading permission.
+    """
+    from ..row_impact import trace
+
+    branch = reading(ctx, worktree)
+    branch.require_results(data=True)
+    result = trace(
+        ctx.deps.services.engine,
+        branch.worktree,
+        branch.environment,
+        dataset,
+        row,
+        page_size=min(5, ctx.deps.configuration.get()["max_rows"]),
+    )
+    # Keep values within the same per-response budget as preview_output/explain_value.
+    selected = page(result.pop("steps"), offset, 20)
+    remaining = ctx.deps.configuration.get()["max_rows"]
+    for step in selected["items"]:
+        if "rows" in step:
+            step["rows"] = step["rows"][:remaining]
+            remaining -= len(step["rows"])
+    return {**result, **selected}
+
+
+@tool(needs="data")
 def explain_value(
     ctx: RunContext[Dependencies],
     dataset: str,
