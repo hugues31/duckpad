@@ -1087,7 +1087,7 @@
   "computingStatistics": "Calculando estatísticas…",
   "computeStatistics": "Calcular estatísticas",
   "computeStatisticsHint": "Percorre todo o resultado uma vez: nulos, valores distintos, intervalos e valores frequentes.",
-  "columnsWithoutResult": "Este nó ainda não tem resultado neste ambiente: só as colunas documentadas são listadas.",
+  "columnsWithoutResult": "Ainda não há resultado neste ambiente. As colunas são descritas a partir do código guardado quando possível.",
   "columnType": "Tipo",
   "nulls": "Nulos",
   "distinct": "Distintos",
@@ -1666,7 +1666,6 @@
   "lineageOrigin": "Origem",
   "lineageImpact": "Impacto",
   "lineageLevels": "Níveis de linhagem",
-  "lineageColumnSoon": "A linhagem de colunas estará disponível em breve",
   "lineagePickValue": "Clique num valor em Dados",
   "lineageSources": "Fontes",
   "lineageExports": "Escrito fora do projeto",
@@ -1687,5 +1686,14 @@
   "lineageRowsHint": "Linhas contribuintes recalculadas a partir do resultado capturado.",
   "resizeLineage": "Redimensionar linhagem",
   "lineageCopy": "Copiar",
-  "lineageCopied": "Copiado"
+  "lineageCopied": "Copiado",
+  "lineageComputedHere": "Calculada aqui",
+  "lineageCarriedFrom": "Transportada de {source}",
+  "lineageComputedIn": "Calculada em {node}",
+  "lineageColumnPython": "Não analisável: Python. As tabelas de entrada estão listadas abaixo.",
+  "lineageColumnIncomplete": "Incompleto: algumas dependências de colunas não podem ser determinadas.",
+  "lineageColumnRun": "Execute {nodes} para descobrir as colunas de saída.",
+  "lineageRowsDependOn": "As linhas dependem de",
+  "lineageColumnSummary": "{column} vem de {sources}: {calculations} cálculos e {carried} nós que a transportam.",
+  "lineageColumnPickValue": "Clique num valor de {column} em Data para seguir este caminho com os seus valores."
 }

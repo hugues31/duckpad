@@ -102,6 +102,76 @@ test("Northstar follows all nodes through nested components in at most ten reque
   expect(errors).toEqual([]);
 });
 
+test("column origins connect Columns, table and value levels with a shareable path", async ({
+  page,
+}) => {
+  await example(page);
+  await page.getByRole("tab", { name: /^Columns/ }).click();
+  await page
+    .getByRole("button", { name: "Lineage: net_share", exact: true })
+    .click();
+  const panel = page.getByRole("complementary", {
+    name: "Lineage",
+    exact: true,
+  });
+  await expect(panel.locator(".lineage-column-summary")).toContainText(
+    "3 calculations",
+  );
+  await expect(panel.locator(".lineage-step header button")).toHaveText([
+    "Rank regions",
+    "Revenue by region",
+    "Eligible orders",
+    "Net amounts",
+    "Channel fees",
+    "Paid orders",
+    "Enrich orders",
+    "Orders",
+  ]);
+  await expect(panel).not.toContainText("Incomplete");
+  await expect(panel).not.toContainText("relation_");
+  await expect(
+    page.locator('.react-flow__node[data-id="net"] .node-lineage-value'),
+  ).toContainText("ƒ net_amount");
+  await expect(
+    panel.getByRole("button", { name: "Impact", exact: true }),
+  ).toBeDisabled();
+  const url = page.url();
+  await page.reload();
+  await expect(panel.locator(".lineage-column-summary")).toContainText(
+    "Orders · amount",
+  );
+  await panel.locator(".lineage-breadcrumb button").first().click();
+  await expect(
+    panel
+      .locator(".lineage-column-link")
+      .filter({ has: page.getByText("region", { exact: true }) }),
+  ).toContainText("Carried from Customers · region");
+  await panel
+    .locator(".lineage-column-link")
+    .filter({ has: page.getByText("region", { exact: true }) })
+    .click();
+  await expect(panel.locator(".lineage-step").last()).toContainText(
+    "Customers",
+  );
+  await expect(
+    panel
+      .locator(".lineage-column-condition")
+      .filter({ hasText: "customer_id" })
+      .first(),
+  ).toBeVisible();
+  await page.goto(url);
+  await page.getByRole("tab", { name: /^Data/ }).click();
+  await explain(page);
+  await panel.locator(".lineage-breadcrumb button").nth(1).click();
+  await expect(panel.locator(".lineage-column-summary")).toContainText(
+    "3 calculations",
+  );
+  const accessibility = await new AxeBuilder({ page })
+    .include(".lineage-panel")
+    .analyze();
+  expect(accessibility.violations).toEqual([]);
+});
+
 test("aggregate values paginate, change the followed row, and open contributor rows in Data", async ({
   page,
 }) => {
@@ -360,6 +430,55 @@ test("six real calculations of the same column remain six visible steps", async 
   await expect(panel.locator(".root .lineage-equation")).toContainText(
     "32 * 2",
   );
+});
+
+test("column lineage describes a project that has never run", async ({
+  page,
+}) => {
+  await signIn(page);
+  const tree = await (
+    await page.request.post("/api/projects", {
+      data: { name: "Static columns" },
+    })
+  ).json();
+  const snapshot = await (
+    await page.request.get(`/api/worktrees/${tree.id}`)
+  ).json();
+  const saved = await page.request.put(`/api/worktrees/${tree.id}`, {
+    data: {
+      revision: snapshot.revision,
+      files: {
+        ...snapshot.files,
+        "flow.json": JSON.stringify({
+          name: "Static columns",
+          nodes: [{ id: "source", params: {} }],
+          edges: [],
+        }),
+        "nodes/source.sql":
+          "-- @output first\nSELECT 2::INTEGER AS amount;\n-- @output result\nSELECT amount * 3 AS total FROM {{ first }};",
+      },
+    },
+  });
+  expect(saved.ok(), await saved.text()).toBeTruthy();
+  await page.goto(
+    `/worktrees/${tree.id}/flow?node=source&lineage=source&output=result&column=total`,
+  );
+  const panel = page.getByRole("complementary", {
+    name: "Lineage",
+    exact: true,
+  });
+  await expect(panel.locator(".lineage-column-expression")).toContainText([
+    "total",
+    "amount",
+  ]);
+  await expect(panel).not.toContainText("Incomplete");
+  await expect(
+    panel.locator(".lineage-column-expression").first(),
+  ).toContainText("* 3");
+  await page.getByRole("tab", { name: /^Columns/ }).click();
+  await expect(
+    page.getByRole("button", { name: "Lineage: total", exact: true }),
+  ).toBeVisible();
 });
 
 test("the panel translates its controls and copies execution evidence", async ({

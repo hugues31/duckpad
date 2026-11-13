@@ -1087,7 +1087,7 @@
   "computingStatistics": "Calcul des statistiques…",
   "computeStatistics": "Calculer les statistiques",
   "computeStatisticsHint": "Parcourt tout le résultat une fois : valeurs nulles, distinctes, plages et valeurs fréquentes.",
-  "columnsWithoutResult": "Ce nœud n'a pas encore de résultat dans cet environnement : seules les colonnes documentées sont listées.",
+  "columnsWithoutResult": "Aucun résultat dans cet environnement. Les colonnes sont décrites à partir du code enregistré quand c’est possible.",
   "columnType": "Type",
   "nulls": "Nulls",
   "distinct": "Distinctes",
@@ -1666,7 +1666,6 @@
   "lineageOrigin": "Origine",
   "lineageImpact": "Impact",
   "lineageLevels": "Niveaux de traçabilité",
-  "lineageColumnSoon": "La traçabilité des colonnes sera disponible prochainement",
   "lineagePickValue": "Cliquez sur une valeur dans Données",
   "lineageSources": "Sources",
   "lineageExports": "Écrit hors du projet",
@@ -1687,5 +1686,14 @@
   "lineageRowsHint": "Lignes contributrices recalculées à partir du résultat capturé.",
   "resizeLineage": "Redimensionner la traçabilité",
   "lineageCopy": "Copier",
-  "lineageCopied": "Copié"
+  "lineageCopied": "Copié",
+  "lineageComputedHere": "Calculée ici",
+  "lineageCarriedFrom": "Transportée depuis {source}",
+  "lineageComputedIn": "Calculée dans {node}",
+  "lineageColumnPython": "Non analysable : Python. Les tables d’entrée sont listées ci-dessous.",
+  "lineageColumnIncomplete": "Incomplet : certaines dépendances de colonnes ne peuvent pas être déterminées.",
+  "lineageColumnRun": "Exécutez {nodes} pour découvrir les colonnes de sortie.",
+  "lineageRowsDependOn": "Les lignes dépendent de",
+  "lineageColumnSummary": "{column} provient de {sources} : {calculations} calculs et {carried} nœuds qui la transportent.",
+  "lineageColumnPickValue": "Cliquez sur une valeur de {column} dans Data pour suivre ce chemin avec ses valeurs."
 }

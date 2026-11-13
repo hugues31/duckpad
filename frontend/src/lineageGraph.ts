@@ -95,6 +95,7 @@ export type TableLineage = {
 export type LineageTarget = {
   node: string;
   port?: string;
+  column?: string;
   direction: "origin" | "impact";
   cell?: Cell;
 };
@@ -257,8 +258,11 @@ export function readLineageTarget(
   return {
     node,
     port: params.get("output") || undefined,
+    column: !cell ? column || undefined : undefined,
     direction:
-      !cell && params.get("direction") === "impact" ? "impact" : "origin",
+      !cell && !column && params.get("direction") === "impact"
+        ? "impact"
+        : "origin",
     cell,
   };
 }
@@ -282,6 +286,7 @@ export function writeLineageTarget(
     next.set("lineage", target.node);
     next.set("node", target.node);
     if (target.port) next.set("output", target.port);
+    if (target.column) next.set("column", target.column);
     if (target.direction === "impact") next.set("direction", "impact");
     if (target.cell) {
       next.set("dataset", target.cell.dataset);

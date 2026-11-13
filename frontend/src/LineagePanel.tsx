@@ -20,6 +20,7 @@ import { useApiResource } from "./useApiResource";
 import { isFinal, usePolling } from "./usePolling";
 import { useLoadedWorktree } from "./worktree";
 import { LineageSteps, TableSteps, type LineageMap } from "./LineageSteps";
+import { ColumnLineage, ColumnList } from "./ColumnLineage";
 
 export default function LineagePanel({
   target,
@@ -128,7 +129,9 @@ export default function LineagePanel({
               key={direction}
               className={target.direction === direction ? "active" : ""}
               aria-pressed={target.direction === direction}
-              disabled={direction === "impact" && !!target.cell}
+              disabled={
+                direction === "impact" && (!!target.cell || !!target.column)
+              }
               onClick={() => onChange({ ...target, direction })}
             >
               {t(direction === "origin" ? "lineageOrigin" : "lineageImpact")}
@@ -155,13 +158,28 @@ export default function LineagePanel({
         </button>
       </header>
       <nav className="lineage-breadcrumb" aria-label={t("lineageLevels")}>
-        <button onClick={() => onChange({ ...target, cell: undefined })}>
+        <button
+          onClick={() =>
+            onChange({ ...target, cell: undefined, column: undefined })
+          }
+        >
           {name}
           {target.port ? ` · ${target.port}` : ""}
         </button>
         <span>›</span>
-        <button disabled title={t("lineageColumnSoon")}>
-          {target.cell?.column || t("columns")}
+        <button
+          disabled={!target.cell && !target.column}
+          aria-current={target.column && !target.cell ? "page" : undefined}
+          onClick={() =>
+            onChange({
+              ...target,
+              cell: undefined,
+              column: target.cell?.column || target.column,
+              direction: "origin",
+            })
+          }
+        >
+          {target.cell?.column || target.column || t("columns")}
         </button>
         <span>›</span>
         <span aria-current={target.cell ? "page" : undefined}>
@@ -203,14 +221,25 @@ export default function LineagePanel({
                 explanation.current = text;
               }}
             />
-          ) : (
-            <TableSteps
+          ) : target.column ? (
+            <ColumnLineage
+              target={target}
               tables={tables}
-              direction={target.direction}
               onMap={onMap}
               onHover={onHover}
               onOpen={onOpen}
             />
+          ) : (
+            <>
+              <TableSteps
+                tables={tables}
+                direction={target.direction}
+                onMap={onMap}
+                onHover={onHover}
+                onOpen={onOpen}
+              />
+              <ColumnList target={target} onChange={onChange} />
+            </>
           ))}
       </div>
     </aside>

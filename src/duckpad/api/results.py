@@ -64,6 +64,20 @@ def router(ctx: Context) -> APIRouter:
             services.projects.snapshot(worktree)["bundle"], node, port, direction, environment
         )
 
+    @api.get(
+        "/api/worktrees/{worktree}/lineage/columns",
+        response_model=None,
+        dependencies=[Depends(worktree_role("reader"))],
+    )
+    def columns(
+        worktree: str,
+        node: str,
+        port: str | None = None,
+        column: str | None = None,
+        environment: str = "dev",
+    ) -> Record:
+        return engine.column_lineage.describe(worktree, environment, node, port, column)
+
     @api.post(
         "/api/worktrees/{worktree}/lineage/rows",
         response_model=None,

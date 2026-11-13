@@ -93,7 +93,10 @@ def test_mixed_group_aggregates_keep_separate_contributions(services, tmp_path):
     [
         # A scalar subquery reads another relation: it is not an operand of the row.
         ("SELECT id, value / (SELECT SUM(value) FROM {{ source }}) AS d FROM {{ source }} ORDER BY id", 1),
-        ("SELECT grp, SUM(value) * (SELECT COUNT(*) FROM {{ source }}) AS d FROM {{ source }} GROUP BY grp", 0),
+        (
+            "SELECT grp, SUM(value) * (SELECT COUNT(*) FROM {{ source }}) AS d FROM {{ source }} GROUP BY grp",
+            0,
+        ),
         # A GROUP BY expression stays one operand.
         ("SELECT upper(grp) || COUNT(*) AS d FROM {{ source }} GROUP BY upper(grp) ORDER BY 1", 0),
         # Operands that the captured row cannot identify fall back to the whole expression.

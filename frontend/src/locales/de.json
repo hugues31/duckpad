@@ -1087,7 +1087,7 @@
   "computingStatistics": "Statistiken werden berechnet…",
   "computeStatistics": "Statistiken berechnen",
   "computeStatisticsHint": "Durchsucht das gesamte Ergebnis einmal: Nullwerte, unterschiedliche Werte, Wertebereiche und häufigste Werte.",
-  "columnsWithoutResult": "Dieser Knoten hat in dieser Umgebung noch kein Ergebnis: Es werden nur dokumentierte Spalten aufgeführt.",
+  "columnsWithoutResult": "Noch kein Ergebnis in dieser Umgebung. Spalten werden nach Möglichkeit aus dem gespeicherten Code beschrieben.",
   "columnType": "Typ",
   "nulls": "Nullwerte",
   "distinct": "Unterschiedliche",
@@ -1666,7 +1666,6 @@
   "lineageOrigin": "Ursprung",
   "lineageImpact": "Auswirkung",
   "lineageLevels": "Herkunftsebenen",
-  "lineageColumnSoon": "Spaltenherkunft folgt demnächst",
   "lineagePickValue": "Einen Wert in Daten anklicken",
   "lineageSources": "Quellen",
   "lineageExports": "Außerhalb des Projekts geschrieben",
@@ -1687,5 +1686,14 @@
   "lineageRowsHint": "Beitragende Zeilen aus dem erfassten Ergebnis neu berechnet.",
   "resizeLineage": "Herkunft verkleinern oder vergrößern",
   "lineageCopy": "Kopieren",
-  "lineageCopied": "Kopiert"
+  "lineageCopied": "Kopiert",
+  "lineageComputedHere": "Hier berechnet",
+  "lineageCarriedFrom": "Übernommen aus {source}",
+  "lineageComputedIn": "Berechnet in {node}",
+  "lineageColumnPython": "Nicht analysierbar: Python. Die Eingabetabellen stehen unten.",
+  "lineageColumnIncomplete": "Unvollständig: Einige Spaltenabhängigkeiten können nicht bestimmt werden.",
+  "lineageColumnRun": "Führen Sie {nodes} aus, um die Ausgabespalten zu ermitteln.",
+  "lineageRowsDependOn": "Zeilen hängen ab von",
+  "lineageColumnSummary": "{column} stammt aus {sources}: {calculations} Berechnungen und {carried} Knoten, die sie übernehmen.",
+  "lineageColumnPickValue": "Klicken Sie auf einen Wert von {column} in Data, um diesen Pfad mit Werten zu verfolgen."
 }

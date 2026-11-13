@@ -656,6 +656,35 @@ def preview_output(
     }
 
 
+@tool
+def explain_column(
+    ctx: RunContext[Dependencies],
+    node: str,
+    column: str,
+    port: str = "result",
+    offset: int = 0,
+    worktree: str = "",
+) -> dict:
+    """Explain a column's origin from saved SQL without reading data or running the flow.
+
+    Returns a bounded page of steps, expressions, source columns, row-selection conditions
+    and explicit limitations. Follow next_offset for remaining steps. Works with data access off.
+    """
+    branch = reading(ctx, worktree)
+    branch.require_results()
+    result = ctx.deps.services.engine.column_lineage.describe(
+        branch.worktree, branch.environment, node, port, column, snapshot=branch.snapshot()
+    )
+    return {
+        "node": node,
+        "column": column,
+        "root": result.get("root"),
+        "complete": result.get("complete", False),
+        "outputs": result["outputs"] if not result.get("root") else [],
+        **page(result.get("steps", []), offset, 20),
+    }
+
+
 @tool(needs="data")
 def explain_value(
     ctx: RunContext[Dependencies],

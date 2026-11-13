@@ -50,11 +50,11 @@ export function Value({ value }: { value: unknown }) {
 }
 const anchor = (id: string) => `lineage-${encodeURIComponent(id)}`;
 
-const componentPaths = (node: string) => {
+export const componentPaths = (node: string) => {
   const path = node.split("::").slice(0, -1);
   return path.map((_, index) => path.slice(0, index + 1).join("::"));
 };
-function ComponentHeading({
+export function ComponentHeading({
   node,
   onOpen,
 }: {
@@ -211,7 +211,13 @@ function useResource(node: string, tables: TableLineage) {
     .join(" · ");
 }
 
-function Resource({ node, tables }: { node: string; tables: TableLineage }) {
+export function Resource({
+  node,
+  tables,
+}: {
+  node: string;
+  tables: TableLineage;
+}) {
   return <span className="muted small">{useResource(node, tables)}</span>;
 }
 

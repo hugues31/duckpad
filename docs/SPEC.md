@@ -106,6 +106,7 @@ the open branch and to every other branch the user can open:
 | Saved project definition files: SQL, README, descriptions, variables, extension requirements and manifest | Yes, including literal/variable values in these definitions | Yes |
 | Compiled SQL and bound project parameters | Yes, resolved connection secrets redacted | Yes, resolved connection secrets redacted |
 | Materialized output schemas, counts, generation IDs and statuses | Yes | Yes |
+| Column origins: saved SQL expressions, input columns, row-selection conditions, sources and limitations | Yes, bounded step pages; no row values | Same |
 | Run IDs, environment, timestamps, statuses, durations, commits and per-node status | Yes | Yes |
 | Run error text and node message text | Withheld; only error presence | Yes, bounded |
 | Historical executed SQL and data-test results | SQL tool absent; result text withheld | Yes, bounded; connection secrets redacted |

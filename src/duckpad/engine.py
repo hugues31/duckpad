@@ -13,6 +13,7 @@ import duckdb
 from . import connection_probe, project_extensions
 from .access import Access
 from .catalog import Catalog
+from .column_lineage import ColumnLineage
 from .datasets import Context
 from .execution.contexts import ContextPool, automatic_resources
 from .execution.drafts import DEFAULT_SAMPLE, DraftPreviews
@@ -73,6 +74,7 @@ class Engine:
         )
         self.drafts = DraftPreviews(store, projects, catalog, self.pool, self.lock, self.active)
         self.drafts.partitions = self.partitions
+        self.column_lineage = ColumnLineage(self)
         self.runs.journal.recover()
 
     def context(self, worktree: str, environment: str, create: bool = False) -> Context:
@@ -266,6 +268,8 @@ class Engine:
         It takes no repository lock, since catalog changes call it under the engine lock. Project
         changes call it under their repository lock, which publication also holds.
         """
+        with self.column_lineage.lock:
+            self.column_lineage.cache.clear()
         for context in self.pool.all(worktree):
             if not self.store.get("worktree", context.worktree):
                 self.discard_worktree(context.worktree)

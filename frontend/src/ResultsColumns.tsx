@@ -2,11 +2,13 @@ import {
   BarChart3,
   CircleCheck,
   GitCompareArrows,
+  GitBranch,
   Loader2,
   Pencil,
 } from "lucide-react";
 import { useRef, useState } from "react";
 import { api, withQuery } from "./api";
+import type { ColumnOrigins } from "./ColumnLineage";
 import { useT } from "./i18n";
 import {
   clock,
@@ -38,6 +40,7 @@ export default function ResultsColumns({
   canEdit,
   onSaveDocumentation,
   onColumn,
+  onLineage,
 }: {
   snapshot: Snapshot;
   environment: string;
@@ -48,6 +51,7 @@ export default function ResultsColumns({
     change: (documentation: Documentation) => void,
   ) => Promise<unknown>;
   onColumn: (column: string) => void;
+  onLineage?: (column: string) => void;
 }) {
   const t = useT();
   const partition = usePartitionQuery(target.node, target.port);
@@ -66,8 +70,19 @@ export default function ResultsColumns({
   const controller = useRef<AbortController | null>(null);
   const info = loaded.data?.dataset === dataset?.id ? loaded.data : null;
   const statistics = info?.statistics;
+  const origins = useApiResource<ColumnOrigins>(
+    !dataset
+      ? withQuery(`/worktrees/${worktree}/lineage/columns`, {
+          node: target.node,
+          port: target.port,
+          environment,
+        })
+      : null,
+    { refresh: snapshot.revision },
+  );
   const columns =
     dataset?.columns ||
+    origins.data?.outputs[0]?.columns ||
     // Without a result, documented columns are all the tab can list.
     Object.keys(descriptions).map((name) => ({ name, type: "" }));
   const schema = info?.schema;
@@ -209,6 +224,17 @@ export default function ResultsColumns({
                     </button>
                   ) : (
                     <strong>{column.name}</strong>
+                  )}
+                  {onLineage && (
+                    <button
+                      className="text-button column-lineage-button"
+                      aria-label={`${t("lineage")}: ${column.name}`}
+                      title={t("lineage")}
+                      onClick={() => onLineage(column.name)}
+                    >
+                      <GitBranch size={13} />
+                      {t("lineage")}
+                    </button>
                   )}
                 </td>
                 <td>

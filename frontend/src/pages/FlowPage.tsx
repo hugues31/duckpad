@@ -631,6 +631,9 @@ export default function FlowPage() {
             onClose={() => panels.set({ preview: false })}
             onRun={(options) => run(fullNode, options)}
             selectedCell={lineageTarget?.cell}
+            onColumnLineage={(node, port, column) =>
+              changeLineage({ node, port, column, direction: "origin" })
+            }
             onExplain={(value) =>
               changeLineage({
                 node: value.node || fullNode,
