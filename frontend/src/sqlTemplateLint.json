@@ -15,6 +15,16 @@
     "errors": []
   },
   {
+    "name": "icon and color among the descriptive directives",
+    "sql": "-- @label Paid orders\n-- @description Keep paid orders.\n-- @icon filter\n-- @color green\n-- @input source\n-- @output result\nSELECT * FROM {{ source }};",
+    "errors": []
+  },
+  {
+    "name": "unknown icon and color only warn",
+    "sql": "-- @icon fitler\n-- @color #ff0000\n-- @icon\n-- @output a\nSELECT 1;",
+    "errors": []
+  },
+  {
     "name": "quoted reference only warns",
     "sql": "-- @input source\n-- @param status: text\n-- @output result\nSELECT * FROM {{ source }} WHERE status = '{{ status }}';",
     "errors": []

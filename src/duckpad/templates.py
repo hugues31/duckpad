@@ -11,7 +11,7 @@ from sqlglot import exp
 from sqlglot.tokens import TokenType
 
 from .data_preparation import PREPARATION_TYPES, render_preparation
-from .python_contract import parse_python
+from .python_contract import APPEARANCE, parse_python
 from .sql_errors import SqlSourceError, source_context
 from .util import Problem, literal, qi
 from .value_types import base_type, is_date, type_argument
@@ -49,8 +49,8 @@ CONNECTION_BOUND = {"file", "destination", "secret", "schema_name"}
 # A database object name, listed from the connection (schemas) or the schema parameter (tables).
 OBJECT_NAMES = {"schema_name": "schema", "table_name": "table"}
 RESOURCE_TYPES = ("file", "destination")
-# Directives that document a template without changing what it computes.
-DESCRIPTIVE = ("label", "description")
+# Directives that document or style a template without changing what it computes.
+DESCRIPTIVE = ("label", "description", "icon", "color")
 LIST_ITEM_TYPES = ("text", "number", "boolean", "column")
 
 
@@ -108,7 +108,10 @@ def parse_template(sql, language="sql"):
             buffer_lines.append(line_number)
             continue
         key, value = found
-        if key in DESCRIPTIVE:
+        if key in APPEARANCE:
+            # Names are case-insensitive; the interface knows which ones it can draw.
+            template[key] = value.lower()
+        elif key in DESCRIPTIVE:
             template[key] = value
         elif key == "input":
             template["inputs"].append(value)

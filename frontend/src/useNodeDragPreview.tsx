@@ -70,6 +70,12 @@ export function useNodeDragPreview({ parsed, components }: CanvasProps) {
           label: nodeLabel(node, signature, t),
           kind: signature.kind,
           icon: kind === "component" ? "component" : id,
+          ...(signature.kind === "component"
+            ? {}
+            : {
+                declaredIcon: signature.definition?.icon,
+                color: signature.definition?.color,
+              }),
           inputs: signature.inputs,
           missingInputs: signature.inputs,
           outputs: signature.outputs,

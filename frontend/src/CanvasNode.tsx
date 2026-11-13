@@ -10,23 +10,18 @@ import {
   Boxes,
   Check,
   Clock3,
-  Code2,
-  FileInput,
-  FileOutput,
-  Filter,
-  GitMerge,
   Hourglass,
   Link,
   Loader2,
-  Sigma,
   Square,
   type LucideProps,
 } from "lucide-react";
 import { memo, useEffect, type CSSProperties } from "react";
-import { PythonIcon } from "./AddIcon";
 import { CanvasPorts, PORT_GROUP_THRESHOLD } from "./CanvasPorts";
 import { WarningBadge } from "./ExecutionMessages";
 import { useT, type Translate } from "./i18n";
+import { colorClass } from "./nodeAppearance";
+import { nodeIcon } from "./nodeIcons";
 import { NodeProgressFill } from "./NodeProgressFill";
 import type { PartitionNode } from "./partitions";
 import { seconds } from "./results";
@@ -34,19 +29,35 @@ import { elapsedDuration, overran, type NodeProgress } from "./runEstimate";
 import type { TemplateKind } from "./types";
 import { useNow } from "./useNow";
 
-/** The icon of a template, from its ID, or of any component. */
-export function NodeIcon({ kind, ...props }: LucideProps & { kind: string }) {
+/** The icon a template ID suggests, by the name `@icon` would give it. */
+function defaultIcon(kind: string) {
   // Python template IDs end with ".py", whatever their name says.
-  if (kind === "python" || kind.endsWith(".py"))
-    return <PythonIcon {...props} />;
-  if (kind.includes("export")) return <FileOutput {...props} />;
-  if (kind === "join") return <GitMerge {...props} />;
-  if (kind === "filter") return <Filter {...props} />;
-  if (kind === "aggregate" || kind.includes("metrics"))
-    return <Sigma {...props} />;
-  if (kind.startsWith("load_")) return <FileInput {...props} />;
+  if (kind === "python" || kind.endsWith(".py")) return "python";
+  if (kind.includes("export")) return "export";
+  if (kind === "join") return "join";
+  if (kind === "filter") return "filter";
+  if (kind === "aggregate" || kind.includes("metrics")) return "aggregate";
+  if (kind.startsWith("load_")) return "import";
+  return "sql";
+}
+
+/**
+ * The icon of a node or palette entry: the one its code declares with `@icon`,
+ * else the one its template ID suggests. Components have their own.
+ */
+export function NodeIcon({
+  kind,
+  icon,
+  ...props
+}: LucideProps & {
+  /** The template ID, "python" or "component". */
+  kind: string;
+  /** The declared name; an unknown one keeps the default icon. */
+  icon?: string;
+}) {
   if (kind === "component") return <Boxes {...props} />;
-  return <Code2 {...props} />;
+  const { name, Icon } = nodeIcon(icon) ?? nodeIcon(defaultIcon(kind))!;
+  return <Icon data-icon={name} {...props} />;
 }
 
 function StatusIcon({ status, ...props }: LucideProps & { status: string }) {
@@ -84,6 +95,9 @@ type PipelineData = {
     | "running";
   /** The template ID, or "component". */
   icon: string;
+  /** The icon and the color the node's code declares, if any. */
+  declaredIcon?: string;
+  color?: string;
   linked?: string;
   warnings: number;
   partition?: PartitionNode;
@@ -183,9 +197,14 @@ export function PipelineNodeView({
         : 75 - Math.sqrt(48 ** 2 - (top - 48) ** 2);
     return { top, inset };
   };
+  // A grouped side draws its links from the oval, at the middle of the side.
+  const socket = (index: number, count: number) =>
+    count >= PORT_GROUP_THRESHOLD
+      ? portPosition(0, 1)
+      : portPosition(index, count);
   return (
     <div
-      className={`pipeline-node ${square ? "square-node" : "round-node"} ${data.kind} ${selected ? "is-selected" : ""} ${data.muted ? "is-muted" : ""} ${running ? "is-running" : ""} ${queued ? "is-queued" : ""}`}
+      className={`pipeline-node ${square ? "square-node" : "round-node"} ${data.kind} ${colorClass(data.color)} ${selected ? "is-selected" : ""} ${data.muted ? "is-muted" : ""} ${running ? "is-running" : ""} ${queued ? "is-queued" : ""}`}
     >
       {data.muted && data.inputs.length > 0 && (
         <svg
@@ -195,22 +214,11 @@ export function PipelineNodeView({
           aria-hidden="true"
         >
           {data.outputs.map((port, index) => {
-            const input = portPosition(
-              data.inputs.length >= PORT_GROUP_THRESHOLD
-                ? 0
-                : index < data.inputs.length
-                  ? index
-                  : 0,
-              data.inputs.length >= PORT_GROUP_THRESHOLD
-                ? 1
-                : data.inputs.length,
+            const input = socket(
+              index < data.inputs.length ? index : 0,
+              data.inputs.length,
             );
-            const output = portPosition(
-              data.outputs.length >= PORT_GROUP_THRESHOLD ? 0 : index,
-              data.outputs.length >= PORT_GROUP_THRESHOLD
-                ? 1
-                : data.outputs.length,
-            );
+            const output = socket(index, data.outputs.length);
             return (
               <path
                 key={port}
@@ -235,7 +243,12 @@ export function PipelineNodeView({
             now={now}
           />
         )}
-        <NodeIcon kind={data.icon} size={48} strokeWidth={1.6} />
+        <NodeIcon
+          kind={data.icon}
+          icon={data.declaredIcon}
+          size={48}
+          strokeWidth={1.6}
+        />
       </div>
       <div className="node-title" title={data.label}>
         {data.label}

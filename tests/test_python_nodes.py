@@ -12,7 +12,7 @@ from helpers import wait_run, wait_until
 from duckpad.archive import archive_bundle, read_archive, write_archive
 from duckpad.bundle import bundle_to_files
 from duckpad.lineage import Lineage
-from duckpad.python_contract import parse_python
+from duckpad.python_contract import executable_python, parse_python
 from duckpad.python_environment import lock_files, prepare, validate_manifest
 from duckpad.services import Services
 from duckpad.util import Problem
@@ -313,11 +313,77 @@ def test_relabeling_python_code_keeps_fingerprints(services):
     snapshot = projects.write(worktree["id"], snapshot["revision"], proposal)
     after, _ = engine.fingerprints.batch(snapshot["bundle"], "dev")
     assert after == before
+    # An icon and a color restyle the node like a label renames it.
+    proposal["nodes/python.py"] = "# @icon Split\n# @color purple\n" + proposal["nodes/python.py"]
+    snapshot = projects.write(worktree["id"], snapshot["revision"], proposal)
+    styled, _ = engine.fingerprints.batch(snapshot["bundle"], "dev")
+    assert styled == before
+    # The flow retains the signature the interface draws the node from.
+    contract = next(n for n in snapshot["bundle"]["flow"]["nodes"] if n["id"] == "python")["python_contract"]
+    assert (contract["label"], contract["icon"], contract["color"]) == (
+        "Reusable splitter",
+        "split",
+        "purple",
+    )
     snapshot = projects.write(
         worktree["id"], snapshot["revision"], {**proposal, "nodes/python.py": SPLIT + "\n# note\n"}
     )
     changed, _ = engine.fingerprints.batch(snapshot["bundle"], "dev")
     assert changed["python"] != before["python"]
+
+
+def test_python_icon_and_color_are_comments_written_like_the_label():
+    contract = parse_python(SPLIT)
+    assert contract["label"] == "Split" and "icon" not in contract and "color" not in contract
+    styled = parse_python("# @label Splitter\n  # @icon   Left-Join  \n# @color TEAL\n" + SPLIT)
+    assert (styled["label"], styled["icon"], styled["color"]) == ("Splitter", "left-join", "teal")
+    # The first comment of each kind counts, like the label; unknown names stay for the interface.
+    repeated = parse_python("# @icon a\n# @icon b\n# @color not-a-color\n" + SPLIT)
+    assert (repeated["icon"], repeated["color"]) == ("a", "not-a-color")
+    # Only "# @name value" is a directive: other comments stay part of the code.
+    for comment in ("#@icon filter", "#  @icon filter", "# @icon", "x = 1  # @icon filter"):
+        assert "icon" not in parse_python(comment + "\n" + SPLIT)
+        assert comment in executable_python(comment + "\n" + SPLIT)
+    assert executable_python("# @icon filter\n# @color red\n# @label A\n" + SPLIT) == SPLIT.rstrip("\n")
+
+
+def test_restyling_python_code_compares_as_documentation(services):
+    from duckpad.comparison import commit_message, compare_files
+
+    _, projects, _, _ = services
+    worktree = flow(services)
+    before = projects.snapshot(worktree["id"])
+    after = projects.write(
+        worktree["id"],
+        before["revision"],
+        {**before["files"], "nodes/python.py": "# @label Splitter\n# @icon split\n# @color teal\n" + SPLIT},
+    )
+    # The signature retained in the flow follows the code: a name and a look are not processing.
+    report = compare_files(before["files"], after["files"])
+    changed = next(e for e in report["entities"] if e["id"] == "node/python")
+    assert changed["categories"] == ["documentation"]
+    assert {"python_contract/icon", "python_contract/color"} <= set(changed["fields"])
+    assert report["impact"]["direct"] == []
+    assert commit_message(before["files"], after["files"]).startswith("docs(node): ")
+
+
+def test_an_icon_removed_from_python_code_leaves_a_node_whose_ports_changed(services):
+    from duckpad.python_nodes import retained_contract
+
+    styled = parse_python("# @icon split\n# @color teal\n" + SPLIT)
+    node = {"id": "python", "language": "python", "python_contract": styled}
+    edges = [
+        {"id": "e", "source": "python", "sourceHandle": "valid", "target": "x", "targetHandle": "source"}
+    ]
+    # The code no longer declares the connected output, nor the icon and the color.
+    renamed = parse_python(SPLIT.replace("valid", "accepted"))
+    retained = retained_contract(node, renamed, edges)
+    assert "no longer declared" in retained["error"]
+    assert "valid" in retained["outputs"] and "accepted" in retained["outputs"]
+    assert "icon" not in retained and "color" not in retained
+    # Code that cannot be read says nothing: the node keeps the look it had.
+    unreadable = retained_contract(node, {"error": "Python line 1: invalid syntax"}, edges)
+    assert (unreadable["icon"], unreadable["color"]) == ("split", "teal")
 
 
 def test_python_syntax_error_is_reported_once_with_other_flow_problems(services):

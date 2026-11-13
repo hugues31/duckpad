@@ -80,6 +80,8 @@ Write each directive on its own line, starting with `-- @`:
 | --- | --- |
 | `-- @label Paid orders` | Display label for the definition |
 | `-- @description Keep paid orders.` | Short explanation |
+| `-- @icon filter` | Icon of the node, by its [name](ICONS.md#icons) |
+| `-- @color green` | Color of the node, one of [nine names](ICONS.md#colors) |
 | `-- @input source` | Declare an input port to connect on the canvas |
 | `-- @param status: text = "paid"` | Typed parameter and optional default |
 | `-- @output orders` | Name the query's output port |
@@ -88,7 +90,8 @@ Write each directive on its own line, starting with `-- @`:
 
 Inputs, parameters and outputs share one namespace: use unique identifiers made
 of letters, digits and underscores, starting with a letter or underscore.
-Unknown directives are errors. Each output block contains exactly one query,
+Unknown directives are errors; an unknown icon or color name only keeps the
+default look. Each output block contains exactly one query,
 ending with a semicolon. Every query reads only declared inputs, earlier outputs,
 resources and connections. A node with outputs cannot write; a node without
 outputs can write data, or only run tests and messages.

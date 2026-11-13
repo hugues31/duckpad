@@ -101,6 +101,9 @@ template name. Diagnostics, lineage, variable usage, conflict titles and new
 Git commits use the same names. References inside a component include its parent
 path; IDs remain available in file paths and tooltips.
 
+A node can also have its own [icon and color](ICONS.md): choose them under
+**Icon and color** in the inspector, or declare `@icon` and `@color` in its code.
+
 ## Find nodes and projects
 
 Use **Find a node…** to search the current graph by label, ID or template.

@@ -9,6 +9,7 @@ from .components import expand
 from .graph import reachable
 from .node_code import code_path
 from .node_names import graph_names, name_text, node_name
+from .python_contract import APPEARANCE
 from .templates import DESCRIPTIVE, directives
 from .util import Problem, dumps
 
@@ -129,6 +130,10 @@ def entities(bundle):
     return result
 
 
+# What the signature retained for a Python node says of its name and look, not of its ports.
+PRESENTATION = {f"python_contract/{key}" for key in ("label", "description", *APPEARANCE)}
+
+
 def fields(before, after, prefix=""):
     """Field names only; values stay in the inspector, never in commit summaries."""
     if before == after:
@@ -178,7 +183,8 @@ def categories(kind, paths, before, after, language="sql"):
             "layout"
             if p.split("/")[0] in ("position", "selected")
             else "documentation"
-            if p.split("/")[0] in ("name", "label", "description", "documentation", "preset")
+            if p in PRESENTATION
+            or p.split("/")[0] in ("name", "label", "description", "documentation", "preset")
             else "processing"
             for p in paths
         }

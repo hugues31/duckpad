@@ -474,6 +474,90 @@ test("capture parameters, node documentation and nested components", async ({
   await capture(page, "component");
 });
 
+test("capture node icons and colors, and the icon library", async ({
+  page,
+}) => {
+  const worktree = await example(page);
+  // Style a few nodes as the inspector writes it in their code.
+  const endpoint = `/api/worktrees/${worktree.id}`;
+  const { revision, bundle } = await (await page.request.get(endpoint)).json();
+  const styled = (code: string, icon: string, color: string) =>
+    code.replace(
+      /^(-- @label.*\n)/m,
+      `$1-- @icon ${icon}\n-- @color ${color}\n`,
+    );
+  for (const [file, icon, color] of [
+    ["nodes/enriched.sql", "left-join", "purple"],
+    ["nodes/period.sql", "date", "orange"],
+    ["nodes/reach.sql", "users", "teal"],
+  ])
+    bundle.node_sql[file] = styled(bundle.node_sql[file], icon, color);
+  for (const [template, icon, color] of [
+    ["validated_orders", "shield", "green"],
+    ["export_report", "euro", "pink"],
+  ])
+    bundle.templates[template] = styled(
+      bundle.templates[template],
+      icon,
+      color,
+    );
+  expect(
+    (await page.request.put(endpoint, { data: { revision, bundle } })).ok(),
+  ).toBeTruthy();
+  await expect(
+    node(page, "Export revenue").locator(".pipeline-node"),
+  ).toHaveClass(/node-color-pink/);
+  await run(page);
+  await node(page, "Enrich orders").click();
+  const inspector = page.locator(".inspector");
+  await inspector.getByRole("button", { name: /^Icon and color/ }).click();
+  await expect(
+    inspector.getByRole("option", { name: "left-join", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator(".preview-header .badge")).toHaveText("Valid");
+  await capture(page, "node-icons");
+
+  // Every icon with its name, drawn by the library itself.
+  const groups = await inspector
+    .locator(".appearance-icons [role=group]")
+    .evaluateAll((sections) =>
+      sections.map((section) => ({
+        title: section.querySelector("h5")!.textContent,
+        icons: [...section.querySelectorAll("button")].map((button) => ({
+          name: button.title,
+          svg: button.innerHTML,
+        })),
+      })),
+    );
+  expect(groups.flatMap((group) => group.icons).length).toBeGreaterThan(100);
+  const sheet = await page.context().newPage();
+  await sheet.setContent(
+    `<style>
+      body { margin: 0; width: 880px; padding: 4px 20px 20px; background: #fafafa; color: #16161b;
+        font: 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      h2 { margin: 20px 0 10px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
+      div { display: grid; grid-template-columns: repeat(8, 1fr); gap: 14px 0; }
+      figure { margin: 0; display: grid; justify-items: center; gap: 6px; }
+      svg { width: 26px; height: 26px; }
+    </style>` +
+      groups
+        .map(
+          (group) =>
+            `<h2>${group.title}</h2><div>${group.icons
+              .map(
+                (icon) =>
+                  `<figure>${icon.svg}<figcaption>${icon.name}</figcaption></figure>`,
+              )
+              .join("")}</div>`,
+        )
+        .join(""),
+  );
+  await sheet.locator("body").screenshot({
+    path: resolve("../docs/images", "node-icon-library.png"),
+  });
+  await sheet.close();
+});
+
 test("capture the docked code editor and its preview", async ({ page }) => {
   await example(page);
   await run(page);

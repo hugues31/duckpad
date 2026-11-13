@@ -12,6 +12,8 @@ import InspectorParameters from "./InspectorParameters";
 import { sourcePreviewParams } from "./nodeParameters";
 import { projectSettingsUrl } from "./navigation";
 import type { NodeAction } from "./nodeActions";
+import type { Appearance } from "./nodeAppearance";
+import NodeAppearanceField from "./NodeAppearanceField";
 import { nodeCode, nodeEntity, nodeSourcePath } from "./nodeCode";
 import NodeDocumentation from "./NodeDocumentation";
 import NodeInfo from "./NodeInfo";
@@ -67,6 +69,7 @@ export default function Inspector({
   statuses,
   onSave,
   onSaveDocumentation,
+  onAppearance,
   onInput,
   actions,
   onRun,
@@ -97,6 +100,8 @@ export default function Inspector({
     change: (documentation: Documentation) => void,
     base: Snapshot,
   ) => Promise<Snapshot>;
+  /** Write a change of icon or color in the node's code. */
+  onAppearance: (change: Appearance, base: Snapshot) => Promise<Snapshot>;
   onInput: (port: string, source: string) => void;
   actions: NodeAction[];
   onRun: () => void;
@@ -258,6 +263,9 @@ export default function Inspector({
         title={nodeLabel(node, signature, t)}
         node={node}
         kind={kind}
+        definition={
+          signature.kind === "component" ? undefined : signature.definition
+        }
         snapshot={snapshot}
         onClose={onClose}
       />
@@ -334,6 +342,15 @@ export default function Inspector({
             </label>
             {node.component && (
               <p className="muted small">{t("sharedTemplateHint")}</p>
+            )}
+            {signature.kind !== "component" && (
+              <NodeAppearanceField
+                node={node}
+                definition={signature.definition}
+                snapshot={snapshot}
+                readOnly={readOnly}
+                onChange={onAppearance}
+              />
             )}
             <InputSelectors
               inputs={inputs}

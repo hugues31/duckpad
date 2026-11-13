@@ -60,6 +60,9 @@ export interface ParsedTemplate {
   error?: string;
   label?: string;
   description?: string;
+  /** The names declared with `@icon` and `@color`, as written in lowercase. */
+  icon?: string;
+  color?: string;
   writes_external?: boolean;
   inputs?: string[];
   outputs?: string[];

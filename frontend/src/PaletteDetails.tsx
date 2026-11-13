@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import { NodeIcon } from "./CanvasNode";
 import type { NodeChoice } from "./graph";
 import { templateLabel, useT } from "./i18n";
+import { colorClass } from "./nodeAppearance";
 import { isWideLayout } from "./WorkspacePanels";
 
 /** Read the definition's interface without creating or editing a graph node. */
@@ -44,9 +45,14 @@ export default function PaletteDetails({
       }}
     >
       <div className="inspector-title">
-        <span className={`kind-icon ${signature.kind}`}>
+        <span
+          className={`kind-icon ${signature.kind} ${choice.kind === "template" ? colorClass(choice.definition.color) : ""}`}
+        >
           <NodeIcon
             kind={choice.kind === "component" ? "component" : choice.id}
+            icon={
+              choice.kind === "template" ? choice.definition.icon : undefined
+            }
             size={18}
           />
         </span>

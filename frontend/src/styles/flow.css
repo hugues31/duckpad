@@ -328,6 +328,11 @@
 .palette-icon.components {
   color: light-dark(#6b589c, #d0bcff);
 }
+/* A declared color shows wherever an icon stands for the node. */
+.palette-icon.node-colored,
+.connection-palette-item > svg.node-colored {
+  color: var(--node-color);
+}
 .palette-info {
   opacity: 0;
   color: var(--muted);
@@ -550,6 +555,8 @@ fieldset.palette-bottom {
   height: 70px;
 }
 .pipeline-node {
+  /* The accent of the shape: the color its code declares, if any. */
+  --node-accent: var(--node-color, var(--accent));
   width: 150px;
   position: relative;
   display: flex;
@@ -610,7 +617,7 @@ fieldset.palette-bottom {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--accent);
+  color: var(--node-accent);
   position: relative;
 }
 /* Sources and exports: where data enters or leaves the pipeline. */
@@ -619,6 +626,24 @@ fieldset.palette-bottom {
   border-color: var(--accent);
   color: light-dark(#1559df, #f2f6ff);
   background: light-dark(#c0d6ff, #245bb8);
+}
+/* A declared color tints the shape and its icon; run and selection feedback follow it. */
+.pipeline-node.node-colored .node-shape {
+  color: var(--node-color);
+  border-color: color-mix(in srgb, var(--node-color) 60%, var(--edge));
+  background: color-mix(in srgb, var(--node-color) 8%, var(--surface));
+}
+/* No more specific than the muted look, which comes later and wins. */
+.pipeline-node.node-colored:where(.square-node) .node-shape {
+  border-color: var(--node-color);
+  color: light-dark(
+    var(--node-color),
+    color-mix(in srgb, var(--node-color) 14%, white)
+  );
+  background: light-dark(
+    color-mix(in srgb, var(--node-color) 24%, white),
+    color-mix(in srgb, var(--node-color) 44%, #121214)
+  );
 }
 /* The links a muted node passes through, drawn like canvas links. */
 .node-passthrough {
@@ -649,16 +674,16 @@ fieldset.palette-bottom {
 }
 /* A running node glows; selection keeps its own ring below. */
 .pipeline-node.is-running .node-shape {
-  border-color: var(--accent);
+  border-color: var(--node-accent);
   box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent),
-    0 6px 22px color-mix(in srgb, var(--accent) 26%, transparent);
+    0 0 0 3px color-mix(in srgb, var(--node-accent) 16%, transparent),
+    0 6px 22px color-mix(in srgb, var(--node-accent) 26%, transparent);
 }
 .pipeline-node.is-running .node-shape::after {
   content: "";
   position: absolute;
   inset: -1.5px;
-  border: 2px solid var(--accent);
+  border: 2px solid var(--node-accent);
   border-radius: inherit;
   opacity: 0;
   pointer-events: none;
@@ -696,20 +721,20 @@ fieldset.palette-bottom {
   background: linear-gradient(
     90deg,
     light-dark(
-      color-mix(in srgb, var(--accent) 5%, transparent),
-      color-mix(in srgb, var(--accent) 10%, transparent)
+      color-mix(in srgb, var(--node-accent) 5%, transparent),
+      color-mix(in srgb, var(--node-accent) 10%, transparent)
     ),
     light-dark(
-      color-mix(in srgb, var(--accent) 24%, transparent),
-      color-mix(in srgb, var(--accent) 38%, transparent)
+      color-mix(in srgb, var(--node-accent) 24%, transparent),
+      color-mix(in srgb, var(--node-accent) 38%, transparent)
     )
   );
 }
 .square-node .node-progress-fill {
   background: linear-gradient(
     90deg,
-    color-mix(in srgb, var(--accent) 10%, transparent),
-    color-mix(in srgb, var(--accent) 40%, transparent)
+    color-mix(in srgb, var(--node-accent) 10%, transparent),
+    color-mix(in srgb, var(--node-accent) 40%, transparent)
   );
 }
 /* The leading edge of an estimated fill. */
@@ -718,8 +743,9 @@ fieldset.palette-bottom {
   position: absolute;
   inset: 0 0 0 auto;
   width: 2px;
-  background: var(--accent);
-  box-shadow: 0 0 10px 2px color-mix(in srgb, var(--accent) 50%, transparent);
+  background: var(--node-accent);
+  box-shadow: 0 0 10px 2px
+    color-mix(in srgb, var(--node-accent) 50%, transparent);
   opacity: 0;
   transition: opacity 0.3s ease;
 }
@@ -744,8 +770,8 @@ fieldset.palette-bottom {
     90deg,
     transparent,
     light-dark(
-      color-mix(in srgb, var(--accent) 28%, transparent),
-      color-mix(in srgb, var(--accent) 40%, transparent)
+      color-mix(in srgb, var(--node-accent) 28%, transparent),
+      color-mix(in srgb, var(--node-accent) 40%, transparent)
     ),
     transparent
   );
@@ -763,13 +789,13 @@ fieldset.palette-bottom {
   }
 }
 .pipeline-node.is-selected .node-shape {
-  border-color: var(--accent);
+  border-color: var(--node-accent);
   box-shadow:
-    0 0 0 4px color-mix(in srgb, var(--accent) 24%, transparent),
+    0 0 0 4px color-mix(in srgb, var(--node-accent) 24%, transparent),
     var(--shadow);
 }
 .pipeline-node:hover .node-shape {
-  border-color: var(--accent);
+  border-color: var(--node-accent);
 }
 /* Component frames and their feedback follow the same six-sided outline. */
 .pipeline-node.component .node-shape {
@@ -1082,7 +1108,7 @@ fieldset.palette-bottom {
   }
   /* Activity without motion: a steady tint. */
   .node-progress:is([data-state="working"], [data-state="overrun"]) {
-    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    background: color-mix(in srgb, var(--node-accent) 12%, transparent);
   }
 }
 .react-flow__edge.selected .react-flow__edge-path {

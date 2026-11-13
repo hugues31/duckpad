@@ -5,6 +5,7 @@ import AddIcon from "./AddIcon";
 import { NodeIcon } from "./CanvasNode";
 import { DRAG_TYPE, nodeChoices, type NodeKind } from "./graph";
 import { isBuiltinTemplate, templateLabel, useT } from "./i18n";
+import { colorClass } from "./nodeAppearance";
 import type { Snapshot } from "./types";
 
 const CATEGORIES = [
@@ -79,6 +80,9 @@ export default function NodePalette({
                 (category) => category === choice.signature.kind + "s",
               ) || "transforms",
         description: choice.definition.description,
+        ...(choice.kind === "template"
+          ? { icon: choice.definition.icon, color: choice.definition.color }
+          : {}),
       }))
       .filter((item) => item.label?.toLowerCase().includes(query));
   }, [snapshot, excludedComponents, search, t]);
@@ -167,9 +171,12 @@ export default function NodePalette({
                       .filter(Boolean)
                       .join(" · ")}
                   >
-                    <span className={`palette-icon ${item.category}`}>
+                    <span
+                      className={`palette-icon ${item.category} ${colorClass(item.color)}`}
+                    >
                       <NodeIcon
                         kind={item.kind === "component" ? "component" : item.id}
+                        icon={item.icon}
                         size={17}
                       />
                     </span>

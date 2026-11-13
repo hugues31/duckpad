@@ -126,11 +126,14 @@ few comment directives, or a Python class. Duckpad reads the declarations and
 turns them into ports, a parameter form and a palette entry. There is nothing
 to compile or register.
 
-A SQL node declares its inputs, typed parameters, outputs and tests in comments:
+A SQL node declares its inputs, typed parameters, outputs and tests in comments,
+and optionally its [icon and color](docs/ICONS.md):
 
 ```sql
 -- @label Revenue breakdown
 -- @description Total revenue for each value of the column you choose.
+-- @icon chart-bar
+-- @color green
 -- @input orders
 -- @param dimension: column(orders) = "region"
 -- @param minimum: number = 100
@@ -153,6 +156,8 @@ from duckdb import col
 
 
 # @label Split orders
+# @icon split
+# @color purple
 class Split(dp.Node):
     minimum: int = dp.param(default=300, ge=0)
     column: dp.Column = dp.param(default="amount", input="orders")
@@ -172,7 +177,7 @@ Click **SQL** or **Python** at the bottom of the palette, paste the code, and
 the node is ready to drop into a pipeline. Python nodes are available once an
 administrator enables Python for the project.
 
-![Both nodes in a pipeline: Duckpad generated their ports, their palette entries and the parameter form from the code](docs/images/readme-custom-nodes.png)
+![Both nodes in a pipeline: Duckpad generated their ports, their palette entries, their icons and the parameter form from the code](docs/images/readme-custom-nodes.png)
 
 More ways to extend Duckpad:
 

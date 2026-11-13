@@ -61,6 +61,27 @@ def test_descriptive_directives_are_recognized_in_every_form(directive):
     assert renamed["source_lines"] == [line + 1 for line in original["source_lines"]]
 
 
+@pytest.mark.parametrize(
+    "styled",
+    ["-- @icon Filter\n-- @color GREEN", "--@icon filter\n  --   @color   green  "],
+)
+def test_icon_and_color_style_a_template_without_changing_what_it_computes(styled):
+    sql = "-- @label Paid\n-- @input source\n-- @output result\nSELECT * FROM {{ source }};"
+    plain, template = parse_template(sql), parse_template(styled + "\n" + sql)
+    # Names are case-insensitive; a template that declares none has neither key.
+    assert (template["icon"], template["color"]) == ("filter", "green")
+    assert "icon" not in plain and "color" not in plain
+    assert executable_sql(styled + "\n" + sql) == executable_sql(sql)
+    assert [block["sql"] for block in template["blocks"]] == [block["sql"] for block in plain["blocks"]]
+
+
+def test_unknown_icon_and_color_names_never_invalidate_a_template():
+    """The interface chooses what it can draw: a later version may know more names."""
+    template = parse_template("-- @icon not-an-icon\n-- @color #ff0000\n-- @output result\nSELECT 1;")
+    assert (template["icon"], template["color"]) == ("not-an-icon", "#ff0000")
+    assert parse_template("-- @icon\n-- @output result\nSELECT 1;")["icon"] == ""
+
+
 def test_directives_inside_sql_lines_are_not_directives():
     assert directives("SELECT 1 -- @input ghost\n-- @output result") == [("output", "result")]
 
