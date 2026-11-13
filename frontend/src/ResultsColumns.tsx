@@ -80,10 +80,11 @@ export default function ResultsColumns({
       : null,
     { refresh: snapshot.revision },
   );
+  const described = origins.data?.outputs[0]?.columns;
   const columns =
     dataset?.columns ||
-    origins.data?.outputs[0]?.columns ||
-    // Without a result, documented columns are all the tab can list.
+    (described?.length ? described : null) ||
+    // Without a result or a description from code, documented columns are all the tab can list.
     Object.keys(descriptions).map((name) => ({ name, type: "" }));
   const schema = info?.schema;
   const changes = schema

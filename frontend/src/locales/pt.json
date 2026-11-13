@@ -950,6 +950,7 @@
   "assistantReadHistory": "Lê o histórico Git",
   "assistantPreview": "Lê os valores de saída",
   "assistantLineage": "Explica um valor",
+  "assistantColumnLineage": "Explica a origem de uma coluna",
   "assistantEditFlow": "Edita o fluxo",
   "assistantWriteSql": "Edita SQL",
   "assistantWriteDocs": "Escreve documentação",
@@ -1694,6 +1695,10 @@
   "lineageColumnIncomplete": "Incompleto: algumas dependências de colunas não podem ser determinadas.",
   "lineageColumnRun": "Execute {nodes} para descobrir as colunas de saída.",
   "lineageRowsDependOn": "As linhas dependem de",
-  "lineageColumnSummary": "{column} vem de {sources}: {calculations} cálculos e {carried} nós que a transportam.",
+  "lineageColumnSummary": "{column} vem de {sources}: {details}.",
+  "lineageCalculationOne": "1 cálculo",
+  "lineageCalculations": "{count} cálculos",
+  "lineageCarrierOne": "1 nó que a transporta",
+  "lineageCarriers": "{count} nós que a transportam",
   "lineageColumnPickValue": "Clique num valor de {column} em Data para seguir este caminho com os seus valores."
 }

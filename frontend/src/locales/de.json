@@ -950,6 +950,7 @@
   "assistantReadHistory": "Liest Git-Verlauf",
   "assistantPreview": "Liest Ausgabewerte",
   "assistantLineage": "Erklärt einen Wert",
+  "assistantColumnLineage": "Erklärt die Herkunft einer Spalte",
   "assistantEditFlow": "Bearbeitet den Flow",
   "assistantWriteSql": "Schreibt SQL",
   "assistantWriteDocs": "Schreibt Dokumentation",
@@ -1694,6 +1695,10 @@
   "lineageColumnIncomplete": "Unvollständig: Einige Spaltenabhängigkeiten können nicht bestimmt werden.",
   "lineageColumnRun": "Führen Sie {nodes} aus, um die Ausgabespalten zu ermitteln.",
   "lineageRowsDependOn": "Zeilen hängen ab von",
-  "lineageColumnSummary": "{column} stammt aus {sources}: {calculations} Berechnungen und {carried} Knoten, die sie übernehmen.",
+  "lineageColumnSummary": "{column} stammt aus {sources}: {details}.",
+  "lineageCalculationOne": "1 Berechnung",
+  "lineageCalculations": "{count} Berechnungen",
+  "lineageCarrierOne": "1 Knoten, der sie übernimmt",
+  "lineageCarriers": "{count} Knoten, die sie übernehmen",
   "lineageColumnPickValue": "Klicken Sie auf einen Wert von {column} in Data, um diesen Pfad mit Werten zu verfolgen."
 }

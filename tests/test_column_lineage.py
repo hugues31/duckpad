@@ -52,6 +52,10 @@ def test_selection_columns_are_separate():
     assert ordered["refs"] == [("a", "amount")]
     assert ordered["selection"][0]["refs"] == [("a", "id")]
     assert {r for s in window["selection"] for r in s["refs"]} == {("a", "region"), ("a", "id")}
+    # ORDER BY an output alias or ordinal is left unqualified by SQLGlot: it names the projection.
+    for order in ("net", "1"):
+        top = analyze(f"SELECT amount * 2 AS net FROM a ORDER BY {order} DESC LIMIT 3", SCHEMA)[0]
+        assert top["selection"][0]["refs"] == [("a", "amount")]
 
 
 def test_unknown_semantics_are_incomplete():
@@ -61,6 +65,9 @@ def test_unknown_semantics_are_incomplete():
         analyze("SELECT amount + (SELECT rate FROM b WHERE b.id = a.id) AS net FROM a", SCHEMA)
     with pytest.raises(Incomplete):
         analyze("WITH RECURSIVE t(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM t WHERE x<5) SELECT x FROM t", {})
+    for projection in ("COLUMNS('amount')", "COLUMNS(c -> c LIKE 'a%')", "UNNEST([amount, 1])"):
+        with pytest.raises(Incomplete):
+            analyze(f"SELECT {projection} FROM a", SCHEMA)
 
 
 def test_northstar_origins_cache_and_limits(services, monkeypatch):

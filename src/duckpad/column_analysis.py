@@ -39,7 +39,7 @@ def analyze(query, schema, labels=None, bindings=None):
         return sql(expression.transform(readable))
 
     if any(
-        isinstance(item, (exp.Pivot, exp.Unnest))
+        isinstance(item, (exp.Pivot, exp.Unnest, exp.Explode, exp.Columns))
         or (isinstance(item, exp.CTE) and item.args.get("recursive"))
         or (isinstance(item, exp.With) and item.args.get("recursive"))
         or (isinstance(item, exp.Anonymous) and item.name.upper() == "COLUMNS")
@@ -112,6 +112,21 @@ def analyze(query, schema, labels=None, bindings=None):
             if not isinstance(item, exp.Column):
                 return item
             source = scope.sources.get(item.table)
+            if not item.table and isinstance(scope.expression, exp.Select):
+                # Qualification leaves ORDER BY output aliases (and ordinals) unqualified.
+                alias = next(
+                    (
+                        s
+                        for s in scope.expression.selects
+                        if s.alias_or_name.casefold() == item.name.casefold()
+                    ),
+                    None,
+                )
+                if isinstance(alias, exp.Alias):
+                    found, value, _ = projection(scope, alias.alias)
+                    if collect:
+                        refs.extend(found)
+                    return value.copy() if isinstance(value, exp.Column) else exp.Paren(this=value.copy())
             if isinstance(source, Scope):
                 found, value, _ = projection(source, item.name)
                 if collect:

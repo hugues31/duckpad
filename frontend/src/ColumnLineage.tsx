@@ -1,7 +1,7 @@
 import { GitBranch, Loader2 } from "lucide-react";
 import { useEffect, useMemo } from "react";
 import { withQuery } from "./api";
-import { useT } from "./i18n";
+import { countLabel, useT } from "./i18n";
 import type { LineageTarget, TableLineage } from "./lineageGraph";
 import {
   ComponentHeading,
@@ -371,6 +371,16 @@ export function ColumnLineage({
         .map((s) => `${name(s.node)} · ${s.column}`),
     ),
   ];
+  const count = (kind: Kind) =>
+    new Set(steps.filter((s) => s.kind === kind).map((s) => s.node)).size;
+  const summary = (
+    [
+      [count("computed"), "lineageCalculationOne", "lineageCalculations"],
+      [count("carried"), "lineageCarrierOne", "lineageCarriers"],
+    ] as const
+  )
+    .filter(([value]) => value > 0)
+    .map(([value, one, many]) => countLabel(t, value, one, many));
   return (
     <>
       {error && (
@@ -389,31 +399,12 @@ export function ColumnLineage({
           {data.complete === false && (
             <p className="notice warning">{t("lineageColumnIncomplete")}</p>
           )}
-          {!!origins.length && (
+          {!!origins.length && !!summary.length && (
             <p className="lineage-column-summary">
               {t("lineageColumnSummary")
                 .replace("{column}", target.column || "")
                 .replace("{sources}", origins.join(", "))
-                .replace(
-                  "{calculations}",
-                  String(
-                    new Set(
-                      steps
-                        .filter((s) => s.kind === "computed")
-                        .map((s) => s.node),
-                    ).size,
-                  ),
-                )
-                .replace(
-                  "{carried}",
-                  String(
-                    new Set(
-                      steps
-                        .filter((s) => s.kind === "carried")
-                        .map((s) => s.node),
-                    ).size,
-                  ),
-                )}
+                .replace("{details}", summary.join(", "))}
             </p>
           )}
           {data.root ? (

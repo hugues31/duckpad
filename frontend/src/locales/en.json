@@ -950,6 +950,7 @@
   "assistantReadHistory": "Reads Git history",
   "assistantPreview": "Reads output values",
   "assistantLineage": "Explains a value",
+  "assistantColumnLineage": "Explains a column's origin",
   "assistantEditFlow": "Edits the flow",
   "assistantWriteSql": "Writes SQL",
   "assistantWriteDocs": "Writes documentation",
@@ -1694,6 +1695,10 @@
   "lineageColumnIncomplete": "Incomplete: some column dependencies cannot be determined.",
   "lineageColumnRun": "Run {nodes} to discover the output columns.",
   "lineageRowsDependOn": "Rows depend on",
-  "lineageColumnSummary": "{column} comes from {sources}: {calculations} calculations and {carried} nodes that carry it.",
+  "lineageColumnSummary": "{column} comes from {sources}: {details}.",
+  "lineageCalculationOne": "1 calculation",
+  "lineageCalculations": "{count} calculations",
+  "lineageCarrierOne": "1 node that carries it",
+  "lineageCarriers": "{count} nodes that carry it",
   "lineageColumnPickValue": "Click a value of {column} in Data to follow this path with its values."
 }

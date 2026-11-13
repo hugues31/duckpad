@@ -669,6 +669,13 @@ def explain_column(
 
     Returns a bounded page of steps, expressions, source columns, row-selection conditions
     and explicit limitations. Follow next_offset for remaining steps. Works with data access off.
+
+    Args:
+        node: Node ID, with `instance::inner` paths for nodes inside components.
+        column: Exact output column name.
+        port: Output port of the node, as listed by read_flow or read_schemas.
+        offset: Step page offset, starting at zero.
+        worktree: Another branch's worktree; leave empty for the open branch.
     """
     branch = reading(ctx, worktree)
     branch.require_results()
