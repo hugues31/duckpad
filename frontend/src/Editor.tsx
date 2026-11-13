@@ -8,6 +8,7 @@ import {
   type CodeEditorInstance,
 } from "./codeEditing";
 import {
+  checkPythonNode,
   checkTemplate,
   clearTemplateChecks,
   EDITOR_THEMES,
@@ -184,6 +185,8 @@ export default function CodeEditor({
   useEffect(() => {
     if (!model) return;
     if (template) checkTemplate(model, t);
+    else if (context?.template && language === "python")
+      checkPythonNode(model, t);
     else clearTemplateChecks(model);
     // Server problems explain what the editor checks cannot see.
     const saved = hasEditorErrors(model) ? [] : problems || [];
@@ -203,7 +206,7 @@ export default function CodeEditor({
         };
       }),
     );
-  }, [model, template, problems, value, t]);
+  }, [model, template, context?.template, language, problems, value, t]);
   const mark = () => {
     const model = editor.current?.getModel();
     if (!model) return;

@@ -272,6 +272,69 @@ describe("enclosingCall", () => {
   });
 });
 
+describe("icon and color directives", () => {
+  it("warn about a name Duckpad cannot show, which the server keeps", () => {
+    expect(
+      lintTemplate(
+        "-- @icon fitler\n--   @color  Grey  \n-- @output a\nSELECT 1;",
+      ),
+    ).toEqual([
+      {
+        code: "unknownIcon",
+        subject: "fitler",
+        severity: "warning",
+        line: 1,
+        column: 10,
+        endColumn: 16,
+      },
+      {
+        code: "unknownColor",
+        subject: "Grey",
+        severity: "warning",
+        line: 2,
+        column: 14,
+        endColumn: 18,
+      },
+    ]);
+  });
+
+  it("check the directive in effect, the last of its kind", () => {
+    expect(
+      codes("-- @icon fitler\n-- @icon filter\n-- @output a\nSELECT 1;"),
+    ).toEqual([]);
+    expect(
+      codes("-- @color green\n-- @color grey\n-- @output a\nSELECT 1;"),
+    ).toEqual([["unknownColor", "grey", 2, 11]]);
+  });
+
+  it("accept every known name in any case, and no name yet", () => {
+    expect(
+      codes(
+        "-- @icon Left-Join\n-- @color GREEN\n-- @icon\n-- @color \n-- @output a\nSELECT 1;",
+      ),
+    ).toEqual([]);
+  });
+
+  it("complete their names, hyphens included", () => {
+    expect(sqlCursor("-- @ic")).toEqual({ kind: "directive", prefix: "ic" });
+    expect(sqlCursor("-- @icon ")).toEqual({
+      kind: "appearance",
+      key: "icon",
+      prefix: "",
+    });
+    expect(sqlCursor("--@icon left-jo")).toEqual({
+      kind: "appearance",
+      key: "icon",
+      prefix: "left-jo",
+    });
+    expect(sqlCursor("  -- @color pu")).toEqual({
+      kind: "appearance",
+      key: "color",
+      prefix: "pu",
+    });
+  });
+});
+
 describe("lint cases shared with the server", () => {
   it.each(cases)("$name", ({ sql, errors }) => {
     expect(

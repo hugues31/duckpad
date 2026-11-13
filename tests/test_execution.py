@@ -96,7 +96,16 @@ def test_layout_change_preserves_valid_results(services, tmp_path):
 
 
 @pytest.mark.parametrize(
-    "directive", ["-- @label Revenue", "--@label Revenue", "  --  @label Revenue", "--@description Revenue"]
+    "directive",
+    [
+        "-- @label Revenue",
+        "--@label Revenue",
+        "  --  @label Revenue",
+        "--@description Revenue",
+        "-- @icon aggregate",
+        "--@color green",
+        "-- @icon unknown-name\n-- @color #123456",
+    ],
 )
 def test_descriptive_directives_never_change_fingerprints(services, tmp_path, directive):
     engine = services[3]

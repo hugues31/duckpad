@@ -34,6 +34,16 @@
   --glass-shadow: 0 2px 12px #18181b0d;
   --shadow: 0 4px 16px #18181b14;
   --minimap-mask: #f2f2f4b3;
+  /* The colors a node can declare with @color, readable on both themes' surfaces. */
+  --node-red: light-dark(#c4372f, #ff9086);
+  --node-orange: light-dark(#b4560a, #ffa45e);
+  --node-yellow: light-dark(#876600, #edc64f);
+  --node-green: light-dark(#1e7a4c, #6fd39c);
+  --node-teal: light-dark(#0b777d, #58cdd3);
+  --node-blue: var(--accent);
+  --node-purple: light-dark(#7748cf, #c0a4ff);
+  --node-pink: light-dark(#bf2d79, #ff8dc5);
+  --node-gray: light-dark(#5c6170, #b9bdc8);
   color-scheme: light;
   font-size: 13px;
 }
@@ -60,6 +70,34 @@
   --shadow: 0 4px 16px #00000030;
   --minimap-mask: #1c1c1eb3;
   color-scheme: dark;
+}
+/* A node takes the tones of the color its code declares with @color. */
+.node-color-red {
+  --node-color: var(--node-red);
+}
+.node-color-orange {
+  --node-color: var(--node-orange);
+}
+.node-color-yellow {
+  --node-color: var(--node-yellow);
+}
+.node-color-green {
+  --node-color: var(--node-green);
+}
+.node-color-teal {
+  --node-color: var(--node-teal);
+}
+.node-color-blue {
+  --node-color: var(--node-blue);
+}
+.node-color-purple {
+  --node-color: var(--node-purple);
+}
+.node-color-pink {
+  --node-color: var(--node-pink);
+}
+.node-color-gray {
+  --node-color: var(--node-gray);
 }
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
   :root,

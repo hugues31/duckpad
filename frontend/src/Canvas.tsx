@@ -46,6 +46,7 @@ import {
 import { downstream, DRAG_TYPE, type NodeConnection } from "./graph";
 import { findNodePosition, layoutNodes } from "./graphLayout";
 import { useT } from "./i18n";
+import { colorValue } from "./nodeAppearance";
 import { SearchField } from "./Search";
 import { blockingDialogShown, typingTarget } from "./searchShortcuts";
 import type { FlowEdge, FlowNode } from "./types";
@@ -733,11 +734,12 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
             pannable
             zoomable
             nodeColor={(n) =>
-              n.data.kind === "source" || n.data.kind === "export"
+              colorValue(n.data.color as string | undefined) ??
+              (n.data.kind === "source" || n.data.kind === "export"
                 ? "#4a8aff"
                 : n.data.kind === "component"
                   ? "#9d91df"
-                  : "#a4a4ac"
+                  : "#a4a4ac")
             }
             maskColor="var(--minimap-mask)"
           />

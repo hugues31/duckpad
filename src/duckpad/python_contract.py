@@ -3,6 +3,7 @@
 import ast
 import copy
 import math
+import re
 from functools import lru_cache
 from typing import NoReturn
 
@@ -55,13 +56,20 @@ def constant(node):
     return value
 
 
-def is_label(line):
-    return line.strip().startswith("# @label ")
+# What a node looks like on the canvas and in the palette: an icon and a color name.
+APPEARANCE = ("icon", "color")
+DESCRIPTIVE_COMMENT = re.compile(r"# @(label|icon|color) (.*)")
+
+
+def descriptive(line):
+    """`# @icon filter` -> ("icon", "filter"); None for any other line."""
+    match = DESCRIPTIVE_COMMENT.fullmatch(line.strip())
+    return (match[1], match[2].strip()) if match else None
 
 
 def executable_python(source):
-    """Node code without its label comment, so relabeling never invalidates results."""
-    return "\n".join(line for line in (source or "").splitlines() if not is_label(line))
+    """Node code without its label, icon and color comments, so restyling never invalidates results."""
+    return "\n".join(line for line in (source or "").splitlines() if not descriptive(line))
 
 
 def parse_python(source):
@@ -209,11 +217,15 @@ def parsed_contract(source):
         parameters.append({"name": name, "type": kind, "python_type": annotation, **metadata})
     if len({p["name"] for p in parameters}) != len(parameters):
         fail(cls, "Parameter names must be unique")
+    described: dict[str, str] = {}
+    for line in source.splitlines():
+        found = descriptive(line)
+        # The first comment of each kind counts, as it always did for the label.
+        if found and found[0] not in described:
+            described[found[0]] = found[1]
     return {
-        "label": next(
-            (line.split("@label", 1)[1].strip() for line in source.splitlines() if is_label(line)),
-            cls.name,
-        ),
+        "label": described.get("label", cls.name),
+        **{key: described[key].lower() for key in APPEARANCE if key in described},
         "description": ast.get_docstring(cls) or "",
         "class": cls.name,
         "language": "python",

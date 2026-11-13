@@ -11,6 +11,7 @@ import { createPortal } from "react-dom";
 import { NodeIcon } from "./CanvasNode";
 import { nodeChoices, type NodeKind } from "./graph";
 import { templateLabel, useT } from "./i18n";
+import { colorClass } from "./nodeAppearance";
 import type { ComponentDefinition, ParsedTemplate } from "./types";
 
 export default function ConnectionPalette({
@@ -51,6 +52,9 @@ export default function ConnectionPalette({
               ? choice.definition.name || choice.id
               : templateLabel(choice.id, choice.definition.label, t),
           description: choice.definition.description || "",
+          ...(choice.kind === "template"
+            ? { icon: choice.definition.icon, color: choice.definition.color }
+            : {}),
         })),
       )
       .filter((item) =>
@@ -180,6 +184,8 @@ export default function ConnectionPalette({
           >
             <NodeIcon
               kind={item.kind === "component" ? "component" : item.id}
+              icon={item.icon}
+              className={colorClass(item.color)}
               size={19}
               aria-hidden="true"
             />
