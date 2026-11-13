@@ -115,57 +115,96 @@ export function TableSteps({
     return () => onMap(null);
   }, [tables, onMap]);
   const seen = new Set<string>();
-  const tree = (id: string, previous: string[] = []): React.ReactNode => {
-    if (seen.has(id))
-      return (
-        <a key={id} className="lineage-reference" href={`#${anchor(id)}`}>
-          {name(id)} ↗
-        </a>
-      );
-    seen.add(id);
-    const components = componentPaths(id);
-    const item = tables.nodes[id];
-    const children = tables.edges
+  const next = (id: string) =>
+    tables.edges
       .filter((e) =>
         direction === "origin" ? e.target === id : e.source === id,
       )
       .map((e) => (direction === "origin" ? e.source : e.target));
+  /** The nodes a branch would add, and the ones it ends on. */
+  const reach = (id: string, found = new Set<string>()) => {
+    if (seen.has(id) || found.has(id)) return found;
+    found.add(id);
+    for (const child of next(id)) reach(child, found);
+    return found;
+  };
+  const reference = (id: string) => (
+    <a key={id} className="lineage-reference" href={`#${anchor(id)}`}>
+      {name(id)} ↗
+    </a>
+  );
+  // The first input continues the path; each other one opens a branch beside it. A node
+  // reached twice is shown on the path and referenced from the branch.
+  const tree = (id: string, previous: string[] = []): React.ReactNode => {
+    if (seen.has(id)) return reference(id);
+    seen.add(id);
+    const components = componentPaths(id);
+    const item = tables.nodes[id];
+    const [trunk, ...branches] = next(id);
+    const rest = trunk === undefined ? null : tree(trunk, components);
     return (
-      <div
-        key={id}
-        className="lineage-table-step"
-        id={anchor(id)}
-        onMouseEnter={() => onHover(id)}
-        onMouseLeave={() => onHover(null)}
-      >
-        {components
-          .filter((c) => !previous.includes(c))
-          .map((component) => (
-            <ComponentHeading
-              key={component}
-              node={component}
-              onOpen={onOpen}
-            />
-          ))}
-        <button
-          className="text-button"
-          onFocus={() => onHover(id)}
-          onBlur={() => onHover(null)}
-          onClick={() => onOpen(id)}
+      <Fragment key={id}>
+        <div
+          className="lineage-table-step"
+          id={anchor(id)}
+          onMouseEnter={() => onHover(id)}
+          onMouseLeave={() => onHover(null)}
         >
-          {name(id)}
-        </button>
-        {item?.error && <p className="notice warning">{item.error}</p>}
-        {!!item?.variables.length && (
-          <p className="muted small">
-            {t("variables")}:{" "}
-            {item.variables
-              .map((v) => `${v.name}${v.node ? ` ← ${name(v.node)}` : ""}`)
-              .join(", ")}
-          </p>
-        )}
-        {children.map((child) => tree(child, components))}
-      </div>
+          {components
+            .filter((c) => !previous.includes(c))
+            .map((component) => (
+              <ComponentHeading
+                key={component}
+                node={component}
+                onOpen={onOpen}
+              />
+            ))}
+          <button
+            className="text-button"
+            onFocus={() => onHover(id)}
+            onBlur={() => onHover(null)}
+            onClick={() => onOpen(id)}
+          >
+            {name(id)}
+          </button>
+          {item?.error && <p className="notice warning">{item.error}</p>}
+          {!!item?.variables.length && (
+            <p className="muted small">
+              {t("variables")}:{" "}
+              {item.variables
+                .map((v) => `${v.name}${v.node ? ` ← ${name(v.node)}` : ""}`)
+                .join(", ")}
+            </p>
+          )}
+          {branches.map((child) => {
+            if (seen.has(child)) return reference(child);
+            const added = [...reach(child)];
+            const ends = added.filter((node) => !next(node).length);
+            if (added.length === 1)
+              return (
+                <div key={child} className="lineage-branch">
+                  {tree(child, components)}
+                </div>
+              );
+            // A short branch is open; a longer one still names where it ends.
+            return (
+              <details
+                key={child}
+                className="lineage-branch"
+                open={added.length <= 3}
+              >
+                <summary>
+                  {name(child)}
+                  {added.length > 3 &&
+                    ` · ${direction === "origin" ? "←" : "→"} ${ends.map(name).join(", ")}`}
+                </summary>
+                {tree(child, components)}
+              </details>
+            );
+          })}
+        </div>
+        {rest}
+      </Fragment>
     );
   };
   const endpoints = Object.values(tables.nodes).filter((n) =>

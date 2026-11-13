@@ -638,7 +638,10 @@ export default function FlowPage() {
               changeLineage({
                 node: value.node || fullNode,
                 port: value.port,
-                direction: "origin",
+                // Following rows one after another stays on their downstream fate.
+                direction: lineageTarget?.cell
+                  ? lineageTarget.direction
+                  : "origin",
                 cell: value,
               })
             }

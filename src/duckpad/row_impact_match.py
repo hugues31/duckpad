@@ -113,6 +113,9 @@ class Matcher:
         if self.tree.args.get("distinct") and not self.tree.find(exp.Window):
             if self.tree.args.get("limit") or self.tree.args.get("offset"):
                 raise Coverage("DISTINCT with LIMIT or OFFSET has no exact forward row mapping.")
+            # DISTINCT ON keeps one row for each key: equal values do not tell which one.
+            if self.tree.args["distinct"].args.get("on"):
+                raise Coverage("DISTINCT ON has no exact forward row mapping.")
             # DISTINCT identifies a value tuple, including NULL, rather than an occurrence.
             values = b.project(self.base.where(self.member), self.tree.expressions)
             if len(values.expressions) != len(self.data.columns):
@@ -206,8 +209,11 @@ class Matcher:
                 f"SELECT {qi(witness['column'])} FROM {qi(self.data.relation)} WHERE rowid=?", [row]
             ).fetchone()[0]
             values[alias] = identity
+        # DISTINCT captures no witness: the conditions are evaluated on the followed row itself.
         selected = b.without(self.base, "where").where(
             b.every(b.same(b.rowid(alias), b.value(identity)) for alias, identity in values.items())
+            if values
+            else self.member
         )
         return {
             "conditions": [

@@ -276,3 +276,165 @@ def test_rejected_rename_writes_nothing(services, name):
     with pytest.raises(Problem):
         inspect(engine, worktree, "dev", "net", "result", "net_amount", new_name=name)
     assert projects.snapshot(worktree)["revision"] == before["revision"]
+
+
+def chain(projects, nodes, edges):
+    """Literal nodes keyed by name; an edge is (source, target, input)."""
+    return projects.create(
+        "Rename",
+        {
+            "flow": {
+                "nodes": [{"id": name} for name in nodes],
+                "edges": [
+                    {
+                        "id": f"{source}-{target}-{handle}",
+                        "source": source,
+                        "sourceHandle": "result",
+                        "target": target,
+                        "targetHandle": handle,
+                    }
+                    for source, target, handle in edges
+                ],
+            },
+            "templates": {},
+            "components": {},
+            "node_sql": {f"nodes/{name}.sql": text for name, text in nodes.items()},
+        },
+    )["id"]
+
+
+ORDERS = (
+    "-- @output result\nSELECT * FROM (VALUES (1, 10, 'N'), (2, 3, 'S'), (3, 8, 'S')) t(id, amount, region);"
+)
+FEES = "-- @output result\nSELECT * FROM (VALUES (1, 2), (2, 5), (3, 7)) t(id, rate);"
+ONE_INPUT = "-- @input source\n-- @output result\n"
+
+
+@pytest.mark.parametrize(
+    ("query", "expected"),
+    [
+        (
+            "SELECT amount * 2 AS total, total + 1 AS more FROM {{ source }};",
+            "SELECT amount * 2 AS gross, gross + 1 AS more FROM {{ source }};",
+        ),
+        (
+            "SELECT amount * 2 AS total FROM {{ source }} WHERE total > 5;",
+            "SELECT amount * 2 AS gross FROM {{ source }} WHERE gross > 5;",
+        ),
+        (
+            "SELECT region, sum(amount) AS total FROM {{ source }} GROUP BY region HAVING total > 5 ORDER BY total;",
+            "SELECT region, sum(amount) AS gross FROM {{ source }} GROUP BY region HAVING gross > 5 ORDER BY gross;",
+        ),
+        (
+            "WITH c AS (SELECT id, amount * 2 AS total FROM {{ source }}) SELECT id, total FROM c;",
+            'WITH c AS (SELECT id, amount * 2 AS total FROM {{ source }}) SELECT id, total AS "gross" FROM c;',
+        ),
+        (
+            "SELECT id, total FROM (SELECT id, amount * 2 AS total FROM {{ source }}) q;",
+            'SELECT id, total AS "gross" FROM (SELECT id, amount * 2 AS total FROM {{ source }}) q;',
+        ),
+    ],
+)
+def test_renaming_an_output_follows_every_way_its_node_names_it(services, query, expected):
+    store, projects, _, engine = services
+    worktree = chain(
+        projects,
+        {
+            "orders": ORDERS,
+            "n": ONE_INPUT + query,
+            "d": ONE_INPUT + "SELECT total + 1 AS next FROM {{ source }};",
+        },
+        [("orders", "n", "source"), ("n", "d", "source")],
+    )
+    plan, _ = inspect(engine, worktree, "dev", "n", "result", "total", new_name="gross")
+    assert not plan["manual"], plan["manual"]
+    rename(engine, worktree, "dev", "n", "result", "total", "gross", plan["revision"], plan["token"])
+    files = projects.snapshot(worktree)["files"]
+    assert files["nodes/n.sql"] == ONE_INPUT + expected
+    assert files["nodes/d.sql"] == ONE_INPUT + "SELECT gross + 1 AS next FROM {{ source }};"
+    assert join_run(store, engine.launch(worktree, "dev")["id"])["status"] == "success"
+
+
+@pytest.mark.parametrize(
+    ("nodes", "edges", "target"),
+    [
+        # The filter would silently read the fee rate instead of the renamed amount.
+        (
+            {
+                "orders": ORDERS,
+                "fees": FEES,
+                "j": "-- @input orders\n-- @input fees\n-- @output result\n"
+                "SELECT o.id, region FROM {{ orders }} o JOIN {{ fees }} f ON o.id = f.id WHERE amount > 5;",
+            },
+            [("orders", "j", "orders"), ("fees", "j", "fees")],
+            ("orders", "amount"),
+        ),
+        # A set operation takes its names from its first branch: only consumers would change.
+        (
+            {
+                "orders": ORDERS,
+                "fees": FEES,
+                "u": "-- @input a\n-- @input b\n-- @output result\n"
+                "SELECT amount AS rate FROM {{ a }} UNION ALL SELECT rate FROM {{ b }};",
+                "d": ONE_INPUT + "SELECT rate + 1 AS next FROM {{ source }};",
+            },
+            [("orders", "u", "a"), ("fees", "u", "b"), ("u", "d", "source")],
+            ("u", "rate"),
+        ),
+    ],
+)
+def test_a_rename_that_would_change_what_a_node_reads_is_refused(services, nodes, edges, target):
+    store, projects, _, engine = services
+    worktree = chain(projects, nodes, edges)
+    assert join_run(store, engine.launch(worktree, "dev")["id"])["status"] == "success"
+    before = projects.snapshot(worktree)
+    new_name = "rate" if target[1] == "amount" else "percent"
+    with pytest.raises(Problem, match="cannot be applied automatically") as refusal:
+        inspect(engine, worktree, "dev", target[0], "result", target[1], new_name=new_name)
+    assert refusal.value.status == 409
+    assert projects.snapshot(worktree)["revision"] == before["revision"]
+
+
+def test_mixed_case_columns_follow_carry_and_collide_like_any_other(services):
+    store, projects, _, engine = services
+    worktree = chain(
+        projects,
+        {
+            "orders": "-- @output result\nSELECT 1 AS id, 10 AS \"Amount\", 'N' AS Region;",
+            "star": ONE_INPUT + "SELECT * FROM {{ source }};",
+            "calc": ONE_INPUT + "SELECT id, Amount * 2 AS Net FROM {{ source }};",
+            "total": ONE_INPUT + 'SELECT *, "Amount" * 2 AS total FROM {{ source }};',
+        },
+        [("orders", "star", "source"), ("orders", "calc", "source"), ("orders", "total", "source")],
+    )
+    for _ in range(2):
+        # The written case of a name is kept before and after a run.
+        impact, _ = inspect(engine, worktree, "dev", "orders", "result", "Amount")
+        assert not impact["manual"], impact["manual"]
+        assert ("star", "Amount") in {(e["node"], e["column"]) for e in impact["follows"]}
+        assert ("calc", "Net") in {(e["node"], e["column"]) for e in impact["derived"]}
+        assert not impact["unaffected"]
+        with pytest.raises(Problem, match="already exists"):
+            inspect(engine, worktree, "dev", "orders", "result", "Amount", new_name="total")
+        assert join_run(store, engine.launch(worktree, "dev")["id"])["status"] == "success"
+    plan, _ = inspect(engine, worktree, "dev", "orders", "result", "Amount", new_name="Gross")
+    rename(engine, worktree, "dev", "orders", "result", "Amount", "Gross", plan["revision"], plan["token"])
+    assert join_run(store, engine.launch(worktree, "dev")["id"])["status"] == "success"
+    assert 'SELECT *, "Gross" * 2 AS total' in projects.snapshot(worktree)["files"]["nodes/total.sql"]
+
+
+def test_impact_follows_a_rename_before_the_next_run(services):
+    store, projects, catalog, engine = services
+    worktree = create_example(projects, catalog)["id"]
+    assert join_run(store, engine.launch(worktree, "dev")["id"])["status"] == "success"
+    plan, _ = inspect(engine, worktree, "dev", "net", "result", "net_amount", new_name="net_value")
+    rename(
+        engine, worktree, "dev", "net", "result", "net_amount", "net_value", plan["revision"], plan["token"]
+    )
+    # The retained results still hold the old name: the saved code is the reference.
+    impact, _ = inspect(engine, worktree, "dev", "net", "result", "net_value")
+    assert not impact["manual"], impact["manual"]
+    assert {e["column"] for e in impact["derived"]} >= {"net_revenue", "net_share"}
+    origin = engine.column_lineage.describe(worktree, "dev", "report", "report", "net_share")
+    assert origin["complete"], origin
+    assert "net/result/net_value" in {step["id"] for step in origin["steps"]}

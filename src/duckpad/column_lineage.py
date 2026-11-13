@@ -34,6 +34,20 @@ def retained_schemas(engine, worktree, environment):
         }
 
 
+def stale_outputs(engine, worktree, environment):
+    """Retained outputs computed from other definitions than the saved ones."""
+    context = engine.pool.find(worktree, environment)
+    if context is None:
+        return frozenset()
+    with context.lock:
+        return frozenset(
+            (key, port)
+            for key, outputs in context.outputs.items()
+            for port, output in outputs.items()
+            if output.status != "valid"
+        )
+
+
 def static_nodes(bundle, environment, computed):
     """A partition filter does not change a schema; unresolved partition expressions do."""
     nodes, edges, boundaries = expand_for(bundle, environment, computed=computed)
@@ -57,17 +71,25 @@ class ColumnLineage:
             raise Problem("Project files are invalid", 422)
         engine.catalog.environment(environment)
         schemas = retained_schemas(engine, worktree, environment)
+        stale = stale_outputs(engine, worktree, environment)
         computed = engine.pool.computed(worktree, environment, bundle)
-        key = (worktree, environment, digest([bundle, sorted(schemas.items()), computed]))
+        key = (worktree, environment, digest([bundle, sorted(schemas.items()), sorted(stale), computed]))
         with self.lock:
             analysis = self.cache.get(key)
             if analysis is None:
-                analysis = self._build(worktree, environment, snapshot, schemas, computed)
+                analysis = self._build(worktree, environment, snapshot, schemas, computed, stale)
                 self.cache[key] = analysis
                 while len(self.cache) > 8:
                     self.cache.popitem(last=False)
             self.cache.move_to_end(key)
         return analysis
+
+    def simulate(self, worktree, environment, snapshot, schemas, pinned=()):
+        """Analyze definitions that are not saved yet. Every output that can be described
+        from its code is; the others, and the `pinned` ones, keep the columns of `schemas`."""
+        computed = self.engine.pool.computed(worktree, environment, snapshot["bundle"])
+        stale = frozenset(schemas) - frozenset(pinned)
+        return self._build(worktree, environment, snapshot, schemas, computed, stale)
 
     def describe(self, worktree, environment, node, port=None, column=None, *, snapshot=None):
         outputs, steps, boundaries = self.analysis(worktree, environment, snapshot=snapshot)
@@ -117,7 +139,7 @@ class ColumnLineage:
             }
         )
 
-    def _build(self, worktree, environment, snapshot, schemas, computed):
+    def _build(self, worktree, environment, snapshot, schemas, computed, stale=frozenset()):
         engine = self.engine
         bundle = snapshot["bundle"]
         nodes, edges, boundaries = static_nodes(bundle, environment, computed)
@@ -207,23 +229,29 @@ class ColumnLineage:
                             status = "complete"
                         except (Incomplete, sqlglot.errors.SqlglotError, KeyError, IndexError):
                             status = "incomplete"
-                        if known is None:
+                        # Columns retained from other definitions describe an older query: the
+                        # saved code is the reference whenever DuckDB can describe it.
+                        if known is None or (key, port) in stale:
                             try:
                                 described = db.execute(
                                     "DESCRIBE " + statement["sql"], statement["bindings"]
                                 ).fetchall()
-                                known = [{"name": c[0], "type": c[1]} for c in described]
+                                # Duplicate names are renamed when stored: only a run knows them.
+                                if len({c[0].casefold() for c in described}) == len(described):
+                                    known = [{"name": c[0], "type": c[1]} for c in described]
                             except duckdb.Error:
                                 # Explicit output names are still useful without a type. Stars
                                 # with unknown schemas must name the node to run instead.
                                 selected = [a["name"] for a in analyzed] if analyzed else query.named_selects
-                                if selected and "*" not in selected:
+                                if known is None and selected and "*" not in selected:
                                     known = [{"name": name, "type": ""} for name in selected]
                     if not known:
                         known = []
                         status = "python" if reason == "python" else "needs_run"
                         missing = missing or [key]
-                    elif analyzed is not None and [c["name"] for c in known] != [a["name"] for a in analyzed]:
+                    elif analyzed is not None and [c["name"].casefold() for c in known] != [
+                        a["name"].casefold() for a in analyzed
+                    ]:
                         # Retained columns may belong to an older definition. Never align by position.
                         analyzed = None
                         status = "incomplete"
@@ -241,7 +269,11 @@ class ColumnLineage:
 
                     for col in known:
                         id_ = identity(key, port, col["name"])
-                        analysis = next((a for a in analyzed or [] if a["name"] == col["name"]), None)
+                        # DuckDB keeps the written case of a name and compares names without it.
+                        analysis = next(
+                            (a for a in analyzed or [] if a["name"].casefold() == col["name"].casefold()),
+                            None,
+                        )
                         refs = [reference(ref) for ref in analysis["refs"]] if analysis else []
                         kind = (
                             "source"

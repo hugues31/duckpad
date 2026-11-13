@@ -226,6 +226,21 @@ test("table Origin and Impact work before a run and include computed variables",
   await expect(panel).toContainText("report_month");
   await expect(panel).toContainText("Reporting period");
   await expect(panel.locator(".lineage-sources")).toContainText("Orders");
+  // The path keeps one column however long it is; a second input opens a branch beside it.
+  const steps = await panel
+    .locator(".lineage-table-step > .text-button")
+    .evaluateAll((buttons) =>
+      buttons.map(
+        (button) =>
+          [button.textContent, button.getBoundingClientRect().left] as const,
+      ),
+    );
+  const left = (name: string) => steps.find(([text]) => text === name)?.[1];
+  expect(left("Orders")).toBe(left("Net amounts"));
+  expect(left("Net amounts")).toBe(left("Export revenue"));
+  await expect(
+    panel.locator(".lineage-branch").filter({ hasText: "Channel fees" }),
+  ).toBeVisible();
   await panel.getByRole("button", { name: "Close", exact: true }).click();
   await page.getByRole("button", { name: "Fit view", exact: true }).click();
   await page
