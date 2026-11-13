@@ -300,6 +300,33 @@ def test_policy_change_does_not_resend_previous_values(instance):
     assert turn(client, new, context)[-1]["turn"]["status"] == "complete"
     tools = app.state.assistant.configuration.model_override.last_model_request_parameters.function_tools
     assert {t.name for t in tools}.isdisjoint({"preview_output", "explain_value"})
+    assert "explain_column" in {t.name for t in tools}
+
+
+def test_column_origin_tool_without_data_access(instance):
+    from helpers import join_run
+
+    from duckpad.assistant.tools import explain_column
+
+    app, client = instance
+    configure(client, allow_data=False)
+    services = app.state.services
+    worktree = client.post("/api/example", json={}).json()
+    run = services.engine.launch(worktree["id"], "dev")
+    assert join_run(services.store, run["id"])["status"] == "success"
+    context = {
+        "page": "pipelines",
+        "tab": "flow",
+        "project": worktree["project"],
+        "worktree": worktree["id"],
+        "branch": "main",
+        "environment": "dev",
+    }
+    result = explain_column(dependencies(app, client, context), "report", "net_share", "report")
+    assert result["complete"]
+    assert {step["node"] for step in result["items"] if step["kind"] == "source"} == {"orders", "fees"}
+    assert "value" not in result["items"][0]
+    assert len(result["items"]) <= 20
 
 
 def test_a_deleted_project_ends_the_conversations_that_read_it(instance):

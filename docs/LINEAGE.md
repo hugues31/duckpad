@@ -1,10 +1,16 @@
 # Lineage coverage
 
-Lineage explains the materialized execution, not today's external resource. A result identifies its execution, dataset generation, column and stable storage row. Sorting, filtering or sampling the displayed rows does not change those identities or restrict the provenance search.
+Value lineage explains the materialized execution, not today's external resource. A result identifies its execution, dataset generation, column and stable storage row. Sorting, filtering or sampling the displayed rows does not change those identities or restrict the provenance search. Table and column lineage analyze saved definitions in the selected environment.
 
-The **Lineage** side panel replaces the inspector while it is open. The canvas and Data grid remain usable; clicking another cell updates the explanation. Its table › column › value breadcrumb returns to the table level. Column analysis and value Impact are reserved for a later release.
+The **Lineage** side panel replaces the inspector while it is open. The canvas and Data grid remain usable; clicking another cell updates the explanation. Its table › column › value breadcrumb returns to either higher level. Column and value Impact are reserved for a later release.
 
 **Table Origin** lists source files or tables and connections, followed by the upstream node tree. **Impact** lists downstream nodes and exports, including dependencies through computed variables. This analysis reads saved definitions and works before any run. Open it from a node's inspector actions or canvas context menu.
+
+**Column Origin** opens from the table's column list, a **Lineage** button in **Columns**, or the column breadcrumb above a value. It separates value inputs from conditions that select rows: filters, joins, grouping, windows, ordering, DISTINCT and set membership. Every calculation and transport node remains visible, including nested components and side branches. Source steps include the column type, resource and description. Canvas badges show column names, with **ƒ** for calculations.
+
+The analysis uses compiled saved SQL, with the selected environment's parameters and variables. It reuses retained schemas or describes code against empty typed relations in a database with external access disabled. It never reads source files or output rows, runs a node, or changes results. If a schema cannot be determined, the panel names the node to run. Analysis is cached by definitions, environment, computed variable metadata and schemas; configuration edits invalidate it.
+
+Static coverage includes qualified joins, aliases, SELECT stars with EXCLUDE/REPLACE, CTEs, derived tables, scalar subqueries and positional UNION, INTERSECT and EXCEPT. Correlated or recursive queries, named windows, pivots, expanding UNNEST projections and set operations BY NAME are explicitly incomplete. Python is opaque and lists its input tables. These static limits are separate from the value replay limits below. The assistant's `explain_column` tool returns bounded pages of the same analysis, including when data reading is disabled.
 
 **Value Origin** keeps every node on the path, including unchanged projections, filters and joins. Each calculation shows its formula, captured operands and result. A transport step also shows the condition selecting its row. Components and nested components have named headers; **Open on the canvas** opens their contents while retaining the trace. A trace started inside a component continues through its external inputs.
 

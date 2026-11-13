@@ -133,6 +133,12 @@ compares the columns with the previous successful run of the node in the same
 environment: added, removed and retyped columns, or "Same columns as the previous
 run".
 
+Each column also has a **Lineage** button. It opens the column's calculations,
+transport steps, source and row-selection conditions in the side panel, without
+reading values. Before the first run, columns are described from saved code when
+possible; sources whose schema is unknown need a run. The table-level Lineage
+panel lists each column's origin and opens the same view.
+
 **Compute statistics** scans the whole retained result once, never the displayed
 sample: null percentage, approximate distinct values, range and distribution of
 numbers and dates, and top values of text. The tab never starts this computation

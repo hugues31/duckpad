@@ -178,3 +178,17 @@ it("round trips a generation-bound URL without discarding unrelated parameters",
     "env=dev&node=report%3A%3Asummary%3A%3Ametrics",
   );
 });
+
+it("round trips column exploration without a dataset or row", () => {
+  const target = {
+    node: "report",
+    port: "report",
+    column: "net_share",
+    direction: "origin" as const,
+  };
+  const url = writeLineageTarget(new URLSearchParams("env=dev"), target);
+  expect(readLineageTarget(url)).toMatchObject(target);
+  expect(readLineageTarget(url)?.cell).toBeUndefined();
+  expect(url.has("dataset")).toBe(false);
+  expect(url.has("row")).toBe(false);
+});

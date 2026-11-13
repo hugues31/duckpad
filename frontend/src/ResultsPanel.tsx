@@ -85,6 +85,7 @@ export default function ResultsPanel({
   onClose,
   onRun,
   onExplain,
+  onColumnLineage,
   onSave,
   onSaveDocumentation,
   onAddFilter,
@@ -120,6 +121,7 @@ export default function ResultsPanel({
   /** Run the node with its ancestors, or only the ancestors its inputs come from. */
   onRun: (options?: { ancestors: true }) => void;
   onExplain: (cell: Cell) => void;
+  onColumnLineage?: (node: string, port: string, column: string) => void;
   onSave: SaveProject;
   onSaveDocumentation: (
     change: (documentation: Documentation) => void,
@@ -624,6 +626,10 @@ export default function ResultsPanel({
           environment={environment}
           target={target}
           dataset={dataset}
+          onLineage={
+            onColumnLineage &&
+            ((column) => onColumnLineage(target.node, target.port, column))
+          }
           canEdit={!readOnly && !target.input}
           onSaveDocumentation={onSaveDocumentation}
           onColumn={(column) => {
