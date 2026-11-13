@@ -38,6 +38,23 @@ describe("the icon library", () => {
       expect(nodeIcon(name)?.name).toBe(name);
   });
 
+  it("is listed in the guide, each icon with its name and its other words", () => {
+    const guide = readFileSync(
+      new URL("../../docs/ICONS.md", import.meta.url),
+      "utf8",
+    );
+    const listed = [...guide.matchAll(/^\| `([a-z0-9-]+)` \| (.*) \|$/gm)].map(
+      ([, name, words]) => [name, words.replaceAll(", ", " ")],
+    );
+    expect(listed).toEqual(
+      NODE_ICONS.map(({ name, keywords }) => [name, keywords]),
+    );
+    const colors = /^## Colors\n\n([^.]+)\./m.exec(guide)![1];
+    expect(colors.match(/`[a-z]+`/g)).toEqual(
+      NODE_COLORS.map((color) => "`" + color + "`"),
+    );
+  });
+
   it("reads names as the server keeps them, whatever their case", () => {
     expect(nodeIcon(" Left-Join ")?.name).toBe("left-join");
     expect(nodeIcon("fitler")).toBeUndefined();
