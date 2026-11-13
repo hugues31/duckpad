@@ -156,7 +156,7 @@ async function example(page: Page) {
   expect(response.ok()).toBeTruthy();
   const worktree = await response.json();
   await page.goto(`/worktrees/${worktree.id}/flow`);
-  await expect(page.locator(".react-flow__node")).toHaveCount(10);
+  await expect(page.locator(".react-flow__node")).toHaveCount(12);
   return worktree;
 }
 
@@ -209,7 +209,7 @@ test("capture project creation, results, lineage and SQL", async ({ page }) => {
     dialog.getByRole("button", { name: "Create", exact: true }),
   ).toBeEnabled();
   await dialog.getByRole("button", { name: "Create", exact: true }).click();
-  await expect(page.locator(".react-flow__node")).toHaveCount(10);
+  await expect(page.locator(".react-flow__node")).toHaveCount(12);
   await run(page);
   await node(page, "Regional revenue").click();
   await page.getByLabel("Output", { exact: true }).selectOption("report");
@@ -678,7 +678,7 @@ test("capture project variables, a parameter binding and a run confirmation", as
     .click();
   await editor.getByLabel("dev value", { exact: true }).selectOption("pending");
   await expect(editor.getByRole("status")).toContainText(
-    "Saving marks Paid orders and 5 descendants as stale in dev.",
+    "Saving marks Paid orders and 6 descendants as stale in dev.",
   );
   await capture(page, "variables");
   await editor

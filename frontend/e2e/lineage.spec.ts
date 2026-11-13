@@ -2,6 +2,9 @@ import { expect, test, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { signIn } from "./helpers";
 
+// The enriched example adds another join to every traced order.
+test.setTimeout(90000);
+
 async function example(page: Page) {
   await signIn(page);
   const worktree = await (
@@ -34,15 +37,49 @@ async function explain(page: Page, column = "revenue", row = 1) {
   });
   await trigger.click();
   await expect(page.getByRole("dialog")).toBeVisible();
-  await expect(page.locator(".lineage-card.root")).toBeVisible();
-  await expect(page.locator(".lineage-loading")).toHaveCount(0);
+  await expect(page.locator(".lineage-card.root")).toBeVisible({
+    timeout: 30000,
+  });
+  await expect(page.locator(".lineage-loading")).toHaveCount(0, {
+    timeout: 30000,
+  });
   return trigger;
 }
 
 async function ready(page: Page) {
-  await expect(page.locator(".lineage-loading")).toHaveCount(0);
+  await expect(page.locator(".lineage-loading")).toHaveCount(0, {
+    timeout: 30000,
+  });
   await expect(page.locator(".lineage-card.root button").last()).toBeEnabled();
 }
+
+test("net share traces calculations in nested components and branches to channel fees", async ({
+  page,
+}) => {
+  await example(page);
+  await explain(page, "net_share");
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.locator(".lineage-selected")).toContainText("25.6");
+  await expect(
+    dialog
+      .locator(".lineage-card.calculation")
+      .filter({ hasText: "net_revenue" })
+      .first(),
+  ).toBeVisible();
+  await expect(
+    dialog
+      .locator(".lineage-card.is-source")
+      .filter({ hasText: "fee_rate" })
+      .first(),
+  ).toBeVisible();
+  await expect(
+    dialog
+      .locator(".lineage-card.is-source")
+      .filter({ hasText: "amount" })
+      .first(),
+  ).toBeVisible();
+  await expect(dialog).not.toContainText("Coverage limitation");
+});
 
 test("a value opens a large calculation DAG with sources, pagination and no pass-through steps", async ({
   page,

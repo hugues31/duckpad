@@ -179,6 +179,9 @@ def test_named_example_populates_an_independent_project(client, worktree):
         assert example["project"] in folder.parts
         assert (folder / "orders.csv").is_file()
         assert (folder / "customers.parquet").is_file()
+        assert (
+            folder / "channel_fees.csv"
+        ).read_text() == "channel,fee_rate\nWeb,0.03\nRetail,0.0\nPartner,0.15\n"
     unchanged = client.get(f"/api/worktrees/{worktree}").json()
     assert unchanged["commit"] == before["commit"]
     assert unchanged["bundle"]["flow"]["nodes"] == []
@@ -203,6 +206,7 @@ def test_example_runs_its_checks_messages_and_variables(app, client):
     }
     assert outcomes == {
         ("enriched", "every_order_matched"): "ok",
+        ("net", "every_order_matched"): "ok",
         ("period", "single_month"): "ok",
         ("validated", "order_id_unique"): "ok",
         ("validated", "amount_positive"): "ok",
