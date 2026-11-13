@@ -55,13 +55,22 @@ export function useCanvasNodes(props: CanvasProps) {
         const traced = Object.entries(props.lineage || {}).filter(
           ([id]) => id === full || id.startsWith(full + "::"),
         );
+        const impact = traced.some(([, item]) => item.state);
+        const stopped = traced.some(([, item]) => item.state === "discarded");
+        const reached = traced.filter(
+          ([, item]) => !["unreached", "unknown"].includes(item.state || ""),
+        );
+        const badge =
+          traced.find(([, item]) => item.state === "discarded") ||
+          reached[0] ||
+          traced[0];
         const hovered =
           props.lineageHover === full ||
           props.lineageHover?.startsWith(full + "::");
         return {
           className: props.lineage
             ? traced.length
-              ? `lineage-traced ${hovered ? "lineage-hovered" : ""}`
+              ? `${impact ? (stopped ? "row-impact-stopped" : reached.length ? "row-impact-travelled" : "lineage-dimmed") : "lineage-traced"} ${hovered ? "lineage-hovered" : ""}`
               : "lineage-dimmed"
             : undefined,
           id: node.id,
@@ -72,9 +81,9 @@ export function useCanvasNodes(props: CanvasProps) {
           style: { pointerEvents: "none" },
           data: {
             lineage:
-              traced.length && Object.hasOwn(traced[0][1], "value")
+              badge && Object.hasOwn(badge[1], "value")
                 ? {
-                    value: traced[0][1].value,
+                    value: badge[1].value,
                     steps: node.component ? traced.length : 0,
                   }
                 : undefined,

@@ -306,10 +306,11 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
       const traced =
         props.lineage &&
         [e.source, e.target].every((id) =>
-          Object.keys(props.lineage!).some(
-            (key) =>
-              key === props.prefix + id ||
-              key.startsWith(props.prefix + id + "::"),
+          Object.entries(props.lineage!).some(
+            ([key, item]) =>
+              !["unreached", "unknown"].includes(item.state || "") &&
+              (key === props.prefix + id ||
+                key.startsWith(props.prefix + id + "::")),
           ),
         );
       const highlighted =
@@ -328,7 +329,12 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
         animated: connected || flowing,
         className:
           [
-            props.lineage && (traced ? "lineage-traced" : "lineage-dimmed"),
+            props.lineage &&
+              (traced
+                ? Object.values(props.lineage).some((item) => item.state)
+                  ? "row-impact-travelled"
+                  : "lineage-traced"
+                : "lineage-dimmed"),
             connected && "node-connected",
             pointed && "node-hovered",
             flowing && "is-flowing",

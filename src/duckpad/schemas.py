@@ -382,6 +382,15 @@ class LineageRows(Explain):
     search: str = ""
 
 
+class RowImpact(BaseModel):
+    environment: str
+    dataset: str
+    row: int = Field(ge=0)
+    choices: dict[str, int] = Field(default_factory=dict)
+    offsets: dict[str, int] = Field(default_factory=dict)
+    page_size: int = Field(default=5, ge=1, le=100)
+
+
 class SourcePreview(BaseModel):
     file: str
     delimiter: str | None = None

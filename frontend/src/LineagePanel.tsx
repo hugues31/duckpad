@@ -22,6 +22,7 @@ import { useLoadedWorktree } from "./worktree";
 import { LineageSteps, TableSteps, type LineageMap } from "./LineageSteps";
 import { ColumnLineage, ColumnList } from "./ColumnLineage";
 import { ColumnImpact } from "./ColumnImpact";
+import { RowImpact } from "./RowImpact";
 
 export default function LineagePanel({
   target,
@@ -130,7 +131,6 @@ export default function LineagePanel({
               key={direction}
               className={target.direction === direction ? "active" : ""}
               aria-pressed={target.direction === direction}
-              disabled={direction === "impact" && !!target.cell}
               onClick={() => onChange({ ...target, direction })}
             >
               {t(direction === "origin" ? "lineageOrigin" : "lineageImpact")}
@@ -200,7 +200,18 @@ export default function LineagePanel({
           </div>
         )}
         {tables &&
-          (target.cell ? (
+          (target.cell && target.direction === "impact" ? (
+            <RowImpact
+              key={JSON.stringify([worktree, environment, cellId(target.cell)])}
+              target={target}
+              onMap={onMap}
+              onHover={onHover}
+              onOpen={onOpen}
+              onText={(text) => {
+                explanation.current = text;
+              }}
+            />
+          ) : target.cell ? (
             <ValueLineage
               key={JSON.stringify([worktree, environment, cellId(target.cell)])}
               target={target}

@@ -2,7 +2,7 @@
 
 Value lineage explains the materialized execution, not today's external resource. A result identifies its execution, dataset generation, column and stable storage row. Sorting, filtering or sampling the displayed rows does not change those identities or restrict the provenance search. Table and column lineage analyze saved definitions in the selected environment.
 
-The **Lineage** side panel replaces the inspector while it is open. The canvas and Data grid remain usable; clicking another cell updates the explanation. Its table › column › value breadcrumb returns to either higher level. Origin and Impact are available for tables and columns; value Impact is reserved for a later release.
+The **Lineage** side panel replaces the inspector while it is open. The canvas and Data grid remain usable; clicking another cell updates the explanation. Its table › column › value breadcrumb returns to either higher level. Origin and Impact are available at all three levels.
 
 **Table Origin** lists source files or tables and connections, followed by the upstream node tree. **Impact** lists downstream nodes and exports, including dependencies through computed variables. This analysis reads saved definitions and works before any run. Open it from a node's inspector actions or canvas context menu.
 
@@ -31,6 +31,34 @@ The canvas highlights the path, dims unrelated nodes and shows captured values. 
 An output whose query reads an external resource, or no flow data at all, is a lineage source: explanations stop at its rows and never reread the resource. To trace a calculation through external rows joined with an input, load them into an earlier output first.
 
 ## Validated baseline
+
+### Downstream row impact
+
+Select a source or intermediate cell and choose **Impact** to find where its row
+stops or which outputs it reaches. The verdict names the stopping node and its
+evaluated condition. Each consumer path shows kept, discarded, grouped, duplicated,
+written, not reached or cannot follow steps. Component internals stay visible.
+The canvas marks traversed nodes green, rejection nodes with a red cross, and
+unreached nodes dimly.
+
+Forward tracing searches captured row witnesses for projections, filters, joins
+and row-preserving windows. It evaluates filter and HAVING conditions over the
+captured input rows, reports missing keys for simple inner joins, and follows
+captured group keys into aggregate rows. Global aggregates include all rows
+selected by their input clauses. DISTINCT uses exact value tuples with NULL-safe
+matching. A duplicated row lists five outputs per page; selecting a different
+output changes the single row followed downstream. Only successful plain full-row
+COPY/INSERT exports from the captured input generation are reported as written.
+
+Python, composed CTE/subquery mappings, set operations, grouped windows, partitions
+and other unsupported forward mappings show **Cannot follow**. After an unknown
+mapping, downstream membership remains unknown rather than being called absent.
+LIMIT/OFFSET rejection is not guessed. These forward coverage limits are separate
+from Origin coverage below. No source is reopened, no export is replayed and no
+result is changed. The assistant's `trace_row` tool returns the same verdict and
+steps, subject to its data-reading permission and row budget.
+
+### Upstream value origin
 
 | Construct | Status | Behavior |
 | --- | --- | --- |

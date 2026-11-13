@@ -22,7 +22,20 @@ import { displayNodeName } from "./nodeNames";
 import type { PartitionPage } from "./partitions";
 import { useLoadedWorktree } from "./worktree";
 
-export type LineageMap = Record<string, { value?: unknown }>;
+export type LineageMap = Record<
+  string,
+  {
+    value?: unknown;
+    state?:
+      | "kept"
+      | "discarded"
+      | "grouped"
+      | "duplicated"
+      | "written"
+      | "unreached"
+      | "unknown";
+  }
+>;
 // Formulas stay SQL: a fixed decimal point, and small numbers keep their digits.
 const ROUNDED = new Intl.NumberFormat("en", {
   maximumFractionDigits: 6,
