@@ -103,7 +103,10 @@ test("palette drags preview nodes at the canvas zoom and refuse drops outside th
   await page.mouse.down();
   await page.mouse.move(area.x + area.width - 160, area.y + 80, { steps: 6 });
   await page.mouse.up();
-  await page.locator(".react-flow__node").first().click();
+  // Paid orders stays on the canvas after panning the wider example.
+  await page
+    .locator('.react-flow__node[data-id="validated"] .node-shape')
+    .click();
   const search = (await page.locator(".canvas-search").boundingBox())!;
   await expect(page.locator(".inspector")).toBeVisible();
   const inspector = (await page.locator(".inspector").boundingBox())!;
