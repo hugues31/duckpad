@@ -121,12 +121,17 @@ def test_review_reports_added_and_removed_outputs(services):
     assert next(c for c in result["changes"] if c["port"] == "extra")["removed"] == ["amount"]
 
 
-def test_export_impact_tracks_columns_and_row_selection(services):
+@pytest.mark.parametrize("aggregate", ["SUM(amount)", "COUNT(*)"])
+def test_export_impact_tracks_columns_and_row_selection(services, aggregate):
     _, projects, _, engine = services
     worktree = flow(services)
     snapshot = projects.snapshot(worktree)
+    snapshot["bundle"]["node_sql"]["nodes/sum.sql"] = snapshot["bundle"]["node_sql"]["nodes/sum.sql"].replace(
+        "SUM(amount)", aggregate
+    )
+    snapshot["files"] = bundle_to_files(snapshot["bundle"])
     candidate = deepcopy(snapshot["bundle"])
-    # The export contains only a sum of amount, so an independent region rename does not affect it.
+    # The export does not use region, so an independent region rename does not affect it.
     candidate["node_sql"]["nodes/carry.sql"] = (
         "-- @input input\n-- @output result\nSELECT amount, region AS area FROM {{ input }};"
     )

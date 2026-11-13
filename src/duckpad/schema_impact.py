@@ -64,7 +64,7 @@ def compile_schemas(engine, worktree, environment, bundle, retained, *, override
     }
     outputs: dict[tuple[str, str], list[Record]] = {}
     failures, unknown, signatures = [], [], {}
-    dependencies, export_dependencies, export_nodes = {}, {}, set()
+    dependencies, export_dependencies, export_nodes, row_signatures = {}, {}, set(), {}
     targets = {name: target for target, name in names.items()}
     with duckdb.connect(
         config={
@@ -166,9 +166,24 @@ def compile_schemas(engine, worktree, environment, bundle, retained, *, override
                         signatures[key, port] = {
                             c["name"]: (c["expression"], c["refs"], c["selection"]) for c in analysis
                         }
+                    table_rows = {(*targets[t.name], None) for t in tables if t.name in targets}
+                    selection = [s for c in analysis for s in c["selection"]]
+                    selection_refs = {(*targets[table], name) for s in selection for table, name in s["refs"]}
+                    if kind == "output":
+                        # Row changes also reach COUNT(*) and constant projections, which
+                        # have no value-column references of their own.
+                        dependencies[key, port, None] = table_rows | selection_refs
+                        row_signatures[key, port] = (
+                            sorted({digest(s) for s in selection}),
+                            sorted(t.name for t in tables if t.name in targets),
+                            [
+                                query.args[name].sql(dialect="duckdb") if query.args.get(name) else None
+                                for name in ("limit", "offset")
+                            ],
+                        )
                     for c in analysis:
                         refs = set(c["refs"]) | {ref for s in c["selection"] for ref in s["refs"]}
-                        linked = {(*targets[table], name) for table, name in refs}
+                        linked = {(*targets[table], name) for table, name in refs} | table_rows
                         if kind == "output":
                             dependencies[key, port, c["name"]] = linked
                         elif kind == "exports":
@@ -200,6 +215,7 @@ def compile_schemas(engine, worktree, environment, bundle, retained, *, override
         "dependencies": dependencies,
         "export_dependencies": export_dependencies,
         "export_nodes": export_nodes,
+        "row_signatures": row_signatures,
     }
 
 
@@ -321,6 +337,10 @@ def review_impact(engine, worktree, environment, current, proposed):
             other_types = {c["name"]: c["type"] for c in other["outputs"].get((key, port), [])}
             signatures = value["signatures"].get((key, port), {})
             other_signatures = other["signatures"].get((key, port), {})
+            if (key, port) not in value["row_signatures"] or value["row_signatures"][key, port] != other[
+                "row_signatures"
+            ].get((key, port)):
+                tainted.add((key, port, None))
             for column in columns:
                 name = column["name"]
                 if (
