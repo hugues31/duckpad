@@ -268,6 +268,15 @@ class Score(dp.Node):
     "chart-bar",
   );
   await expect(codePanel(page).locator(".squiggly-warning")).toHaveCount(0);
+  // An unknown name is underlined and fixed as in SQL.
+  await codeSaved(page, () => page.keyboard.type("s"));
+  await expect(codePanel(page).locator(".squiggly-warning")).not.toHaveCount(0);
+  await page.keyboard.press("ControlOrMeta+.");
+  await expect(page.locator(".action-widget")).toContainText(
+    "Change to chart-bar",
+  );
+  await codeSaved(page, () => page.keyboard.press("Enter"));
+  await expect(codePanel(page).locator(".squiggly-warning")).toHaveCount(0);
   expect((await read()).files["nodes/filtered.py"]).toMatch(
     /^# @label Score\n# @icon chart-bar\n# @color purple\nimport duckpad as dp\n/,
   );

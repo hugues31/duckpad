@@ -1137,8 +1137,8 @@ const closestDirective = (key: string) =>
       directive.startsWith(key.toLowerCase()),
   );
 
-/** Quick fixes for the problems the editor located. */
-function sqlCodeActions(
+/** Quick fixes for the problems the editor located, in SQL and in Python. */
+function codeActions(
   model: Model,
   range: monaco.Range,
   actionContext: monaco.languages.CodeActionContext,
@@ -1148,7 +1148,8 @@ function sqlCodeActions(
   const list = { actions, dispose: () => {} };
   if (!context?.template) return list;
   const { t } = context;
-  const outline = outlineTemplate(model.getValue());
+  // Read once, and only for SQL: Python reports no reference.
+  let outline: ReturnType<typeof outlineTemplate> | undefined;
   for (const problem of problemsOf.get(model) || []) {
     const span = new monaco.Range(
       problem.line,
@@ -1180,7 +1181,9 @@ function sqlCodeActions(
     const name = problem.subject;
     if (
       problem.code === "undeclaredReference" &&
-      !outline.declarations.some((d) => d.name === name)
+      !(outline ??= outlineTemplate(model.getValue())).declarations.some(
+        (d) => d.name === name,
+      )
     ) {
       for (const [key, title, text] of [
         ["input", "codeFixDeclareInput", `-- @input ${name}\n`],
@@ -1248,50 +1251,6 @@ export function clearTemplateChecks(model: Model) {
 /** Mark the icon and color names of a Python node that Duckpad cannot show. */
 export function checkPythonNode(model: Model, t: Translate) {
   markProblems(model, lintPythonAppearance(model.getValue()), t);
-}
-
-/** Quick fixes for the names of a Python node's icon and color. */
-function pythonCodeActions(
-  model: Model,
-  range: monaco.Range,
-  actionContext: monaco.languages.CodeActionContext,
-): monaco.languages.CodeActionList {
-  const t = contexts.get(model)?.t;
-  const actions: monaco.languages.CodeAction[] = [];
-  for (const problem of (t && problemsOf.get(model)) || []) {
-    const span = new monaco.Range(
-      problem.line,
-      problem.column,
-      problem.line,
-      problem.endColumn,
-    );
-    const known = closestAppearance(
-      problem.code === "unknownIcon" ? "icon" : "color",
-      problem.subject,
-    );
-    if (!known || !(span.intersectRanges(range) || range.containsRange(span)))
-      continue;
-    const marker = actionContext.markers.find(
-      (m) =>
-        m.startLineNumber === problem.line && m.startColumn === problem.column,
-    );
-    actions.push({
-      title: t!("codeFixChangeTo").replace("{text}", known),
-      kind: "quickfix",
-      diagnostics: marker ? [marker] : undefined,
-      isPreferred: true,
-      edit: {
-        edits: [
-          {
-            resource: model.uri,
-            textEdit: { range: span, text: known },
-            versionId: model.getVersionId(),
-          },
-        ],
-      },
-    });
-  }
-  return { actions, dispose: () => {} };
 }
 
 /** Whether the editor checks found an error in the text. */
@@ -1636,7 +1595,7 @@ export function registerCodeIntelligence() {
   monaco.languages.registerHoverProvider("sql", { provideHover: sqlHover });
   monaco.languages.registerCodeActionProvider(
     "sql",
-    { provideCodeActions: sqlCodeActions },
+    { provideCodeActions: codeActions },
     { providedCodeActionKinds: ["quickfix"] },
   );
   monaco.languages.registerSignatureHelpProvider("sql", {
@@ -1650,7 +1609,7 @@ export function registerCodeIntelligence() {
   });
   monaco.languages.registerCodeActionProvider(
     "python",
-    { provideCodeActions: pythonCodeActions },
+    { provideCodeActions: codeActions },
     { providedCodeActionKinds: ["quickfix"] },
   );
   monaco.languages.registerHoverProvider("python", {
