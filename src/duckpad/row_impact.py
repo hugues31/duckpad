@@ -274,6 +274,12 @@ class Walk:
             if statement.get("test_name") or statement.get("message_block") or statement.get("output"):
                 continue
             tree = sqlglot.parse_one(statement["sql"], read="duckdb")
+            if isinstance(tree, exp.Copy) and tree.args.get("kind"):
+                return identity
+            if isinstance(tree, exp.Insert) and any(
+                tree.args.get(key) for key in ("conflict", "where", "overwrite", "alternative", "ignore")
+            ):
+                return identity
             query = (
                 tree.this.unnest()
                 if isinstance(tree, exp.Copy)
