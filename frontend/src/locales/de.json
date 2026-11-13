@@ -1753,5 +1753,21 @@
   "rowImpactNoConsumers": "Diese Ausgabe hat keine nachgelagerten Verbraucher.",
   "rowImpactStopsAfter": "Endet nach {count} Knoten",
   "rowImpactReached": "Erreicht diese Ausgabe",
-  "rowImpactStopsAfterOne": "Endet nach {count} Knoten"
+  "rowImpactStopsAfterOne": "Endet nach {count} Knoten",
+  "schemaSimulate": "Typänderung simulieren…",
+  "schemaSimulationHint": "Wählen Sie einen DuckDB-Typ, um nachgelagerte Knoten mit leeren Eingaben zu kompilieren. Es werden keine Daten gelesen, keine Ausführung gestartet und keine Änderungen gespeichert.",
+  "schemaNewType": "Neuer Typ",
+  "schemaRunSimulation": "Simulieren",
+  "schemaFailures": "Kompilierungsfehler",
+  "schemaNoFailures": "Keine Kompilierungsfehler in den geprüften Abfragen.",
+  "schemaOutputChanges": "Änderungen der Ausgabeschemata",
+  "schemaRenamed": "Umbenannt",
+  "schemaExistingFailure": "Schlägt bereits vor dieser Änderung fehl",
+  "schemaUnchangedNode": "Durch die Zusammenführung unverändert",
+  "schemaUnknown": "Prüfung nicht möglich",
+  "schemaNeedsSource": "Das Quellschema ist unbekannt. Führen Sie zuerst die Quelle aus.",
+  "schemaUpstream": "Eine vorgelagerte Ausgabe ist fehlgeschlagen oder ihr Schema ist unbekannt.",
+  "schemaExtension": "Verwendet eine Funktion oder einen Typ aus einer Erweiterung, die nur bei Ausführungen geladen wird.",
+  "schemaGitImpact": "Auswirkungen auf Schemata",
+  "schemaGitHint": "Prüft die vorgeschlagene Zusammenführung in dieser Umgebung mit leeren Eingaben. Quellschemata stammen aus vorhandenen Metadaten. Aufgeführte Exporte können sich ändern; ihre Inhalte werden nicht verglichen."
 }

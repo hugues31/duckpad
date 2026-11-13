@@ -312,6 +312,18 @@ class VariableRename(BaseModel):
     name: str = Field(max_length=200)
 
 
+class TypeSimulation(BaseModel):
+    environment: str = "dev"
+    node: str
+    port: str
+    column: str
+    new_type: str = Field(min_length=1, max_length=256)
+
+
+class GitSchemaImpact(GitApply):
+    environment: str = "dev"
+
+
 class ColumnRename(BaseModel):
     environment: str = "dev"
     node: str

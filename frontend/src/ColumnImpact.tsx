@@ -11,6 +11,7 @@ import { displayNodeName } from "./nodeNames";
 import type { Snapshot } from "./types";
 import { useApiResource } from "./useApiResource";
 import { useLoadedWorktree } from "./worktree";
+import { TypeSimulation } from "./SchemaImpact";
 
 type Entry = {
   node: string;
@@ -245,6 +246,10 @@ export function ColumnImpact({
               {t("impactRename")}
             </button>
           )}
+          <TypeSimulation
+            key={JSON.stringify([id, environment, target])}
+            target={target}
+          />
           {renaming && (
             <form
               className="impact-rename"

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api, send } from "./api";
 import ComparisonView from "./ComparisonView";
 import GitDataImpact from "./GitDataImpact";
+import { GitSchemaImpact } from "./SchemaImpact";
 import { TabStatus, useTabAction } from "./gitTabs";
 import type { MergeChoice, MergeReview } from "./gitTypes";
 import { useT } from "./i18n";
@@ -140,6 +141,11 @@ export default function GitReviewTab({
         report={review.comparison}
         storageKey={storageKey + ".reviewFilters"}
       />
+      {!integrated &&
+        !pending &&
+        review.comparison.impact.direct.length > 0 && (
+          <GitSchemaImpact review={review} environment={environment} />
+        )}
       {/* Only processing changes on local branches have retained results to compare. */}
       {!integrated &&
         review.source_worktree &&

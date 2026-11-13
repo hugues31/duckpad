@@ -1753,5 +1753,21 @@
   "rowImpactNoConsumers": "Cette sortie n’a pas de consommateur en aval.",
   "rowImpactStopsAfter": "S’arrête après {count} nœuds",
   "rowImpactReached": "Atteint cette sortie",
-  "rowImpactStopsAfterOne": "S’arrête après {count} nœud"
+  "rowImpactStopsAfterOne": "S’arrête après {count} nœud",
+  "schemaSimulate": "Simuler un changement de type…",
+  "schemaSimulationHint": "Choisissez un type DuckDB pour compiler les nœuds en aval avec des entrées vides. Aucune donnée lue, aucun run lancé, rien enregistré.",
+  "schemaNewType": "Nouveau type",
+  "schemaRunSimulation": "Simuler",
+  "schemaFailures": "Erreurs de compilation",
+  "schemaNoFailures": "Aucune erreur de compilation dans les requêtes vérifiées.",
+  "schemaOutputChanges": "Changements des schémas de sortie",
+  "schemaRenamed": "Renommée",
+  "schemaExistingFailure": "Échoue déjà avant ce changement",
+  "schemaUnchangedNode": "Non modifié par la fusion",
+  "schemaUnknown": "Vérification impossible",
+  "schemaNeedsSource": "Le schéma de la source est inconnu. Exécutez la source au préalable.",
+  "schemaUpstream": "Une sortie en amont a échoué ou son schéma est inconnu.",
+  "schemaExtension": "Utilise une fonction ou un type d’une extension chargée uniquement pendant les runs.",
+  "schemaGitImpact": "Impact sur les schémas",
+  "schemaGitHint": "Vérifie la fusion proposée dans cet environnement avec des entrées vides. Les schémas des sources proviennent des métadonnées conservées. Les exports listés peuvent changer ; leur contenu n’est pas comparé."
 }

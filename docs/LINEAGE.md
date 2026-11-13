@@ -16,6 +16,26 @@ Static coverage includes qualified joins, aliases, SELECT stars with EXCLUDE/REP
 
 **Rename…** previews every changed file before applying one save, which the existing **Undo** reverses. SQL edits replace identifier tokens and preserve comments, directives and formatting. The defining alias and downstream references change together; a carried output can introduce a local alias. Renaming a source column updates project references and warns that the source must supply the new name. Documentation keys follow the rename. Shared definitions remain shared when their instances need identical edits; otherwise the affected instances receive separate definitions, keeping unrelated branches unchanged.
 
+**Simulate a type change…** in Column Impact compiles downstream outputs, tests,
+messages and export queries against empty typed inputs. It lists DuckDB errors
+with links to the code, before/after output types and affected exports. Nothing
+is saved, no run starts, and no result rows or external sources are read. Source
+schemas must already be known unless the source is a literal SQL query. Python,
+unsupported statements and outputs blocked by an unknown or failed upstream
+schema are listed separately. Compilation does not prove that existing values
+can be converted to the chosen type, or validate an export destination.
+
+In **Compare & merge**, **Schema impact** checks the proposed merged definitions
+in the selected environment, including conflict choices, without running either
+branch. It reports added, removed, renamed and retyped columns, downstream
+compilation failures (including consumers unchanged by the branch), and exports
+whose input columns or row selection are affected. A rename is reported only
+when an unchanged expression uniquely identifies the old and new column;
+otherwise it remains an addition and removal. Unknown schemas are not treated
+as empty outputs. Existing failures are distinguished from new ones. Changed
+external source definitions need fresh schema metadata; their old schemas are
+not assumed to describe the proposed source. Resolve conflicts before checking.
+
 Invalid names and collisions in affected outputs are rejected before writing. A changed revision or schema requires another preview. Python, unsupported SQL, JOIN USING/NATURAL, affected star modifiers and expressions bound through variables are listed for manual review and are not automatically rewritten. A partition filter does not prevent static analysis, but unresolved partition expressions remain incomplete. Renaming invalidates affected retained results just like editing SQL; run the flow again before explaining their values.
 
 **Value Origin** keeps every node on the path, including unchanged projections, filters and joins. Each calculation shows its formula, captured operands and result. A transport step also shows the condition selecting its row. Components and nested components have named headers; **Open on the canvas** opens their contents while retaining the trace. A trace started inside a component continues through its external inputs.

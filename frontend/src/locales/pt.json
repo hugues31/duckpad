@@ -1753,5 +1753,21 @@
   "rowImpactNoConsumers": "Esta saída não tem consumidores a jusante.",
   "rowImpactStopsAfter": "Para após {count} nós",
   "rowImpactReached": "Alcança esta saída",
-  "rowImpactStopsAfterOne": "Para após {count} nó"
+  "rowImpactStopsAfterOne": "Para após {count} nó",
+  "schemaSimulate": "Simular uma alteração de tipo…",
+  "schemaSimulationHint": "Escolha um tipo DuckDB para compilar os nós a jusante com entradas vazias. Nenhum dado é lido, nenhuma execução é iniciada e nada é guardado.",
+  "schemaNewType": "Novo tipo",
+  "schemaRunSimulation": "Simular",
+  "schemaFailures": "Erros de compilação",
+  "schemaNoFailures": "Nenhum erro de compilação nas consultas verificadas.",
+  "schemaOutputChanges": "Alterações dos esquemas de saída",
+  "schemaRenamed": "Renomeada",
+  "schemaExistingFailure": "Já falha antes desta alteração",
+  "schemaUnchangedNode": "Não alterado pela integração",
+  "schemaUnknown": "Não foi possível verificar",
+  "schemaNeedsSource": "O esquema da origem é desconhecido. Execute a origem primeiro.",
+  "schemaUpstream": "Uma saída a montante falhou ou o seu esquema é desconhecido.",
+  "schemaExtension": "Usa uma função ou um tipo de uma extensão carregada apenas durante as execuções.",
+  "schemaGitImpact": "Impacto nos esquemas",
+  "schemaGitHint": "Verifica a integração proposta neste ambiente com entradas vazias. Os esquemas das origens vêm dos metadados retidos. As exportações listadas podem mudar; o conteúdo não é comparado."
 }
