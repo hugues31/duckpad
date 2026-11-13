@@ -1750,5 +1750,6 @@
   "rowImpactChoose": "{count} rows produced. Choose one to follow.",
   "rowImpactNoConsumers": "This output has no downstream consumers.",
   "rowImpactStopsAfter": "Stops after {count} nodes",
-  "rowImpactReached": "Reaches this output"
+  "rowImpactReached": "Reaches this output",
+  "rowImpactStopsAfterOne": "Stops after {count} node"
 }

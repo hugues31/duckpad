@@ -268,7 +268,8 @@
   color: var(--danger);
   border-color: var(--danger);
 }
-.react-flow__edge.row-impact-travelled path {
+.react-flow__edge-pipeline.row-impact-travelled.highlighted
+  .react-flow__edge-path {
   stroke: var(--success);
 }
 .lineage-traced .node-shape,

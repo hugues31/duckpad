@@ -321,6 +321,8 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
         flowing ||
         travelled ||
         insertionEdge === e.id;
+      const rowImpact =
+        traced && Object.values(props.lineage || {}).some((item) => item.state);
       return {
         ...e,
         selected: edgeSelected,
@@ -331,7 +333,7 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
           [
             props.lineage &&
               (traced
-                ? Object.values(props.lineage).some((item) => item.state)
+                ? rowImpact
                   ? "row-impact-travelled"
                   : "lineage-traced"
                 : "lineage-dimmed"),
@@ -346,7 +348,7 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
         markerEnd: highlighted
           ? {
               type: MarkerType.ArrowClosed,
-              color: "var(--accent)",
+              color: rowImpact ? "var(--success)" : "var(--accent)",
               width: 14,
               height: 14,
             }

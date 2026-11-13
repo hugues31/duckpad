@@ -151,7 +151,10 @@ export function RowImpact({
         ...data.stops.map((id) => {
           const s = byId.get(id)!;
           return t("rowImpactStops")
-            .replace("{node}", name(s.node))
+            .replace(
+              "{node}",
+              displayNodeName(snapshot.node_names?.[s.node], s.node, t),
+            )
             .replace("{reason}", s.reason ? reason(s.reason) : "");
         }),
         ...(data.reached.length
@@ -257,7 +260,9 @@ export function RowImpact({
     let count = 0;
     while (current) {
       if (current.state === "discarded")
-        return t("rowImpactStopsAfter").replace("{count}", String(count));
+        return t(
+          count === 1 ? "rowImpactStopsAfterOne" : "rowImpactStopsAfter",
+        ).replace("{count}", String(count));
       if (current.state === "unknown") return t("rowImpactUnknown");
       count += 1;
       current = byId.get(current.children[0]);

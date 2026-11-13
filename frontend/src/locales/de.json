@@ -1750,5 +1750,6 @@
   "rowImpactChoose": "{count} Zeilen erzeugt. Eine zum Verfolgen auswählen.",
   "rowImpactNoConsumers": "Diese Ausgabe hat keine nachgelagerten Verbraucher.",
   "rowImpactStopsAfter": "Endet nach {count} Knoten",
-  "rowImpactReached": "Erreicht diese Ausgabe"
+  "rowImpactReached": "Erreicht diese Ausgabe",
+  "rowImpactStopsAfterOne": "Endet nach {count} Knoten"
 }

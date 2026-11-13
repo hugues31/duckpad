@@ -54,6 +54,11 @@ test("source row impact explains rejection, grouping and export across component
   await expect(
     page.locator(".react-flow__node.row-impact-travelled"),
   ).toHaveCount(3);
+  await expect(
+    page
+      .locator(".react-flow__edge.row-impact-travelled .react-flow__edge-path")
+      .first(),
+  ).toHaveCSS("stroke", "rgb(31, 122, 77)");
   const link = page.url();
   await page.reload();
   await expect(panel.locator(".row-impact-discarded")).toContainText(

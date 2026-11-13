@@ -1750,5 +1750,6 @@
   "rowImpactChoose": "{count} linhas produzidas. Escolha uma para seguir.",
   "rowImpactNoConsumers": "Esta saída não tem consumidores a jusante.",
   "rowImpactStopsAfter": "Para após {count} nós",
-  "rowImpactReached": "Alcança esta saída"
+  "rowImpactReached": "Alcança esta saída",
+  "rowImpactStopsAfterOne": "Para após {count} nó"
 }
