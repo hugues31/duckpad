@@ -130,7 +130,8 @@ test("the SQL editor suggests icon and color names with previews, and fixes an u
   await expect(suggestions(page)).toHaveText(["@icon"]);
   await page.keyboard.press("Tab");
   await expect(suggestions(page).first()).toHaveText(/^table/);
-  await page.keyboard.type("left");
+  // A hyphen is part of a name: the list stays open on it.
+  await page.keyboard.type("left-j");
   await expect(suggestions(page)).toHaveText([/^left-join/]);
   const preview = page.locator(".suggest-details img");
   await expect(preview).toHaveAttribute("alt", "left-join");
@@ -254,8 +255,20 @@ class Score(dp.Node):
   await page.keyboard.type("pur");
   await codeSaved(page, () => page.keyboard.press("Tab"));
   await expect(score).toHaveClass(/node-color-purple/);
+  // Comments suggest nothing by themselves: a hyphen keeps the list of names open.
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("End");
+  for (let step = 0; step < "brain".length; step++)
+    await page.keyboard.press("Backspace");
+  await page.keyboard.type("chart-b");
+  await expect(suggestions(page)).toHaveText([/^chart-bar/]);
+  await codeSaved(page, () => page.keyboard.press("Tab"));
+  await expect(score.locator("[data-icon]")).toHaveAttribute(
+    "data-icon",
+    "chart-bar",
+  );
   await expect(codePanel(page).locator(".squiggly-warning")).toHaveCount(0);
   expect((await read()).files["nodes/filtered.py"]).toMatch(
-    /^# @label Score\n# @icon brain\n# @color purple\nimport duckpad as dp\n/,
+    /^# @label Score\n# @icon chart-bar\n# @color purple\nimport duckpad as dp\n/,
   );
 });
