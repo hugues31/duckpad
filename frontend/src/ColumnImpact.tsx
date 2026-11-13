@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Link } from "react-router";
 import { codeFileUrl } from "./navigation";
 import { api, send, withQuery } from "./api";
-import { useT } from "./i18n";
+import { countLabel, useT } from "./i18n";
+import { projectFileLanguage } from "./projectFiles";
 import type { LineageTarget } from "./lineageGraph";
 import type { LineageMap } from "./LineageSteps";
 import { displayNodeName } from "./nodeNames";
@@ -49,6 +50,43 @@ const groups = {
   unaffected: "impactUnaffected",
   mentions: "impactMentions",
 } as const;
+
+const CodeDiff = lazy(() =>
+  import("./Editor").then((module) => ({ default: module.CodeDiff })),
+);
+
+/** One file of a rename preview; its diff editor exists only while open. */
+function ChangedFile({
+  file,
+  before,
+  after,
+}: {
+  file: string;
+  before: string;
+  after: string;
+}) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  return (
+    <details
+      className="impact-file"
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
+      <summary>{file}</summary>
+      {open && (
+        <Suspense fallback={<p>{t("loading")}</p>}>
+          <CodeDiff
+            before={before}
+            after={after}
+            language={projectFileLanguage(file)}
+            originalLabel={t("impactBefore")}
+            modifiedLabel={t("impactAfter")}
+          />
+        </Suspense>
+      )}
+    </details>
+  );
+}
 
 export function ColumnImpact({
   target,
@@ -154,7 +192,8 @@ export function ColumnImpact({
               .replace("{column}", target.column || "")
               .replace(
                 "{nodes}",
-                String(
+                countLabel(
+                  t,
                   new Set(
                     data.edit
                       .filter(
@@ -162,23 +201,47 @@ export function ColumnImpact({
                       )
                       .map((e) => e.node),
                   ).size,
+                  "impactNodeOne",
+                  "impactNodeMany",
                 ),
               )
               .replace(
                 "{views}",
-                String(
+                countLabel(
+                  t,
                   new Set(
                     data.edit
                       .filter((e) => e.file === "views.json")
                       .map((e) => e.label),
                   ).size,
+                  "impactViewOne",
+                  "impactViewMany",
                 ),
               )
-              .replace("{columns}", String(data.affected_columns))
-              .replace("{exports}", String(data.exports.length))}
+              .replace(
+                "{columns}",
+                countLabel(
+                  t,
+                  data.affected_columns,
+                  "impactColumnOne",
+                  "impactColumnMany",
+                ),
+              )
+              .replace(
+                "{exports}",
+                countLabel(
+                  t,
+                  data.exports.length,
+                  "impactExportOne",
+                  "impactExportMany",
+                ),
+              )}
           </p>
           {canEdit && !renaming && (
-            <button onClick={() => setRenaming(true)}>
+            <button
+              className="button secondary small"
+              onClick={() => setRenaming(true)}
+            >
               {t("impactRename")}
             </button>
           )}
@@ -208,12 +271,17 @@ export function ColumnImpact({
               {!!data.manual.length && (
                 <p className="notice warning">{t("impactManualWarning")}</p>
               )}
-              <div className="button-row">
-                <button type="submit" disabled={busy || !name.trim()}>
+              <div className="impact-actions">
+                <button
+                  type="submit"
+                  className={`button ${plan ? "secondary" : "primary"}`}
+                  disabled={busy || !name.trim()}
+                >
                   {t("impactPreview")}
                 </button>
                 <button
                   type="button"
+                  className="button secondary"
                   disabled={busy}
                   onClick={() => {
                     setRenaming(false);
@@ -227,16 +295,11 @@ export function ColumnImpact({
                 <>
                   <p>{t("impactSaveOnce")}</p>
                   {plan.changes?.map((change) => (
-                    <details key={change.file} className="impact-file">
-                      <summary>{change.file}</summary>
-                      <h4>{t("impactBefore")}</h4>
-                      <pre>{change.before || "∅"}</pre>
-                      <h4>{t("impactAfter")}</h4>
-                      <pre>{change.after || "∅"}</pre>
-                    </details>
+                    <ChangedFile key={change.file} {...change} />
                   ))}
                   <button
                     type="button"
+                    className="button primary"
                     disabled={
                       busy ||
                       !plan.changes?.length ||
@@ -256,7 +319,7 @@ export function ColumnImpact({
                 {t(groups[group])} <small>({data[group].length})</small>
               </h3>
               {!data[group].length && (
-                <p className="muted">{t("impactNone")}</p>
+                <p className="muted">{t("impactGroupEmpty")}</p>
               )}
               {data[group].map((entry, index) => (
                 <article
@@ -276,9 +339,11 @@ export function ColumnImpact({
                     </button>
                   </header>
                   <div className="small muted">
-                    {[entry.port, entry.label, entry.column]
-                      .filter(Boolean)
-                      .join(" · ")}
+                    {[
+                      ...new Set(
+                        [entry.port, entry.label, entry.column].filter(Boolean),
+                      ),
+                    ].join(" · ")}
                   </div>
                   {entry.excerpt && <pre>{entry.excerpt}</pre>}
                   {entry.expression &&
@@ -312,7 +377,7 @@ export function ColumnImpact({
                     </p>
                   )}
                   {entry.file && (
-                    <div className="small">
+                    <div className="small impact-code">
                       {entry.file}
                       <Link to={codeFileUrl(id, entry.file, environment)}>
                         {t("impactOpenCode")}

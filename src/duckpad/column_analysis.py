@@ -58,6 +58,9 @@ def analyze(query, schema, labels=None, bindings=None):
         for source in scope.sources.values():
             if isinstance(source, exp.Table) and source.name not in schema:
                 raise Incomplete("external_relation")
+            # `FROM t AS x(a, b)` renames columns by position, which scopes do not track.
+            if isinstance(source, exp.Table) and source.args.get("alias") and source.args["alias"].columns:
+                raise Incomplete("table_alias_columns")
     memo = {}
 
     def projection(scope, name):

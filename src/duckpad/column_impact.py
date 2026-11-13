@@ -183,7 +183,7 @@ def inspect(engine, worktree, environment, node, port, column, *, new_name=None,
     target = tuple(boundaries[node]["outputs"].get(port, ())) if node in boundaries else (node, port)
     root = identity(*target, column) if len(target) == 2 else ""
     if root not in steps:
-        raise Problem("Column schema unavailable. Run the source before inspecting its impact.", 422)
+        raise Problem(f"No schema for {column} yet. Run the flow to refresh column schemas.", 422)
     computed = engine.pool.computed(worktree, environment, bundle)
     nodes, edges, _ = static_nodes(bundle, environment, computed)
     downstream = reachable({target[0]}, edges, upstream=False)

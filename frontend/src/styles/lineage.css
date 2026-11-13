@@ -302,6 +302,18 @@
   margin-block: 16px;
 }
 
+.impact-actions,
+.impact-code {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.impact-actions {
+  margin-block: 10px;
+}
+
 .impact-rename label {
   display: grid;
   gap: 6px;
