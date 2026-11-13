@@ -72,18 +72,24 @@ export async function signIn(page: Page) {
 
 /**
  * Make edits that the flow saves by itself, and wait until they are saved.
- * Leaving the focused field saves it without waiting for the typing pause.
+ * Leaving the focused field saves it without waiting for the typing pause;
+ * `keepFocus` leaves the focus where a canvas gesture put it.
  */
-export async function autosaved(page: Page, edit: () => Promise<unknown>) {
+export async function autosaved(
+  page: Page,
+  edit: () => Promise<unknown>,
+  keepFocus = false,
+) {
   const saved = page.waitForResponse(
     (response) =>
       response.request().method() === "PUT" &&
       /^\/api\/worktrees\/[^/]+$/.test(new URL(response.url()).pathname),
   );
   await edit();
-  await page.evaluate(() =>
-    (document.activeElement as HTMLElement | null)?.blur(),
-  );
+  if (!keepFocus)
+    await page.evaluate(() =>
+      (document.activeElement as HTMLElement | null)?.blur(),
+    );
   expect((await saved).ok()).toBeTruthy();
   await expect(page.locator(".save-status")).toHaveText("All changes saved");
 }

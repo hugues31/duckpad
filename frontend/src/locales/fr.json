@@ -1052,6 +1052,7 @@
   "noResultYet": "Pas encore de résultat",
   "summaryOutput": "{count} sortie",
   "summaryOutputs": "{count} sorties",
+  "summaryInputs": "{count} entrées",
   "summaryMessage": "{count} message",
   "summaryMessages": "{count} messages",
   "summaryTest": "{count} test",
