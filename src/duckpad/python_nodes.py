@@ -3,6 +3,7 @@
 import math
 
 from .json_read import loads
+from .python_contract import APPEARANCE
 from .templates import check_scalar, connection_for, render_parameter
 from .util import Problem, dumps
 from .value_types import base_type, type_argument
@@ -29,6 +30,9 @@ def retained_contract(node, parsed, edges):
     if not error or not node.get("python_contract"):
         return parsed
     previous = node["python_contract"]
+    if "error" not in parsed:
+        # Code that parses says how the node looks: an icon or a color it no longer declares is gone.
+        previous = {key: value for key, value in previous.items() if key not in APPEARANCE}
     return {
         **previous,
         **parsed,

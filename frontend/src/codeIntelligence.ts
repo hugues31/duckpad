@@ -12,10 +12,28 @@ import {
   type PythonMember,
   type SqlFunction,
 } from "./codeCatalog";
+import {
+  lintPythonAppearance,
+  PYTHON_DIRECTIVES,
+  pythonDirectiveCursor,
+  readPythonDirective,
+} from "./appearanceCode";
+import {
+  appearancePreviews,
+  appearanceSuggestions,
+  ICON_GROUP_LABELS,
+  toneOf,
+} from "./appearanceSuggestions";
 import type { CodeContext, CodeInput } from "./codeEditing";
 import type { Translate, TranslationKey } from "./i18n";
+import {
+  closestAppearance,
+  knownAppearance,
+  type AppearanceKey,
+} from "./nodeAppearance";
 import { outlinePython, pythonCursor, stringPurpose } from "./pythonNode";
 import { quoteIdentifier, RESERVED_KEYWORDS } from "./samples";
+import { showSuggestionDetails } from "./suggestionDetails";
 import {
   blockAt,
   DIRECTIVES,
@@ -67,6 +85,8 @@ export const prepareCodeCatalog = () => void withCatalog();
 const DIRECTIVE_DOCS: Record<DirectiveName, TranslationKey> = {
   label: "codeDirectiveLabel",
   description: "codeDirectiveDescription",
+  icon: "codeDirectiveIcon",
+  color: "codeDirectiveColor",
   input: "codeDirectiveInput",
   param: "codeDirectiveParam",
   output: "codeDirectiveOutput",
@@ -76,6 +96,9 @@ const DIRECTIVE_DOCS: Record<DirectiveName, TranslationKey> = {
 const DIRECTIVE_SNIPPETS: Record<DirectiveName, string> = {
   label: "label ${1:Label}",
   description: "description ${1:Description}",
+  // Their names are suggested as soon as the directive is inserted.
+  icon: "icon ",
+  color: "color ",
   input: "input ${1:source}",
   param: `param \${1:name}: \${2|${Object.keys(PARAMETER_TYPES).join(",")}|}`,
   output: "output ${1:result}",
@@ -118,6 +141,8 @@ const PROBLEM_MESSAGES: Record<TemplateProblem["code"], TranslationKey> = {
   messageArguments: "codeProblemMessageArguments",
   emptyCheck: "codeProblemEmptyCheck",
   quotedReference: "codeProblemQuotedReference",
+  unknownIcon: "codeProblemUnknownIcon",
+  unknownColor: "codeProblemUnknownColor",
 };
 const DECLARATION_LABELS: Record<Declaration["kind"], TranslationKey> = {
   input: "codeInput",
@@ -259,6 +284,10 @@ const SQL_LANGUAGE: monaco.languages.IMonarchLanguage = {
       [
         /(--\s*@)(label|description)(.*)/,
         ["keyword.directive", "keyword.directive", "comment.doc"],
+      ],
+      [
+        /(--\s*@)(icon|color)(\s+)([\w-]*)(.*)/,
+        ["keyword.directive", "keyword.directive", "", "type", "comment"],
       ],
       [
         /(--\s*@)(param)(\s+)(\w+)(\s*:\s*)([^=]*?)(\s*=\s*)(.*)/,
@@ -554,9 +583,93 @@ function sqlCatalogItems(t: Translate) {
   return staticSqlItems;
 }
 
+/** Suggest the names of an icon or a color once its directive is inserted. */
+const SUGGEST_NAMES = { id: "editor.action.triggerSuggest", title: "" };
+
+/**
+ * The names `@icon` or `@color` accepts that the typed text finds, each with
+ * what it shows. The list is computed again for each character typed.
+ */
+function appearanceList(
+  key: AppearanceKey,
+  position: Position,
+  prefix: string,
+  after: string,
+  t: Translate,
+): monaco.languages.CompletionList {
+  // Names contain hyphens, which end a word for the editor.
+  const range = lineRange(
+    position,
+    position.column - prefix.length,
+    position.column + /^[\w-]*/.exec(after)![0].length,
+  );
+  const preview = appearancePreviews(key);
+  return {
+    incomplete: true,
+    suggestions: appearanceSuggestions(key, prefix).map(
+      ({ name, keywords, group }, index) => {
+        const tone = key === "color" ? toneOf(name) : undefined;
+        return {
+          label: name,
+          // The editor draws the tone of a color beside its name.
+          kind: key === "color" ? Kind.Color : Kind.Value,
+          detail: tone ?? (group && t(ICON_GROUP_LABELS[group])),
+          documentation: markdown(
+            [preview(name), keywords].filter(Boolean).join("\n\n"),
+          ),
+          // The names are already those the typed text finds, in their order.
+          filterText: prefix || name,
+          insertText: name,
+          sortText: String(index).padStart(3, "0"),
+          range,
+        };
+      },
+    ),
+  };
+}
+
+interface DirectiveLocation {
+  key: string;
+  value: string;
+  keyColumn: number;
+  valueColumn: number;
+}
+
+/** The documentation of a directive's name, or what its icon or color shows. */
+function directiveHover(
+  found: DirectiveLocation,
+  position: Position,
+  t: Translate,
+): monaco.languages.Hover | null {
+  const { column } = position;
+  const keyEnd = found.keyColumn + found.key.length;
+  if (column >= found.keyColumn - 1 && column <= keyEnd) {
+    const doc = own(DIRECTIVE_DOCS, found.key);
+    return doc
+      ? {
+          range: lineRange(position, found.keyColumn - 1, keyEnd),
+          contents: [markdown(`**@${found.key}**\n\n${t(doc)}`)],
+        }
+      : null;
+  }
+  const valueEnd = found.valueColumn + found.value.length;
+  if (
+    (found.key !== "icon" && found.key !== "color") ||
+    column < found.valueColumn ||
+    column > valueEnd ||
+    !knownAppearance(found.key, found.value)
+  )
+    return null;
+  return {
+    range: lineRange(position, found.valueColumn, valueEnd),
+    contents: [markdown(appearancePreviews(found.key)(found.value))],
+  };
+}
+
 async function sqlCompletions(
   model: Model,
   position: Position,
+  trigger: monaco.languages.CompletionContext,
 ): Promise<monaco.languages.CompletionList> {
   const context = contexts.get(model);
   if (!context) return { suggestions: [] };
@@ -571,6 +684,15 @@ async function sqlCompletions(
     model.getWordAtPosition(position)?.endColumn ?? word.endColumn,
   );
   const cursor = sqlCursor(before);
+  showSuggestionDetails(cursor.kind === "appearance");
+  // A space or a hyphen continues the name of an icon or a color, or a default
+  // value; anywhere else it ends the word being completed, as before.
+  if (
+    (trigger.triggerCharacter === " " || trigger.triggerCharacter === "-") &&
+    cursor.kind !== "appearance" &&
+    cursor.kind !== "parameterDefault"
+  )
+    return { suggestions: [] };
   const outline = context.template ? outlineTemplate(model.getValue()) : null;
   const declarations = outline?.declarations || [];
   const parameters = declarations.filter((d) => d.kind === "parameter");
@@ -590,9 +712,16 @@ async function sqlCompletions(
               insertTextRules: Rule.InsertAsSnippet,
               sortText: String(DIRECTIVES.indexOf(directive)),
               range,
+              ...(directive === "icon" || directive === "color"
+                ? { command: SUGGEST_NAMES }
+                : {}),
             }))
           : [],
       };
+    case "appearance":
+      return outline
+        ? appearanceList(cursor.key, position, cursor.prefix, after, t)
+        : { suggestions: [] };
     case "parameterType":
       return {
         suggestions: (Object.keys(PARAMETER_TYPES) as ParameterType[]).map(
@@ -852,15 +981,12 @@ async function sqlHover(
   const directive = outline && readDirective(lineText);
   if (directive) {
     const keyEnd = directive.keyColumn + directive.key.length;
-    if (column >= directive.keyColumn - 1 && column <= keyEnd) {
-      const doc = own(DIRECTIVE_DOCS, directive.key);
-      return doc
-        ? {
-            range: lineRange(position, directive.keyColumn - 1, keyEnd),
-            contents: [markdown(`**@${directive.key}**\n\n${t(doc)}`)],
-          }
-        : null;
-    }
+    if (
+      (column >= directive.keyColumn - 1 && column <= keyEnd) ||
+      directive.key === "icon" ||
+      directive.key === "color"
+    )
+      return directiveHover(directive, position, t);
     const word = model.getWordAtPosition(position);
     if (!word) return null;
     const declaration = declared(word.word);
@@ -953,7 +1079,10 @@ const problemsOf = new WeakMap<Model, TemplateProblem[]>();
 
 /** Mark the problems of a template's text, located where they are. */
 export function checkTemplate(model: Model, t: Translate) {
-  const problems = lintTemplate(model.getValue());
+  markProblems(model, lintTemplate(model.getValue()), t);
+}
+
+function markProblems(model: Model, problems: TemplateProblem[], t: Translate) {
   problemsOf.set(model, problems);
   monaco.editor.setModelMarkers(
     model,
@@ -975,7 +1104,14 @@ export function checkTemplate(model: Model, t: Translate) {
   );
 }
 
-const HEADER = new Set(["label", "description", "input", "param"]);
+const HEADER = new Set([
+  "label",
+  "description",
+  "icon",
+  "color",
+  "input",
+  "param",
+]);
 
 /** The line after which a new declaration goes: its kind's last one, or the header's. */
 function declarationLine(model: Model, key: "input" | "param") {
@@ -1074,6 +1210,16 @@ function sqlCodeActions(
           span,
           directive,
         );
+    } else if (
+      problem.code === "unknownIcon" ||
+      problem.code === "unknownColor"
+    ) {
+      const known = closestAppearance(
+        problem.code === "unknownIcon" ? "icon" : "color",
+        name,
+      );
+      if (known)
+        fix(t("codeFixChangeTo").replace("{text}", known), span, known);
     } else if (problem.code === "messageArguments") {
       // Keep "-- @message", drop what follows it.
       const text = model.getLineContent(problem.line);
@@ -1097,6 +1243,55 @@ function sqlCodeActions(
 export function clearTemplateChecks(model: Model) {
   problemsOf.delete(model);
   monaco.editor.setModelMarkers(model, "duckpad", []);
+}
+
+/** Mark the icon and color names of a Python node that Duckpad cannot show. */
+export function checkPythonNode(model: Model, t: Translate) {
+  markProblems(model, lintPythonAppearance(model.getValue()), t);
+}
+
+/** Quick fixes for the names of a Python node's icon and color. */
+function pythonCodeActions(
+  model: Model,
+  range: monaco.Range,
+  actionContext: monaco.languages.CodeActionContext,
+): monaco.languages.CodeActionList {
+  const t = contexts.get(model)?.t;
+  const actions: monaco.languages.CodeAction[] = [];
+  for (const problem of (t && problemsOf.get(model)) || []) {
+    const span = new monaco.Range(
+      problem.line,
+      problem.column,
+      problem.line,
+      problem.endColumn,
+    );
+    const known = closestAppearance(
+      problem.code === "unknownIcon" ? "icon" : "color",
+      problem.subject,
+    );
+    if (!known || !(span.intersectRanges(range) || range.containsRange(span)))
+      continue;
+    const marker = actionContext.markers.find(
+      (m) =>
+        m.startLineNumber === problem.line && m.startColumn === problem.column,
+    );
+    actions.push({
+      title: t!("codeFixChangeTo").replace("{text}", known),
+      kind: "quickfix",
+      diagnostics: marker ? [marker] : undefined,
+      isPreferred: true,
+      edit: {
+        edits: [
+          {
+            resource: model.uri,
+            textEdit: { range: span, text: known },
+            versionId: model.getVersionId(),
+          },
+        ],
+      },
+    });
+  }
+  return { actions, dispose: () => {} };
 }
 
 /** Whether the editor checks found an error in the text. */
@@ -1140,13 +1335,45 @@ const sdkItems = (t: Translate, range: monaco.IRange): Item[] =>
 async function pythonCompletions(
   model: Model,
   position: Position,
+  trigger: monaco.languages.CompletionContext,
 ): Promise<monaco.languages.CompletionList> {
   const context = contexts.get(model);
   if (!context?.template) return { suggestions: [] };
   const { t } = context;
-  const before = model
-    .getLineContent(position.lineNumber)
-    .slice(0, position.column - 1);
+  const lineText = model.getLineContent(position.lineNumber);
+  const before = lineText.slice(0, position.column - 1);
+  // Comments complete nothing but the directives that name and style the node.
+  const directive = pythonDirectiveCursor(before);
+  showSuggestionDetails(directive?.kind === "appearance");
+  if (directive?.kind === "appearance")
+    return appearanceList(
+      directive.key,
+      position,
+      directive.prefix,
+      lineText.slice(position.column - 1),
+      t,
+    );
+  if (directive)
+    return {
+      suggestions: PYTHON_DIRECTIVES.map((name, index) => ({
+        label: "@" + name,
+        filterText: name,
+        kind: Kind.Keyword,
+        documentation: markdown(t(DIRECTIVE_DOCS[name])),
+        insertText: DIRECTIVE_SNIPPETS[name],
+        insertTextRules: Rule.InsertAsSnippet,
+        sortText: String(index),
+        range: lineRange(position, position.column - directive.prefix.length),
+        ...(name === "label" ? {} : { command: SUGGEST_NAMES }),
+      })),
+    };
+  // These characters only continue a directive, or the text of a string.
+  if (
+    trigger.triggerCharacter === "@" ||
+    ((trigger.triggerCharacter === " " || trigger.triggerCharacter === "-") &&
+      pythonCursor(before).kind !== "string")
+  )
+    return { suggestions: [] };
   const word = model.getWordUntilPosition(position);
   const range = lineRange(
     position,
@@ -1276,10 +1503,12 @@ async function pythonHover(
   const context = contexts.get(model);
   if (!context?.template) return null;
   const { t } = context;
+  const lineText = model.getLineContent(position.lineNumber);
+  const directive = readPythonDirective(lineText);
+  if (directive) return directiveHover(directive, position, t);
   const word = model.getWordAtPosition(position);
   if (!word) return null;
   const range = lineRange(position, word.startColumn, word.endColumn);
-  const lineText = model.getLineContent(position.lineNumber);
   const owner = /((?:\w+\.)*\w+)\.$/.exec(
     lineText.slice(0, word.startColumn - 1),
   )?.[1];
@@ -1335,6 +1564,7 @@ async function jsonCompletions(
   position: Position,
 ): Promise<monaco.languages.CompletionList> {
   const context = contexts.get(model);
+  showSuggestionDetails(false);
   const before = model
     .getLineContent(position.lineNumber)
     .slice(0, position.column - 1);
@@ -1399,7 +1629,8 @@ export function registerCodeIntelligence() {
   monaco.languages.setMonarchTokensProvider("sql", SQL_LANGUAGE);
   monaco.languages.setLanguageConfiguration("sql", SQL_CONFIGURATION);
   monaco.languages.registerCompletionItemProvider("sql", {
-    triggerCharacters: ["@", "{", ".", ":", "(", '"', ","],
+    // A space lists the names after `@icon` and `@color`; some hold a hyphen.
+    triggerCharacters: ["@", "{", ".", ":", "(", '"', ",", " ", "-"],
     provideCompletionItems: sqlCompletions,
   });
   monaco.languages.registerHoverProvider("sql", { provideHover: sqlHover });
@@ -1414,9 +1645,14 @@ export function registerCodeIntelligence() {
     provideSignatureHelp: sqlSignatureHelp,
   });
   monaco.languages.registerCompletionItemProvider("python", {
-    triggerCharacters: [".", '"', "'", "(", ","],
+    triggerCharacters: [".", '"', "'", "(", ",", "@", " ", "-"],
     provideCompletionItems: pythonCompletions,
   });
+  monaco.languages.registerCodeActionProvider(
+    "python",
+    { provideCodeActions: pythonCodeActions },
+    { providedCodeActionKinds: ["quickfix"] },
+  );
   monaco.languages.registerHoverProvider("python", {
     provideHover: pythonHover,
   });

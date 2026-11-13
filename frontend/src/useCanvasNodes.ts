@@ -5,6 +5,7 @@ import type { CanvasProps } from "./canvasTypes";
 import { warningCount } from "./ExecutionMessages";
 import { nodeInterface } from "./graph";
 import { nodeLabel, templateLabel, useT } from "./i18n";
+import { nodeIconKind } from "./nodeAppearance";
 import { displayNodeName } from "./nodeNames";
 import { nodeProgress } from "./runEstimate";
 import { useOptionalWorktree } from "./worktree";
@@ -96,11 +97,13 @@ export function useCanvasNodes(props: CanvasProps) {
               (count, state) => count + warningCount(state.results),
               0,
             ),
-            icon: node.component
-              ? "component"
-              : node.language === "python"
-                ? "python"
-                : node.preset || node.template || node.origin || "",
+            icon: nodeIconKind(node),
+            ...(signature.kind === "component"
+              ? {}
+              : {
+                  declaredIcon: signature.definition?.icon,
+                  color: signature.definition?.color,
+                }),
             linked: node.template
               ? templateLabel(
                   node.template,

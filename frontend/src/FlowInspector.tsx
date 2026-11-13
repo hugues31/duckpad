@@ -12,7 +12,8 @@ import PaletteDetails from "./PaletteDetails";
 import type { ModalState } from "./ModalHost";
 import NodeCodePanel, { type CodeReveal } from "./NodeCodePanel";
 import type { NodeAction } from "./nodeActions";
-import { nodeEntity } from "./nodeCode";
+import { withAppearance } from "./appearanceCode";
+import { nodeCode, nodeEntity, setNodeCode } from "./nodeCode";
 import type { PartitionLaunchOptions } from "./partitions";
 import type { ResultsTab } from "./results";
 import type {
@@ -188,6 +189,26 @@ export default function FlowInspector({
             fromInspector(
               inspected,
               save(base, (value) => change(value.documentation)),
+            )
+          }
+          onAppearance={(appearance, base) =>
+            fromInspector(
+              inspected,
+              save(base, (value) => {
+                // A node removed meanwhile has no code left to style.
+                if (!graphAt(value, path).nodes.some((n) => n.id === node.id))
+                  return;
+                setNodeCode(
+                  value,
+                  node,
+                  withAppearance(
+                    nodeCode(value, node, parent) ?? "",
+                    node.language,
+                    appearance,
+                  ),
+                  parent,
+                );
+              }),
             )
           }
           onInput={(port, source) =>

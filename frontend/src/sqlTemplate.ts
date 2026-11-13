@@ -6,6 +6,7 @@
  * The rules mirror `parse_template` and `validate_interface` in
  * `src/duckpad/templates.py`: an error reported here is always one there.
  */
+import { knownAppearance, type AppearanceKey } from "./nodeAppearance";
 import { RESERVED_KEYWORDS } from "./samples";
 
 /** Python's `\w`, which matches any Unicode letter or digit. */
@@ -24,6 +25,8 @@ const IDENTIFIER = new RegExp(String.raw`^[A-Za-z_]${WORD}*$`, "u");
 export const DIRECTIVES = [
   "label",
   "description",
+  "icon",
+  "color",
   "input",
   "param",
   "output",
@@ -205,7 +208,9 @@ export type TemplateProblemCode =
   | "invalidTestSeverity"
   | "messageArguments"
   | "emptyCheck"
-  | "quotedReference";
+  | "quotedReference"
+  | "unknownIcon"
+  | "unknownColor";
 export interface TemplateProblem {
   code: TemplateProblemCode;
   /** The name, type or directive the message is about. */
@@ -249,6 +254,10 @@ export function lintTemplate(text: string): TemplateProblem[] {
       endColumn: column + Math.max(length, 1),
     });
   const tests = new Set<string>();
+  const appearance = new Map<
+    AppearanceKey,
+    { value: string; line: number; column: number }
+  >();
   // Checks need a query before the next block.
   let check: { line: number; column: number; key: string } | null = null;
   let checkHasQuery = false;
@@ -267,6 +276,11 @@ export function lintTemplate(text: string): TemplateProblem[] {
     const { key, value, keyColumn, valueColumn } = found;
     if (!(DIRECTIVES as readonly string[]).includes(key))
       return at("unknownDirective", key, number, keyColumn);
+    if (key === "icon" || key === "color") {
+      // Like the server, only the last directive of each kind counts.
+      appearance.set(key, { value, line: number, column: valueColumn });
+      return;
+    }
     if (key === "param") {
       const parameter = PARAMETER.exec(value);
       if (!parameter)
@@ -306,6 +320,17 @@ export function lintTemplate(text: string): TemplateProblem[] {
     }
   });
   closeCheck();
+  // The server keeps any name: one Duckpad cannot show leaves the default look.
+  for (const [key, { value, line, column }] of appearance)
+    if (value && !knownAppearance(key, value))
+      at(
+        key === "icon" ? "unknownIcon" : "unknownColor",
+        value,
+        line,
+        column,
+        value.length,
+        "warning",
+      );
 
   const outline = outlineTemplate(text);
   const seen = new Map<string, number>();
@@ -394,6 +419,7 @@ export type SqlCursor =
     }
   | { kind: "parameterDefault"; type: string; prefix: string; quoted: boolean }
   | { kind: "testSeverity"; prefix: string }
+  | { kind: "appearance"; key: AppearanceKey; prefix: string }
   | { kind: "declaration" }
   | { kind: "reference"; prefix: string; spaced: boolean }
   | { kind: "member"; owner: string; prefix: string }
@@ -435,6 +461,8 @@ export function sqlCursor(before: string): SqlCursor {
         };
       return { kind: "declaration" };
     }
+    if (key === "icon" || key === "color")
+      return { kind: "appearance", key, prefix: value };
     if (key === "test") {
       const severity = /^\w+\s*:\s*(\w*)$/.exec(value);
       return severity

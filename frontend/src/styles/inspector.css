@@ -114,6 +114,10 @@
   background: var(--surface-alt);
   color: light-dark(#6b589c, #d0bcff);
 }
+.kind-icon.node-colored {
+  color: var(--node-color);
+  background: color-mix(in srgb, var(--node-color) 14%, var(--surface));
+}
 /* The node's main action, then the others as one bar of named icons. */
 .inspector-actions {
   flex-shrink: 0;
@@ -547,4 +551,146 @@
 .source-empty {
   display: grid;
   gap: 8px;
+}
+/* The icon and the color of a node: a summary that opens the library. */
+.appearance-toggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 5px 9px 5px 5px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  font-size: 12px;
+  text-align: left;
+}
+.appearance-toggle:enabled:hover {
+  background: var(--surface-alt);
+}
+.appearance-toggle .kind-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+}
+.appearance-toggle > svg {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.appearance-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.appearance-unknown {
+  margin: 0;
+}
+.appearance-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.appearance-picker .search {
+  margin: 0;
+}
+.appearance-picker .search input {
+  padding: 7px 0;
+}
+.appearance-colors {
+  display: flex;
+  justify-content: space-between;
+  gap: 3px;
+  padding: 3px;
+}
+.appearance-swatch {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--node-color);
+}
+/* No declared color: the look of the node's kind. */
+.appearance-swatch.default {
+  background:
+    linear-gradient(
+      135deg,
+      transparent 44%,
+      var(--edge) 44% 56%,
+      transparent 56%
+    ),
+    var(--surface);
+  box-shadow: inset 0 0 0 1.5px var(--edge);
+}
+.appearance-swatch[aria-selected="true"] {
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--node-color, var(--accent));
+}
+.appearance-swatch.default[aria-selected="true"] {
+  box-shadow:
+    inset 0 0 0 1.5px var(--edge),
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--accent);
+}
+.appearance-icons {
+  max-height: 268px;
+  margin: 0 -4px;
+  padding: 2px 4px;
+  overflow-y: auto;
+}
+.appearance-icons h5 {
+  margin: 10px 0 5px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.appearance-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(30px, 1fr));
+  gap: 2px;
+}
+.appearance-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+}
+.appearance-icon:enabled:hover {
+  background: var(--surface-alt);
+}
+.appearance-icon:focus-visible,
+.appearance-swatch:focus-visible {
+  outline-offset: 1px;
+}
+/* The chosen icon previews the chosen color. */
+.appearance-icon[aria-selected="true"] {
+  border-color: var(--node-color, var(--accent));
+  background: color-mix(
+    in srgb,
+    var(--node-color, var(--accent)) 14%,
+    var(--surface)
+  );
+  color: var(--node-color, var(--accent));
+}
+.appearance-icon.default {
+  justify-content: flex-start;
+  width: 100%;
+  padding: 0 7px;
+  font-size: 12px;
+}
+.appearance-hint {
+  margin: 0;
 }

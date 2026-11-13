@@ -164,6 +164,15 @@ def test_local_descriptions_preserve_fingerprints_and_compare_as_documentation(s
     report = compare_files(before, bundle_to_files(bundle))
     assert next(e for e in report["entities"] if e["id"] == "node/filter")["categories"] == ["documentation"]
     assert report["impact"]["direct"] == []
+    # An icon and a color are presentation too: nothing to recompute, nothing impacted.
+    renamed = bundle_to_files(bundle)
+    bundle["node_sql"]["nodes/filter.sql"] = (
+        "-- @icon filter\n-- @color green\n" + bundle["node_sql"]["nodes/filter.sql"]
+    )
+    assert engine.fingerprints.of(bundle, "dev") == fingerprints
+    report = compare_files(renamed, bundle_to_files(bundle))
+    assert next(e for e in report["entities"] if e["id"] == "node/filter")["categories"] == ["documentation"]
+    assert report["impact"]["direct"] == []
 
 
 def test_owned_export_download_and_lineage_use_local_code(services, tmp_path):

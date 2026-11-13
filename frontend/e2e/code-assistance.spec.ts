@@ -226,6 +226,8 @@ test("the code editor completes Duckpad SQL, explains references and fixes probl
   await expect(suggestions(page)).toHaveText([
     "@label",
     "@description",
+    "@icon",
+    "@color",
     "@input",
     "@param",
     "@output",

@@ -78,6 +78,8 @@ SQL definitions and parameters:
   files. Extensions must be enabled for the project. Saving or compiling does not execute SQL.
 - -- @test name: error queries return failing rows (not COUNT(*)). -- @message queries return
   level and message columns. Checks run before outputs publish or external writes occur.
+- Optional -- @icon name and -- @color name lines (# @icon and # @color comments in Python) choose
+  how a node looks without changing its results. Read the icons guide for the names.
 
 Project variables:
 - variables.json declarations are separate from SQL @param declarations. Names are lowercase
