@@ -1085,7 +1085,7 @@
   "addDatasetDescription": "Descrever este conjunto de dados…",
   "addDescription": "Adicionar uma descrição…",
   "sameColumns": "Mesmas colunas da execução anterior",
-  "schemaChanges": "Alterações dos esquemas de saída",
+  "schemaChanges": "Desde a execução anterior: {added} adicionadas, {removed} removidas, {retyped} com tipo alterado",
   "statisticsComputed": "Estatísticas das {count} linhas deste resultado · calculadas às {time} em {duration}",
   "computingStatistics": "Calculando estatísticas…",
   "computeStatistics": "Calcular estatísticas",
@@ -1760,12 +1760,14 @@
   "schemaRunSimulation": "Simular",
   "schemaFailures": "Erros de compilação",
   "schemaNoFailures": "Nenhum erro de compilação nas consultas verificadas.",
+  "schemaOutputChanges": "Alterações dos esquemas de saída",
   "schemaRenamed": "Renomeada",
   "schemaExistingFailure": "Já falha antes desta alteração",
   "schemaUnchangedNode": "Não alterado pela integração",
   "schemaUnknown": "Não foi possível verificar",
   "schemaNeedsSource": "O esquema da origem é desconhecido. Execute a origem primeiro.",
   "schemaUpstream": "Uma saída a montante falhou ou o seu esquema é desconhecido.",
+  "schemaExtension": "Usa uma função ou um tipo de uma extensão carregada apenas durante as execuções.",
   "schemaGitImpact": "Impacto nos esquemas",
   "schemaGitHint": "Verifica a integração proposta neste ambiente com entradas vazias. Os esquemas das origens vêm dos metadados retidos. As exportações listadas podem mudar; o conteúdo não é comparado."
 }

@@ -21,6 +21,19 @@ def identity(node, port, column):
     return f"{node}/{port}/{column}"
 
 
+def retained_schemas(engine, worktree, environment):
+    """Columns of every retained output, keyed by (node, port)."""
+    context = engine.pool.find(worktree, environment)
+    if context is None:
+        return {}
+    with context.lock:
+        return {
+            (key, port): deepcopy(output.columns)
+            for key, outputs in context.outputs.items()
+            for port, output in outputs.items()
+        }
+
+
 def static_nodes(bundle, environment, computed):
     """A partition filter does not change a schema; unresolved partition expressions do."""
     nodes, edges, boundaries = expand_for(bundle, environment, computed=computed)
@@ -43,15 +56,7 @@ class ColumnLineage:
         if bundle is None:
             raise Problem("Project files are invalid", 422)
         engine.catalog.environment(environment)
-        context = engine.pool.find(worktree, environment)
-        schemas = {}
-        if context:
-            with context.lock:
-                schemas = {
-                    (key, name): deepcopy(data.columns)
-                    for key, outputs in context.outputs.items()
-                    for name, data in outputs.items()
-                }
+        schemas = retained_schemas(engine, worktree, environment)
         computed = engine.pool.computed(worktree, environment, bundle)
         key = (worktree, environment, digest([bundle, sorted(schemas.items()), computed]))
         with self.lock:

@@ -1085,7 +1085,7 @@
   "addDatasetDescription": "Décrire ce jeu de données…",
   "addDescription": "Ajouter une description…",
   "sameColumns": "Mêmes colonnes qu'au run précédent",
-  "schemaChanges": "Changements des schémas de sortie",
+  "schemaChanges": "Depuis le run précédent : {added} ajoutées, {removed} supprimées, {retyped} retypées",
   "statisticsComputed": "Statistiques des {count} lignes de ce résultat · calculées à {time} en {duration}",
   "computingStatistics": "Calcul des statistiques…",
   "computeStatistics": "Calculer les statistiques",
@@ -1760,12 +1760,14 @@
   "schemaRunSimulation": "Simuler",
   "schemaFailures": "Erreurs de compilation",
   "schemaNoFailures": "Aucune erreur de compilation dans les requêtes vérifiées.",
+  "schemaOutputChanges": "Changements des schémas de sortie",
   "schemaRenamed": "Renommée",
   "schemaExistingFailure": "Échoue déjà avant ce changement",
   "schemaUnchangedNode": "Non modifié par la fusion",
   "schemaUnknown": "Vérification impossible",
   "schemaNeedsSource": "Le schéma de la source est inconnu. Exécutez la source au préalable.",
   "schemaUpstream": "Une sortie en amont a échoué ou son schéma est inconnu.",
+  "schemaExtension": "Utilise une fonction ou un type d’une extension chargée uniquement pendant les runs.",
   "schemaGitImpact": "Impact sur les schémas",
   "schemaGitHint": "Vérifie la fusion proposée dans cet environnement avec des entrées vides. Les schémas des sources proviennent des métadonnées conservées. Les exports listés peuvent changer ; leur contenu n’est pas comparé."
 }

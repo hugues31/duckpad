@@ -208,3 +208,18 @@ def test_compilation_does_not_read_external_sources_or_write_exports(services, m
     assert statements
     simulated = simulate(engine, worktree, "dev", "orders", "result", "amount", "VARCHAR")
     assert simulated["failures"]
+
+
+def test_function_from_an_unloaded_extension_is_not_a_compilation_error(services):
+    _, projects, _, engine = services
+    worktree = flow(services)
+    snapshot = projects.snapshot(worktree)
+    bundle = deepcopy(snapshot["bundle"])
+    bundle["node_sql"]["nodes/carry.sql"] = (
+        "-- @input input\n-- @output result\nSELECT *, ST_Point(1, 2) AS point FROM {{ input }};"
+    )
+    projects.write(worktree, snapshot["revision"], bundle_to_files(bundle))
+    result = simulate(engine, worktree, "dev", "source", "result", "amount", "DOUBLE")
+    assert not result["failures"]
+    assert any(f["node"] == "carry" and f["reason"] == "extension" for f in result["unknown"])
+    assert any(f["node"] == "sum" and f["reason"] == "upstream" for f in result["unknown"])

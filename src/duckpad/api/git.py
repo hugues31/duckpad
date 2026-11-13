@@ -179,9 +179,10 @@ def router(ctx: Context) -> APIRouter:
                 raise Problem("The merge proposal changed. Reload the review.", 409)
             if proposal["unresolved"] or proposal["diagnostics"]:
                 raise Problem("Resolve merge conflicts before inspecting schema impact.", 422)
-            return schema_impact.review_impact(
-                engine, worktree, data.environment, current["current"], proposal["files"]
-            )
+        # Compiling reads only these file snapshots; other writes need not wait for it.
+        return schema_impact.review_impact(
+            engine, worktree, data.environment, current["current"], proposal["files"]
+        )
 
     @api.put(
         "/api/worktrees/{worktree}/git/remote",

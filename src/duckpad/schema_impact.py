@@ -11,7 +11,7 @@ from .bundle import files_to_bundle
 from .catalog import redact
 from .column_analysis import Incomplete, analyze
 from .column_impact import inspect
-from .column_lineage import static_nodes
+from .column_lineage import retained_schemas, static_nodes
 from .column_references import query_tree
 from .comparison import potential_impact
 from .execution.statements import compile_node, statement_kind
@@ -20,18 +20,6 @@ from .node_code import code_path, find_node, template_path
 from .node_names import node_name
 from .types import Record
 from .util import Problem, digest, qi
-
-
-def retained_schemas(engine, worktree, environment):
-    context = engine.pool.find(worktree, environment)
-    if context is None:
-        return {}
-    with context.lock:
-        return {
-            (key, port): deepcopy(output.columns)
-            for key, outputs in context.outputs.items()
-            for port, output in outputs.items()
-        }
 
 
 def location(bundle, key):
@@ -151,7 +139,12 @@ def compile_schemas(engine, worktree, environment, bundle, retained, *, override
                         described = db.execute("DESCRIBE " + sql, bindings).fetchall()
                         columns = [{"name": c[0], "type": c[1]} for c in described]
                     except duckdb.Error as error:
-                        failures.append({**detail, "error": redact(str(error), secrets)})
+                        message = redact(str(error), secrets)
+                        # Project extensions are loaded only by execution workers.
+                        if isinstance(error, duckdb.CatalogException) and " extension" in message:
+                            unknown.append({**detail, "reason": "extension", "error": message})
+                        else:
+                            failures.append({**detail, "error": message})
                         continue
                 try:
                     analysis = analyze(

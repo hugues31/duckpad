@@ -54,6 +54,8 @@ function SchemaResults({
           displayNodeName(snapshot.node_names?.[entry.node], entry.node, t)}
       </strong>
       {entry.port && ` · ${entry.port}`}
+      {/* Tests, messages and exports have no port; name the checked statement. */}
+      {entry.label && entry.label !== entry.port && ` · ${entry.label}`}
       {entry.file && (
         <>
           {" "}
@@ -84,18 +86,23 @@ function SchemaResults({
         {report.failures.map((entry, i) => (
           <article className="lineage-step" key={i}>
             <header>{title(entry)}</header>
-            <p className="small">
-              {entry.label}
-              {entry.existing && ` · ${t("schemaExistingFailure")}`}
-              {entry.direct === false && ` · ${t("schemaUnchangedNode")}`}
-            </p>
+            {(entry.existing || entry.direct === false) && (
+              <p className="small">
+                {[
+                  entry.existing && t("schemaExistingFailure"),
+                  entry.direct === false && t("schemaUnchangedNode"),
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+            )}
             <pre>{entry.error}</pre>
           </article>
         ))}
       </section>
       <section className="impact-group">
         <h4>
-          {t("schemaChanges")} ({report.changes.length})
+          {t("schemaOutputChanges")} ({report.changes.length})
         </h4>
         {report.changes.map((entry, i) => (
           <article className="lineage-step" key={i}>
@@ -159,7 +166,9 @@ function SchemaResults({
                       ? "schemaNeedsSource"
                       : entry.reason === "upstream"
                         ? "schemaUpstream"
-                        : "lineageColumnIncomplete",
+                        : entry.reason === "extension"
+                          ? "schemaExtension"
+                          : "lineageColumnIncomplete",
                 )}
               </p>
               {entry.error && <pre>{entry.error}</pre>}

@@ -1085,7 +1085,7 @@
   "addDatasetDescription": "Diesen Datensatz beschreiben…",
   "addDescription": "Beschreibung hinzufügen…",
   "sameColumns": "Gleiche Spalten wie bei der vorherigen Ausführung",
-  "schemaChanges": "Änderungen der Ausgabeschemata",
+  "schemaChanges": "Seit der vorherigen Ausführung: {added} hinzugefügt, {removed} entfernt, {retyped} mit neuem Typ",
   "statisticsComputed": "Statistiken der {count} Zeilen dieses Ergebnisses · berechnet um {time} in {duration}",
   "computingStatistics": "Statistiken werden berechnet…",
   "computeStatistics": "Statistiken berechnen",
@@ -1760,12 +1760,14 @@
   "schemaRunSimulation": "Simulieren",
   "schemaFailures": "Kompilierungsfehler",
   "schemaNoFailures": "Keine Kompilierungsfehler in den geprüften Abfragen.",
+  "schemaOutputChanges": "Änderungen der Ausgabeschemata",
   "schemaRenamed": "Umbenannt",
   "schemaExistingFailure": "Schlägt bereits vor dieser Änderung fehl",
   "schemaUnchangedNode": "Durch die Zusammenführung unverändert",
   "schemaUnknown": "Prüfung nicht möglich",
   "schemaNeedsSource": "Das Quellschema ist unbekannt. Führen Sie zuerst die Quelle aus.",
   "schemaUpstream": "Eine vorgelagerte Ausgabe ist fehlgeschlagen oder ihr Schema ist unbekannt.",
+  "schemaExtension": "Verwendet eine Funktion oder einen Typ aus einer Erweiterung, die nur bei Ausführungen geladen wird.",
   "schemaGitImpact": "Auswirkungen auf Schemata",
   "schemaGitHint": "Prüft die vorgeschlagene Zusammenführung in dieser Umgebung mit leeren Eingaben. Quellschemata stammen aus vorhandenen Metadaten. Aufgeführte Exporte können sich ändern; ihre Inhalte werden nicht verglichen."
 }

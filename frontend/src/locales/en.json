@@ -1085,7 +1085,7 @@
   "addDatasetDescription": "Describe this dataset…",
   "addDescription": "Add a description…",
   "sameColumns": "Same columns as the previous run",
-  "schemaChanges": "Output schema changes",
+  "schemaChanges": "Since the previous run: {added} added, {removed} removed, {retyped} retyped",
   "statisticsComputed": "Statistics of the {count} rows of this result · computed at {time} in {duration}",
   "computingStatistics": "Computing statistics…",
   "computeStatistics": "Compute statistics",
@@ -1760,12 +1760,14 @@
   "schemaRunSimulation": "Simulate",
   "schemaFailures": "Compilation errors",
   "schemaNoFailures": "No compilation errors in the checked queries.",
+  "schemaOutputChanges": "Output schema changes",
   "schemaRenamed": "Renamed",
   "schemaExistingFailure": "Already fails before this change",
   "schemaUnchangedNode": "Unchanged by the merge",
   "schemaUnknown": "Could not check",
   "schemaNeedsSource": "The source schema is unknown. Run the source first.",
   "schemaUpstream": "An upstream output failed or its schema is unknown.",
+  "schemaExtension": "Uses a function or type from an extension that is loaded only during runs.",
   "schemaGitImpact": "Schema impact",
   "schemaGitHint": "Checks the proposed merge in this environment using empty inputs. Source schemas come from retained metadata. Exports listed here may change; their contents are not compared."
 }
