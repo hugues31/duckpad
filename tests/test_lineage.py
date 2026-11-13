@@ -88,6 +88,40 @@ def test_mixed_group_aggregates_keep_separate_contributions(services, tmp_path):
     assert result["calculation"]["evaluated"] == "50 / 3"
 
 
+@pytest.mark.parametrize(
+    ("query", "row"),
+    [
+        # A scalar subquery reads another relation: it is not an operand of the row.
+        ("SELECT id, value / (SELECT SUM(value) FROM {{ source }}) AS d FROM {{ source }} ORDER BY id", 1),
+        ("SELECT grp, SUM(value) * (SELECT COUNT(*) FROM {{ source }}) AS d FROM {{ source }} GROUP BY grp", 0),
+        # A GROUP BY expression stays one operand.
+        ("SELECT upper(grp) || COUNT(*) AS d FROM {{ source }} GROUP BY upper(grp) ORDER BY 1", 0),
+        # Operands that the captured row cannot identify fall back to the whole expression.
+        ("SELECT DISTINCT grp, value * 0 + SUM(value) OVER (PARTITION BY grp) AS d FROM {{ source }}", 0),
+    ],
+)
+def test_operands_never_make_a_covered_expression_incomplete(services, tmp_path, query, row):
+    worktree, preview, lineage = pipeline(services, tmp_path, query)
+    result = lineage.explain(worktree, "dev", preview["id"], row, "d")
+    assert result["complete"], result["warnings"]
+
+
+def test_a_distinct_group_narrows_only_its_own_operand(services, tmp_path):
+    worktree, preview, lineage = pipeline(
+        services,
+        tmp_path,
+        "SELECT COUNT(DISTINCT category) * 100 + SUM(value) AS d FROM {{ source }}",
+    )
+    result = lineage.explain(worktree, "dev", preview["id"], 0, "d")
+    distinct, total = result["operands"]
+    assert distinct["kind"] == "distinct_groups" and distinct["total"] == 7
+    assert total["total"] == 9
+    group = distinct["groups"][0]["key"]
+    page = lineage.explain(worktree, "dev", preview["id"], 0, "d", group=group, operand=distinct["id"])
+    assert page["complete"], page["warnings"]
+    assert page["total"] == distinct["groups"][0]["rows"]
+
+
 def test_unselected_group_keys_distinguish_equal_aggregate_results(services, tmp_path):
     worktree, preview, lineage = pipeline(
         services, tmp_path, "SELECT COUNT(*) AS n FROM {{ source }} GROUP BY id % 3 ORDER BY id % 3;"

@@ -70,7 +70,7 @@ def router(ctx: Context) -> APIRouter:
         dependencies=[Depends(worktree_role("reader"))],
     )
     def lineage_rows(worktree: str, data: schemas.LineageRows) -> Record:
-        return services.lineage.explain(
+        result = services.lineage.explain(
             worktree,
             data.environment,
             data.dataset,
@@ -85,6 +85,10 @@ def router(ctx: Context) -> APIRouter:
             rows_dataset=data.input_dataset,
             search=data.search,
         )
+        # Sources, Python steps and retained partition origins have no contributing rows.
+        if "rows" not in result:
+            raise Problem("This value has no contributing rows to open", 422)
+        return result
 
     @api.post(
         "/api/worktrees/{worktree}/runs", response_model=None, dependencies=[Depends(worktree_role("editor"))]

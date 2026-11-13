@@ -432,6 +432,13 @@ def expression_references_of(node):
     return {param: names for param, names in referenced(node.get("params")).items() if param in declared}
 
 
+def names_used(node):
+    """Variable names an expanded node binds to parameters or references in their text."""
+    names = set(references(node.get("params")).values())
+    names.update(name for refs in expression_references_of(node).values() for name in refs)
+    return names
+
+
 def problems(bundle):
     """Errors of variables.json and of references inside definitions. Warnings are separate."""
     variables, file_error = inspect_declarations(bundle)

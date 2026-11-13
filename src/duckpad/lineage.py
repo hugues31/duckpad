@@ -20,6 +20,13 @@ PAGE_SIZE = 5
 INTERRUPTED = "Lineage interrupted by recalculation. Select a cell in the new result."
 
 
+def selected_operand(tracer, operand):
+    part = next((part for key, _, part in tracer.operands if key == operand), None)
+    if part is None:
+        raise Problem("Unknown calculation operand", 422)
+    return render(part.contributions), render(part.context), part.distinct
+
+
 def incomplete(response, warning):
     """An explanation that states its limitation instead of presenting partial results as complete."""
     response.update(
@@ -191,28 +198,24 @@ class Lineage:
             else:
                 tracer = TraceQuery(context, cursor, dataset, row)
                 tree = tracer.normalize(dataset)
+                # Operand pages and contributing rows only need their own contributions.
+                summary = not context_values and operand is None and rows_dataset is None
                 contribution_sql, selection_sql, distinct = tracer.trace(
-                    tree, columns.index(column), context_values
+                    tree, columns.index(column), context_values, operand=operand
                 )
                 if operand is not None:
-                    selected = next((part for key, _, part in tracer.operands if key == operand), None)
-                    if selected is None:
-                        raise Problem("Unknown calculation operand", 422)
-                    contribution_sql, selection_sql, distinct = (
-                        render(selected.contributions),
-                        render(selected.context),
-                        selected.distinct,
-                    )
+                    contribution_sql, selection_sql, distinct = selected_operand(tracer, operand)
                 response["expression"] = tracer.expression
                 response["kind"] = tracer.kind
-                response["input_order"] = [
-                    {
-                        "dataset": tracer.sources[c.table].id,
-                        "column": tracer.original_column(tracer.sources[c.table], c.name),
-                    }
-                    for c in tracer.referenced(tracer.step.columns if tracer.step else [])
-                ]
-                if contribution_sql and not context_values:
+                if summary:
+                    response["input_order"] = [
+                        {
+                            "dataset": tracer.sources[c.table].id,
+                            "column": tracer.original_column(tracer.sources[c.table], c.name),
+                        }
+                        for c in tracer.referenced(tracer.step.columns if tracer.step else [])
+                    ]
+                if contribution_sql and summary:
                     first_inputs = (
                         f"SELECT * FROM ({contribution_sql}) c QUALIFY "
                         "row_number() OVER (PARTITION BY dataset, column_name ORDER BY row_id)=1"
@@ -224,29 +227,14 @@ class Lineage:
                         max(1, sum(len(d.columns) for d in tracer.sources.values())),
                     )["contributions"]
                 if distinct and not context_values:
-                    base, value_expression = distinct
                     if group is None:
-                        groups_query = f"SELECT to_json(v) AS value, COUNT(*) AS rows FROM (SELECT {value_expression} AS v {base}) q WHERE v IS NOT NULL GROUP BY v"
-                        total = cursor.execute(f"SELECT count(*) FROM ({groups_query})").fetchone()[0]
-                        rows = cursor.execute(
-                            groups_query + f" ORDER BY value LIMIT {page_size} OFFSET ?", [offset]
-                        ).fetchall()
-                        response.update(
-                            kind="distinct_groups",
-                            total=total,
-                            groups=[{"value": json.loads(v), "rows": count, "key": v} for v, count in rows],
-                            contributions=[],
-                        )
+                        response.update(self.distinct_groups(cursor, distinct, offset, page_size))
                     else:
                         contribution_sql, selection_sql, _ = tracer.trace(
-                            tree, columns.index(column), False, json.loads(group)
+                            tree, columns.index(column), False, json.loads(group), operand
                         )
                         if operand is not None:
-                            selected = next(part for key, _, part in tracer.operands if key == operand)
-                            contribution_sql, selection_sql = (
-                                render(selected.contributions),
-                                render(selected.context),
-                            )
+                            contribution_sql, selection_sql, _ = selected_operand(tracer, operand)
                         response.update(self.page(cursor, contribution_sql, offset, page_size))
                         response["group"] = json.loads(group)
                 else:
@@ -264,7 +252,7 @@ class Lineage:
                         for data in tracer.sources.values()
                     ],
                 )
-                if not context_values:
+                if summary:
                     response["calculation"] = tracer.describe(response)
                     if tracer.operands and tracer.step is not None:
                         display = Display(tracer, tracer.step.tree)
@@ -275,14 +263,19 @@ class Lineage:
                                 "value": clean(tracer.operand_values[key]),
                                 "aggregate": expression.find(exp.AggFunc, exp.Window) is not None,
                                 "operation": aggregate_operation(expression) or "expression",
-                                **self.page(cursor, render(part.contributions), 0, PAGE_SIZE),
+                                **(
+                                    self.distinct_groups(cursor, part.distinct, 0, PAGE_SIZE)
+                                    if part.distinct
+                                    else self.page(cursor, render(part.contributions), 0, PAGE_SIZE)
+                                ),
                             }
                             for key, expression, part in tracer.operands
                         ]
-                response["partition_groups"] = self.partitions.groups(
-                    context, cursor, contribution_sql, tracer.sources
-                )
-                if rows_dataset is not None:
+                if rows_dataset is None:
+                    response["partition_groups"] = self.partitions.groups(
+                        context, cursor, contribution_sql, tracer.sources
+                    )
+                else:
                     data = next((d for d in tracer.sources.values() if d.id == rows_dataset), None)
                     if data is None or not contribution_sql:
                         raise Problem("This dataset does not contribute to the selected value", 422)
@@ -318,6 +311,21 @@ class Lineage:
             cursor.close()
 
     @staticmethod
+    def distinct_groups(cursor, distinct, offset, page_size):
+        base, value_expression = distinct
+        groups_query = f"SELECT to_json(v) AS value, COUNT(*) AS rows FROM (SELECT {value_expression} AS v {base}) q WHERE v IS NOT NULL GROUP BY v"
+        total = cursor.execute(f"SELECT count(*) FROM ({groups_query})").fetchone()[0]
+        rows = cursor.execute(
+            groups_query + f" ORDER BY value LIMIT {page_size} OFFSET ?", [offset]
+        ).fetchall()
+        return {
+            "kind": "distinct_groups",
+            "total": total,
+            "groups": [{"value": json.loads(v), "rows": count, "key": v} for v, count in rows],
+            "contributions": [],
+        }
+
+    @staticmethod
     def rows(cursor, dataset, query, offset, page_size, search):
         """Page whole contributing rows, recomputed from witnesses and never stored."""
         projection = ", ".join(qi(dataset.stored(c["name"])) for c in dataset.columns)
@@ -326,6 +334,7 @@ class Lineage:
         count = cursor.execute(
             f"SELECT count(*) FROM {qi(dataset.relation)} WHERE {selected}", parameters
         ).fetchone()[0]
+        total = count
         if search:
             selected += (
                 " AND ("
@@ -335,9 +344,9 @@ class Lineage:
                 + ")"
             )
             parameters += [f"%{search}%"] * len(dataset.columns)
-        total = cursor.execute(
-            f"SELECT count(*) FROM {qi(dataset.relation)} WHERE {selected}", parameters
-        ).fetchone()[0]
+            total = cursor.execute(
+                f"SELECT count(*) FROM {qi(dataset.relation)} WHERE {selected}", parameters
+            ).fetchone()[0]
         records = cursor.execute(
             f"SELECT rowid, {projection} FROM {qi(dataset.relation)} WHERE {selected} ORDER BY rowid LIMIT ? OFFSET ?",
             [*parameters, page_size, max(0, offset)],

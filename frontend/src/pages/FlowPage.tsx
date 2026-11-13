@@ -9,7 +9,12 @@ import {
   useState,
   type CSSProperties,
 } from "react";
-import { useLocation, useOutletContext, useSearchParams } from "react-router";
+import {
+  useLocation,
+  useNavigationType,
+  useOutletContext,
+  useSearchParams,
+} from "react-router";
 import BranchResultsNotice from "../BranchResultsNotice";
 import Canvas from "../Canvas";
 import CanvasHeader from "../CanvasHeader";
@@ -83,6 +88,7 @@ export default function FlowPage() {
   const view = useOutletContext<FlowView>();
   const { path, selected, cell } = view;
   const location = useLocation();
+  const navigation = useNavigationType();
   const [params, setParams] = useSearchParams();
   const urlTarget = useMemo(() => readLineageTarget(params), [params]);
   const lineageTarget = useMemo(
@@ -104,8 +110,17 @@ export default function FlowPage() {
     useState<ContributingRows | null>(null);
   const changeLineage = (target: LineageTarget | null) => {
     view.change({ cell: null });
-    setParams(writeLineageTarget(params, target));
+    setContributingRows(null);
+    const next = writeLineageTarget(params, target);
+    // Choosing the explained cell again adds no history entry.
+    if (next.toString() !== params.toString())
+      // The node parameter makes the link shareable; in the page it is not a reveal.
+      setParams(next, { state: { lineage: true } });
     if (target) panels.set({ inspector: true });
+  };
+  /** An explicit request for the inspector, code or palette details ends the exploration. */
+  const closeLineage = () => {
+    if (lineageTarget) changeLineage(null);
   };
   const sizes = usePanelSizes();
   const canvas = useRef<CanvasHandle>(null);
@@ -254,13 +269,26 @@ export default function FlowPage() {
   );
   // Reveal the node named by a search result, once per navigation.
   useEffect(() => {
-    if (!bundle || view.revealed === location.key) return;
+    // Lineage keeps the node in its links; only Back or Forward reveals it again.
+    if (
+      !bundle ||
+      view.revealed === location.key ||
+      (location.state?.lineage && navigation !== "POP")
+    )
+      return;
     const target = new URLSearchParams(location.search).get("node");
     if (!target && !location.state?.searchResult) return;
     // A navigation, not a user event on this page, names the node to select.
     // eslint-disable-next-line react-hooks/set-state-in-effect -- once per location key
     reveal(target ? resolveNodePath(bundle, target) : { path: [], id: null });
-  }, [bundle, view.revealed, location.key, location.search, location.state]);
+  }, [
+    bundle,
+    view.revealed,
+    location.key,
+    location.search,
+    location.state,
+    navigation,
+  ]);
 
   const {
     addingNode,
@@ -283,17 +311,20 @@ export default function FlowPage() {
     setFocusRequest,
     safe,
   });
+  const componentPart = (instance: FlowNode & { component: string }) => ({
+    instance: instance.id,
+    definition: instance.component,
+    label:
+      instance.label ||
+      bundle!.components[instance.component].name ||
+      instance.id,
+  });
   function openComponent(id: string) {
     const instance = graph?.nodes.find((n) => n.id === id);
     if (!instance?.component) return;
     select(null, [
       ...path,
-      {
-        instance: id,
-        definition: instance.component,
-        label:
-          instance.label || bundle!.components[instance.component].name || id,
-      },
+      componentPart({ ...instance, component: instance.component }),
     ]);
   }
 
@@ -308,14 +339,7 @@ export default function FlowPage() {
       view.change({
         path: [
           ...found.path,
-          {
-            instance: current.id,
-            definition: current.component,
-            label:
-              current.label ||
-              bundle.components[current.component].name ||
-              current.id,
-          },
+          componentPart({ ...current, component: current.component }),
         ],
         selected: null,
       });
@@ -357,6 +381,7 @@ export default function FlowPage() {
     // The code of a node of this graph docks beside the canvas, in the inspector's place.
     const shown = graph.nodes.find((item) => prefix + item.id === target);
     if (shown && !shown.component) {
+      closeLineage();
       if (shown.id !== selected) select(shown.id);
       view.change({ code: true, paletteNode: null });
       panels.set({ inspector: true });
@@ -443,6 +468,7 @@ export default function FlowPage() {
         onDismiss={closePaletteDetails}
         onInspect={(kind, id, trigger, keyboard) => {
           paletteTrigger.current = trigger;
+          closeLineage();
           view.change({ paletteNode: { kind, id, keyboard }, cell: null });
           panels.set({
             inspector: true,
@@ -488,7 +514,9 @@ export default function FlowPage() {
           onTogglePalette={() => panels.set({ palette: !panels.open.palette })}
           onTogglePreview={() => panels.set({ preview: !panels.open.preview })}
           onToggleInspector={() =>
-            panels.set({ inspector: !panels.open.inspector })
+            lineageTarget
+              ? closeLineage()
+              : panels.set({ inspector: !panels.open.inspector })
           }
           onGroup={() =>
             openModal({
@@ -639,6 +667,12 @@ export default function FlowPage() {
         <LineagePanel
           target={lineageTarget}
           onChange={changeLineage}
+          onClose={() => {
+            changeLineage(null);
+            // Focus returns to the node whose inspector comes back.
+            if (selected)
+              setFocusRequest({ id: selected, key: String(Date.now()) });
+          }}
           onMap={setLineageMap}
           onHover={setLineageHover}
           onOpen={openLineageNode}

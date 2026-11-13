@@ -11,12 +11,18 @@ from .coverage import Coverage
 from .step import cell_columns
 
 
-def parts(target):
+def parts(target, keys=()):
+    """Aggregates, windows and scalar terms of a mixed expression; a GROUP BY key stays whole."""
     result = []
 
     def collect(node):
-        if isinstance(node, (exp.Window, exp.AggFunc, exp.Column)) or (
-            isinstance(node, exp.Filter) and node.find(exp.AggFunc)
+        # A scalar subquery reads other relations: it is not an operand of this row.
+        if isinstance(node, (exp.Subquery, exp.Query)):
+            return
+        if (
+            isinstance(node, (exp.Window, exp.AggFunc, exp.Column))
+            or (isinstance(node, exp.Filter) and node.find(exp.AggFunc))
+            or node in keys
         ):
             if node not in result:
                 result.append(node)
@@ -31,11 +37,15 @@ def parts(target):
     return result
 
 
-def trace_parts(tracer, step, visitors):
+def trace_parts(tracer, step, visitors, operand=None):
+    """Trace each operand; a chosen distinct value applies only to the requested operand."""
+    group = step.tree.args.get("group")
     result = []
-    for index, expression in enumerate(parts(step.target)):
+    for index, expression in enumerate(parts(step.target, group.expressions if group else ())):
         columns, conditions = cell_columns(tracer, step.tree, expression)
         part = replace(step, target=expression, columns=columns, conditions=conditions)
+        if operand is not None and str(index) != operand:
+            part = replace(part, distinct_value=...)
         visitor = next(visitor for visitor in visitors if visitor.accepts(part))
         result.append((str(index), expression, visitor(tracer).visit(part)))
     return result

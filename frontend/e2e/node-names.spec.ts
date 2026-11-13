@@ -123,14 +123,14 @@ test("display names follow SQL and templates through messages, lineage, usages a
   await page
     .getByRole("button", { name: /Explain this value: amount, rows 1,/ })
     .click();
-  const lineage = page.getByRole("dialog", {
-    name: "How this value was calculated",
+  const lineage = page.getByRole("complementary", {
+    name: "Lineage",
+    exact: true,
   });
-  await expect(lineage.locator(".lineage-card.is-source")).toContainText(
+  await expect(lineage.locator(".lineage-step.is-source")).toContainText(
     "Revenue report",
   );
   await expect(lineage).not.toContainText("node_report");
-  await page.keyboard.press("Escape");
   await page.goto(`/worktrees/${id}/variables`);
   await page.getByRole("button", { name: "minimum", exact: true }).click();
   await expect(page.locator(".variable-usage-row")).toContainText("Filter");

@@ -24,19 +24,27 @@ import { LineageSteps, TableSteps, type LineageMap } from "./LineageSteps";
 export default function LineagePanel({
   target,
   onChange,
+  onClose,
   onMap,
   onHover,
   onOpen,
   onRows,
 }: {
   target: LineageTarget;
-  onChange: (target: LineageTarget | null) => void;
+  onChange: (target: LineageTarget) => void;
+  onClose: () => void;
   onMap: (map: LineageMap | null) => void;
   onHover: (node: string | null) => void;
   onOpen: (node: string) => void;
   onRows: (rows: ContributingRows) => void;
 }) {
   const t = useT();
+  const panel = useRef<HTMLElement>(null);
+  // Opening from the inspector's actions unmounts the focused button.
+  useEffect(() => {
+    if (document.activeElement === document.body)
+      panel.current?.querySelector<HTMLElement>("h2")?.focus();
+  }, []);
   const { id: worktree, snapshot, environment } = useLoadedWorktree();
   const { data: tables, error } = useApiResource<TableLineage>(
     withQuery(`/worktrees/${worktree}/lineage/tables`, {
@@ -47,8 +55,23 @@ export default function LineagePanel({
     }),
     { refresh: snapshot.revision },
   );
-  const [parents, setParents] = useState<LineageTarget[]>([]);
+  // Python parent cells followed from this panel; another cell hides the way back.
+  const [parents, setParents] = useState<
+    { from: LineageTarget; to: LineageTarget }[]
+  >([]);
+  const parent = parents.at(-1);
+  const back =
+    parent?.to.cell &&
+    target.cell &&
+    cellId(parent.to.cell) === cellId(target.cell)
+      ? parent.from
+      : undefined;
   const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
   const explanation = useRef("");
   const name = displayNodeName(
     snapshot.node_names?.[target.node],
@@ -65,6 +88,7 @@ export default function LineagePanel({
   };
   return (
     <aside
+      ref={panel}
       className="inspector lineage-panel"
       id="node-inspector"
       aria-label={t("lineage")}
@@ -72,26 +96,25 @@ export default function LineagePanel({
         if (event.key === "Escape" && !event.defaultPrevented) {
           event.preventDefault();
           event.stopPropagation();
-          onChange(null);
+          onClose();
         }
       }}
     >
       <header className="lineage-header">
-        {!!parents.length && (
+        {back && (
           <button
             className="icon"
             title={t("lineageBackToPython")}
             aria-label={t("lineageBackToPython")}
             onClick={() => {
-              onChange(parents.at(-1)!);
+              onChange(back);
               setParents((current) => current.slice(0, -1));
             }}
           >
             <ArrowLeft size={16} />
           </button>
         )}
-
-        <h2>
+        <h2 tabIndex={-1}>
           <GitBranch size={18} />
           {t("lineage")}
         </h2>
@@ -126,7 +149,7 @@ export default function LineagePanel({
           className="icon"
           title={t("close")}
           aria-label={t("close")}
-          onClick={() => onChange(null)}
+          onClick={onClose}
         >
           <X size={18} />
         </button>
@@ -170,7 +193,10 @@ export default function LineagePanel({
               onOpen={onOpen}
               onRows={onRows}
               onChange={(next) => {
-                setParents((current) => [...current, target]);
+                setParents((current) => [
+                  ...(back ? current : []),
+                  { from: target, to: next },
+                ]);
                 onChange(next);
               }}
               onText={(text) => {
@@ -207,7 +233,7 @@ function ValueLineage({
   onHover: (node: string | null) => void;
   onOpen: (node: string) => void;
   onRows: (rows: ContributingRows) => void;
-  onChange: (target: LineageTarget | null) => void;
+  onChange: (target: LineageTarget) => void;
   onText: (text: string) => void;
 }) {
   const t = useT();

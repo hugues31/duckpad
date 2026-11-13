@@ -76,7 +76,7 @@ export function usePanelSizes() {
     previewMax,
   );
   const lineage = clamp(
-    preferences.lineage ?? 540,
+    preferences.lineage ?? clamp(width * 0.4, 440, 540),
     Math.min(360, codeMax),
     codeMax,
   );

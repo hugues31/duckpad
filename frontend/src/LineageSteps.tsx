@@ -1,8 +1,9 @@
 import { ArrowUpRight, Boxes, Database, GitBranch } from "lucide-react";
 import { Fragment, useEffect, useState } from "react";
+import { useNavigate } from "react-router";
 import { api, withQuery } from "./api";
 import { formatValue } from "./graph";
-import { useT } from "./i18n";
+import { countLabel, useT } from "./i18n";
 import {
   cellId,
   type Cell,
@@ -16,18 +17,23 @@ import {
   type TableLineage,
 } from "./lineageGraph";
 import { nodeLocation } from "./nodeCode";
+import { worktreeUrl } from "./navigation";
 import { displayNodeName } from "./nodeNames";
 import type { PartitionPage } from "./partitions";
 import { useLoadedWorktree } from "./worktree";
 
 export type LineageMap = Record<string, { value?: unknown }>;
+// Formulas stay SQL: a fixed decimal point, and small numbers keep their digits.
+const ROUNDED = new Intl.NumberFormat("en", {
+  maximumFractionDigits: 6,
+  useGrouping: false,
+});
 export const roundedValue = (value: unknown) =>
-  typeof value === "number" && Number.isFinite(value)
-    ? new Intl.NumberFormat(undefined, {
-        maximumFractionDigits: 6,
-        useGrouping: false,
-      }).format(value)
-    : formatValue(value);
+  typeof value !== "number" || !Number.isFinite(value)
+    ? formatValue(value)
+    : value !== 0 && Math.abs(value) < 1e-4
+      ? value.toPrecision(3)
+      : ROUNDED.format(value);
 const roundedExpression = (expression: string) =>
   expression
     .split(/('(?:[^']|'')*')/)
@@ -184,33 +190,29 @@ export function TableSteps({
       <h3>
         {t(direction === "origin" ? "lineageUpstream" : "lineageDownstream")}
       </h3>
-      {tables.seeds.map((seed) => tree(seed))}
+      {tables.seeds.map((seed) => (seen.has(seed) ? null : tree(seed)))}
     </>
   );
 }
 
-function Resource({ node, tables }: { node: string; tables: TableLineage }) {
+function useResource(node: string, tables: TableLineage) {
   const { snapshot } = useLoadedWorktree();
-  const resource = tables.nodes[node]?.resource || {};
-  return (
-    <span className="muted small">
-      {Object.entries(resource)
-        .map(([key, value]) => {
-          if (value === null || value === undefined || value === "")
-            return null;
-          if (key === "connection")
-            return (
-              snapshot.connections.find((c) => c.id === value)?.name ||
-              String(value)
-            );
-          return typeof value === "object"
-            ? JSON.stringify(value)
-            : String(value);
-        })
-        .filter(Boolean)
-        .join(" · ")}
-    </span>
-  );
+  return Object.entries(tables.nodes[node]?.resource || {})
+    .map(([key, value]) => {
+      if (value === null || value === undefined || value === "") return null;
+      if (key === "connection")
+        return (
+          snapshot.connections.find((c) => c.id === value)?.name ||
+          String(value)
+        );
+      return typeof value === "object" ? JSON.stringify(value) : String(value);
+    })
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function Resource({ node, tables }: { node: string; tables: TableLineage }) {
+  return <span className="muted small">{useResource(node, tables)}</span>;
 }
 
 export function LineageSteps({
@@ -287,10 +289,12 @@ export function LineageSteps({
       seen.add(other.id);
       anchors.set(other.id, id);
     });
+    // Steps inside the same node (CTEs) are shown above, not as inputs.
     const children = [
       ...new Map(
         sameNode
           .flatMap((other) => other.children)
+          .filter((child) => entries.get(child.id)?.result.node !== node)
           .map((child) => [child.id, child]),
       ).values(),
     ];
@@ -389,7 +393,9 @@ function StepDetails({
 }) {
   const t = useT();
   const worktree = useLoadedWorktree();
+  const navigate = useNavigate();
   const { result } = entry;
+  const resource = useResource(result.node || "", tables);
   const [page, setPage] = useState(result);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -414,6 +420,12 @@ function StepDetails({
         );
         if (found) {
           worktree.selectPartition(found);
+          // The run interrupts this exploration: show the node it recomputes.
+          navigate(
+            worktreeUrl(worktree.id, "flow", worktree.environment, {
+              node: value.node,
+            }),
+          );
           await worktree.run(value.node, { partitions: value.partitions });
           return;
         }
@@ -471,9 +483,10 @@ function StepDetails({
         </p>
       )}
       {result.kind === "source" && (
-        <p className="lineage-source-location">
-          <Resource node={result.node || ""} tables={tables} /> ·{" "}
-          {t("lineageRow")} {result.row + 1}
+        <p className="lineage-source-location muted small">
+          {[resource, `${t("lineageRow")} ${result.row + 1}`]
+            .filter(Boolean)
+            .join(" · ")}
         </p>
       )}
       {!result.complete && (
@@ -763,21 +776,22 @@ function Contributions({
             )}
           </div>
           <div className="row gap">
-            <button
-              className="text-button"
-              disabled={busy || disabled}
-              onClick={() => {
-                if (expanded) setExpanded(false);
-                else if (items.length > 5 || items.length >= page.total)
-                  setExpanded(true);
-                else void load(items.length);
-              }}
-            >
-              {t(expanded ? "lineageHideValues" : "lineageShowValues").replace(
-                "{count}",
-                String(page.total),
-              )}
-            </button>
+            {page.total > 5 && (
+              <button
+                className="text-button"
+                disabled={busy || disabled}
+                onClick={() => {
+                  if (expanded) setExpanded(false);
+                  else if (items.length > 5 || items.length >= page.total)
+                    setExpanded(true);
+                  else void load(items.length);
+                }}
+              >
+                {t(
+                  expanded ? "lineageHideValues" : "lineageShowValues",
+                ).replace("{count}", String(page.total))}
+              </button>
+            )}
             <small className="muted">{t("lineageChooseValue")}</small>
           </div>
           {expanded && items.length < page.total && (
@@ -798,7 +812,7 @@ function Contributions({
                 onClick={() => onRows({ query: { ...query, group }, input })}
               >
                 <ArrowUpRight size={13} />
-                {t("lineageOpenRows").replace("{count}", String(page.total))}
+                {countLabel(t, page.total, "lineageOpenRow", "lineageOpenRows")}
               </button>
             ),
           )}

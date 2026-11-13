@@ -11,9 +11,10 @@ from ..sqlast import explained, sql
 from ..util import digest, qi
 from . import builders as b
 from .aggregate import AggregateVisitor
+from .coverage import Coverage
 from .describe import describe
 from .normalize import normalize
-from .operands import trace_parts
+from .operands import trace_parts, values
 from .rows import DistinctVisitor, FilterVisitor, JoinVisitor, ProjectionVisitor
 from .set_operation import SetOperationVisitor
 from .step import Step
@@ -40,14 +41,14 @@ class TraceQuery:
     def normalize(self, dataset):
         return normalize(self, dataset)
 
-    def trace(self, tree, column_index, all_context=False, distinct_value=...):
+    def trace(self, tree, column_index, all_context=False, distinct_value=..., operand=None):
         """Contribution and selection queries for one output column, and distinct value groups."""
         if isinstance(tree, exp.SetOperation):
             result = SetOperationVisitor(self).visit(tree, column_index)
         else:
             self.step = Step.analyze(self, tree, column_index, all_context, distinct_value)
             self.expression = explained(self.step.target)
-            self.operands = trace_parts(self, self.step, VISITORS)
+            self.operands, self.operand_values = self.split(operand)
             if self.operands:
                 self.kind = "expression"
                 return (
@@ -71,6 +72,17 @@ class TraceQuery:
             self.kind = visitor.kind
             result = visitor(self).visit(self.step)
         return render(result.contributions), render(result.context), result.distinct
+
+    def split(self, operand):
+        """Operands and their captured values, or none: the whole expression is then traced as on a plain step."""
+        try:
+            operands = trace_parts(self, self.step, VISITORS, operand)
+            if not operands:
+                return [], {}
+            captured = values(self, self.step, [expression for _, expression, _ in operands])
+        except (Coverage, duckdb.Error, ValueError):
+            return [], {}
+        return operands, dict(zip((key for key, _, _ in operands), captured, strict=True))
 
     def describe(self, response):
         return describe(self, response)

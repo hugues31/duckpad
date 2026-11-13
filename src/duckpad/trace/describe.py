@@ -5,7 +5,6 @@ from sqlglot import exp
 from ..sqlast import explained, sql
 from ..util import Problem
 from . import builders as b
-from .operands import values
 
 OPERATIONS = (exp.Sum, exp.Avg, exp.Min, exp.Max, exp.Count)
 
@@ -114,10 +113,9 @@ def evaluate(tracer, step, response):
     """
     target = step.target
     if tracer.operands:
-        expressions = [expression for _, expression, _ in tracer.operands]
-        captured = values(tracer, step, expressions)
-        tracer.operand_values = dict(zip((key for key, _, _ in tracer.operands), captured, strict=True))
-        replacements = dict(zip(expressions, map(b.value, captured), strict=True))
+        replacements = {
+            expression: b.value(tracer.operand_values[key]) for key, expression, _ in tracer.operands
+        }
         return target.transform(lambda node: replacements[node].copy() if node in replacements else node)
     if (
         target.find(exp.AggFunc, exp.Window)

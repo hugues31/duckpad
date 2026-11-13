@@ -90,9 +90,7 @@ def dependencies(nodes, edges, sources):
         adjacency[edge["source"]].append((edge["target"], []))
     uses = {}
     for key, node in nodes.items():
-        names = set(variables.references(node.get("params")).values())
-        names.update(name for names in variables.expression_references_of(node).values() for name in names)
-        uses[key] = names & sources.keys()
+        uses[key] = variables.names_used(node) & sources.keys()
         for name in uses[key]:
             if "node" in sources[name]:
                 adjacency[sources[name]["node"]].append((key, [f"var.{name}"]))
@@ -136,8 +134,7 @@ def problems(bundle, nodes, edges, boundaries, partition_phase=()):
     phase, invalid = dependencies(nodes, edges, declared)
     for key in set(partition_phase) | phase:
         node = nodes[key]
-        used = set(variables.references(node.get("params")).values())
-        used.update(n for names in variables.expression_references_of(node).values() for n in names)
+        used = variables.names_used(node)
         if node.get("partitioned") or (key in partition_phase and used & declared.keys()):
             invalid.setdefault(
                 key,

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, send } from "./api";
 import DataGrid from "./DataGrid";
 import { formatValue } from "./graph";
@@ -24,18 +24,30 @@ export default function ContributingRowsData({
   const t = useT();
   const [offset, setOffset] = useState(0);
   const [search, setSearch] = useState("");
+  const [query, setQuery] = useState("");
+  // Like Data, search once typing pauses.
+  useEffect(() => {
+    if (search === query) return;
+    const timer = setTimeout(() => {
+      setQuery(search);
+      setOffset(0);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [search, query]);
   const body = {
     ...value.query,
     input_dataset: value.input.dataset,
     offset,
-    search,
+    search: query,
     page_size: 100,
     environment,
   };
+  // The current page stays visible while another page or search loads.
   const { data, error, pending } = useResource<PreviewPage>(
-    JSON.stringify(body),
+    JSON.stringify([value.query, value.input.dataset, environment]),
     (signal) =>
       api(`/worktrees/${worktree}/lineage/rows`, { ...send(body), signal }),
+    { refresh: JSON.stringify(body) },
   );
   return (
     <div className="results-data">
@@ -47,10 +59,7 @@ export default function ContributingRowsData({
         <input
           type="search"
           value={search}
-          onChange={(event) => {
-            setSearch(event.target.value);
-            setOffset(0);
-          }}
+          onChange={(event) => setSearch(event.target.value)}
           aria-label={t("searchAllColumns")}
           placeholder={t("searchAllColumns")}
         />
@@ -68,6 +77,8 @@ export default function ContributingRowsData({
           <button
             className="cell"
             disabled={pending}
+            title={t("explain")}
+            aria-label={`${t("explain")}: ${column.name}, ${t("rows")} ${row.id + 1}, ${formatValue(content)}`}
             onClick={() =>
               data &&
               onExplain({

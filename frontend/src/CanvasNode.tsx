@@ -20,7 +20,7 @@ import { memo, useEffect, type CSSProperties } from "react";
 import { Value } from "./LineageSteps";
 import { CanvasPorts, PORT_GROUP_THRESHOLD } from "./CanvasPorts";
 import { WarningBadge } from "./ExecutionMessages";
-import { useT, type Translate } from "./i18n";
+import { countLabel, useT, type Translate } from "./i18n";
 import { colorClass } from "./nodeAppearance";
 import { nodeIcon } from "./nodeIcons";
 import { NodeProgressFill } from "./NodeProgressFill";
@@ -257,9 +257,11 @@ export function PipelineNodeView({
           <Value value={data.lineage.value} />
           {data.lineage.steps > 0 && (
             <small>
-              {t("lineageStepsInside").replace(
-                "{count}",
-                String(data.lineage.steps),
+              {countLabel(
+                t,
+                data.lineage.steps,
+                "lineageStepInside",
+                "lineageStepsInside",
               )}
             </small>
           )}

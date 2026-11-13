@@ -915,8 +915,10 @@ test("double-click opens Python code and read-only nodes cannot be changed", asy
     exact: true,
   });
   await expect(actions).toBeVisible();
+  // Lineage only reads, so it stays available.
   for (const button of await actions.getByRole("button").all())
-    await expect(button).toBeDisabled();
+    if ((await button.getAttribute("aria-label")) !== "Lineage")
+      await expect(button).toBeDisabled();
   const before = (await read()).revision;
   await node(page, "python_node").locator(".node-shape").dblclick();
   await expect(codePanel(page).locator(".monaco-editor")).toBeVisible();

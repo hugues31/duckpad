@@ -7,6 +7,8 @@ from .util import Problem
 
 
 def describe(bundle, node, port=None, direction="origin", environment="dev"):
+    if bundle is None:
+        raise Problem("Project files are invalid", 422)
     nodes, edges, boundaries = expand(bundle, tolerant=True)
     if node not in nodes and node not in boundaries:
         raise Problem("Node not found", 404)
@@ -14,8 +16,7 @@ def describe(bundle, node, port=None, direction="origin", environment="dev"):
     sources = value_sources.sources(bundle, nodes, boundaries)
     used = {}
     for key, item in nodes.items():
-        names = set(variables.references(item.get("params")).values())
-        names.update(name for refs in variables.expression_references_of(item).values() for name in refs)
+        names = variables.names_used(item)
         used[key] = [{"name": name, "node": sources.get(name, {}).get("node")} for name in sorted(names)]
         edges.extend(
             {"source": sources[name]["node"], "target": key, "variable": name}
@@ -24,13 +25,12 @@ def describe(bundle, node, port=None, direction="origin", environment="dev"):
         )
     if node in nodes:
         seeds = [node]
-    elif direction == "origin":
+    else:
+        # A component starts from the inner nodes producing its outputs, in both directions.
         outputs = boundaries[node]["outputs"]
         if port and port not in outputs:
             raise Problem("Output not found", 404)
-        seeds = [value[0] for name, value in outputs.items() if not port or name == port]
-    else:
-        seeds = [key for key in nodes if key.startswith(node + "::")]
+        seeds = list(dict.fromkeys(value[0] for name, value in outputs.items() if not port or name == port))
     selected = reachable(seeds, edges, upstream=direction == "origin")
     result = {}
     for key, item in nodes.items():

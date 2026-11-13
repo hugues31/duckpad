@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import { signIn } from "./helpers";
+import { codePanel, signIn } from "./helpers";
 import fr from "../src/locales/fr.json" with { type: "json" };
 import pt from "../src/locales/pt.json" with { type: "json" };
 
@@ -181,6 +181,31 @@ test("a new cell updates the panel and browser Back restores the previous cell",
   await panel.getByRole("button", { name: "Close", exact: true }).click();
   await expect(panel).toHaveCount(0);
   await expect(page.locator("#node-inspector .inspector")).toBeVisible();
+});
+
+test("closing or opening code ends the exploration and its contributing rows", async ({
+  page,
+}) => {
+  await example(page);
+  const panel = await explain(page, "net_revenue");
+  await panel.getByRole("button", { name: "Open the 27 rows in Data" }).click();
+  const data = page.getByRole("region", { name: "Results", exact: true });
+  await expect(data).toContainText("Contributing rows");
+  await panel.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(panel).toHaveCount(0);
+  await expect(data).not.toContainText("Contributing rows");
+  await expect(page.locator("#node-inspector .inspector")).toBeVisible();
+  // Back reopens the exploration on the canvas level of its node.
+  await page.goBack();
+  await expect(panel.locator(".lineage-step.root")).toBeVisible();
+  await page.getByRole("button", { name: "Fit view", exact: true }).click();
+  await page
+    .locator(".react-flow__node")
+    .filter({ has: page.getByText("Paid orders", { exact: true }) })
+    .locator(".node-shape")
+    .dblclick();
+  await expect(codePanel(page).locator(".monaco-editor")).toBeVisible();
+  await expect(panel).toHaveCount(0);
 });
 
 test("recalculation interrupts and a saved old link never explains the new generation", async ({

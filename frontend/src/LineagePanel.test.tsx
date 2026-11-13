@@ -72,6 +72,7 @@ function Explorer({ dataset, row }: { dataset: string; row: number }) {
       <LineagePanel
         target={target}
         onChange={onChange}
+        onClose={() => onChange(null)}
         onMap={ignore}
         onHover={ignore}
         onOpen={ignore}

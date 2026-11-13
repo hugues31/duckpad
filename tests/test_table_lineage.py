@@ -23,6 +23,8 @@ def test_northstar_table_lineage_without_any_run(services):
     assert any(
         v["name"] == "report_month" and v["node"] == "period" for v in export["nodes"]["export"]["variables"]
     )
+    # A component output impacts what reads it, not the inner nodes feeding it.
+    assert set(describe(bundle, "report", "report", "impact")["nodes"]) == {"report::rank", "export"}
     impact = describe(bundle, "period", direction="impact")
     assert impact["nodes"]["export"]["export"]
     assert "orders" not in impact["nodes"]

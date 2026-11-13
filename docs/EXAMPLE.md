@@ -53,6 +53,9 @@ Component headers expose their internal steps. **Open on the canvas** opens Regi
 
 For an overview without executing anything, use a node's **Lineage** action. **Origin** lists its sources and upstream dependencies; **Impact** lists downstream consumers and exports. Export revenue also depends on Reporting period through the computed `report_month` variable.
 
+Write project and node descriptions in their **Documentation** tabs; edit
+dataset and column descriptions in **Results → Columns**.
+
 ## Inspect the SQL
 
 Open the **Code** tab and select `templates/sql.sql` in the project file tree.

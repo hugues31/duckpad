@@ -220,16 +220,15 @@ test("capture project creation, results, lineage and SQL", async ({ page }) => {
   await expect(page.locator(".preview-header .badge")).toHaveText("Valid");
   await capture(page, "workspace");
   await revenue.click();
-  const lineage = page.getByRole("dialog", {
-    name: "How this value was calculated",
+  const lineage = page.getByRole("complementary", {
+    name: "Lineage",
+    exact: true,
   });
-  await expect(lineage).toContainText("Sum of 27 contributing values", {
-    ignoreCase: true,
-  });
-  await expect(lineage.locator(".lineage-card.is-source")).toHaveCount(5);
-  await capture(page, "lineage", lineage);
-  await captureForReadme(page, "readme-lineage", lineage);
-  await page.keyboard.press("Escape");
+  await expect(lineage.locator(".lineage-step.root")).toBeVisible();
+  await expect(lineage.locator(".lineage-loading")).toHaveCount(0);
+  await expect(lineage).toContainText("+ 22 more");
+  await captureForReadme(page, "readme-lineage");
+  await lineage.getByRole("button", { name: "Close", exact: true }).click();
   await page.getByRole("link", { name: "Code", exact: true }).click();
   await page.getByRole("treeitem", { name: "templates", exact: true }).click();
   await page
@@ -307,18 +306,21 @@ test("capture the quickstart using the SQL printed in the guide", async ({
   await expect(connection).not.toHaveCSS("stroke", "none");
   await capture(page, "quickstart-results");
   await revenue.click();
-  const lineage = page.getByRole("dialog", {
-    name: "How this value was calculated",
+  const lineage = page.getByRole("complementary", {
+    name: "Lineage",
+    exact: true,
   });
-  await expect(lineage.locator(".lineage-card.is-source")).toHaveCount(2);
-  await expect(lineage).toContainText("120 + 30 = 150.00");
-  await expect(lineage.locator(".lineage-card.is-source")).toContainText([
+  await expect(lineage.locator(".lineage-step.root")).toBeVisible();
+  await expect(lineage.locator(".lineage-loading")).toHaveCount(0);
+  await expect(lineage.locator(".lineage-step.root .lineage-value")).toHaveText(
+    ["120", "30"],
+  );
+  await expect(lineage.locator(".lineage-step.is-source")).toContainText(
     "Sample orders",
-    "Sample orders",
-  ]);
+  );
   await expect(lineage).not.toContainText("node_");
-  await capture(page, "quickstart-lineage", lineage);
-  await page.keyboard.press("Escape");
+  await capture(page, "quickstart-lineage");
+  await lineage.getByRole("button", { name: "Close", exact: true }).click();
   await edit(sql[1] + "\n" + sql[2]);
   await run(page);
   await results.getByRole("tab", { name: /^Tests/ }).click();
