@@ -86,6 +86,8 @@ ROUTE_ACCESS = {
         "GET /api/worktrees/{worktree}/connections/{connection}/objects",
         "GET /api/worktrees/{worktree}/source-files",
         "POST /api/worktrees/{worktree}/lineage",
+        "GET /api/worktrees/{worktree}/lineage/tables",
+        "POST /api/worktrees/{worktree}/lineage/rows",
         "GET /api/worktrees/{worktree}/git/reviews/{review}/data",
         "POST /api/worktrees/{worktree}/git/reviews/{review}/data",
         "GET /api/runs/{run}",

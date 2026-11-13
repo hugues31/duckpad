@@ -1,190 +1,246 @@
-import {
-  Background,
-  Controls,
-  ReactFlow,
-  useReactFlow,
-  useStore,
-} from "@xyflow/react";
-import {
-  ArrowLeft,
-  ArrowRight,
-  Database,
-  GitBranch,
-  Loader2,
-  X,
-} from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { createPortal } from "react-dom";
-import { useNavigate } from "react-router";
+import { ArrowLeft, Copy, GitBranch, Loader2, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, send, withQuery } from "./api";
-import { CalculationCard, type CardNode } from "./CalculationCard";
-import { CalculationDetails } from "./CalculationDetails";
 import { formatValue } from "./graph";
 import { useT } from "./i18n";
 import {
-  arrangeLineage,
   buildLineageGraph,
   cellId,
-  pythonCardHeight,
   requestId,
-  type Cell,
+  type ContributingRows,
   type Explanation,
+  type Input,
+  type LineageGraph,
+  type LineageTarget,
   type Query,
+  type TableLineage,
 } from "./lineageGraph";
-import { trapFocus } from "./modals";
-import { worktreeUrl } from "./navigation";
-import type { PartitionPage } from "./partitions";
+import { displayNodeName } from "./nodeNames";
+import { useApiResource } from "./useApiResource";
 import { isFinal, usePolling } from "./usePolling";
-import { useOptionalWorktree } from "./worktree";
+import { useLoadedWorktree } from "./worktree";
+import { LineageSteps, TableSteps, type LineageMap } from "./LineageSteps";
 
-type Props = {
-  worktree: string;
-  environment: string;
-  cell: Cell;
-  onClose: () => void;
-};
-type Graph = Awaited<ReturnType<typeof buildLineageGraph>>;
-const nodeTypes = { lineage: CalculationCard };
-
-function FitGraph({ version }: { version: Graph }) {
-  const { fitView } = useReactFlow();
-  const width = useStore((state) => state.width);
-  const height = useStore((state) => state.height);
-  useEffect(() => {
-    const frame = requestAnimationFrame(
-      () => void fitView({ padding: 0.16, maxZoom: 1, duration: 0 }),
-    );
-    return () => cancelAnimationFrame(frame);
-  }, [fitView, version, width, height]);
-  return null;
-}
-
-export default function LineagePanel(props: Props) {
-  return (
-    <LineageExplorer
-      key={JSON.stringify([
-        props.worktree,
-        props.environment,
-        cellId(props.cell),
-      ])}
-      {...props}
-    />
-  );
-}
-
-function LineageExplorer(props: Props) {
-  const [parents, setParents] = useState<Cell[]>([]);
-  const cell = parents.at(-1) || props.cell;
-  const onParent = useCallback(
-    (parent: Cell) => setParents((current) => [...current, parent]),
-    [],
-  );
-  return (
-    <LineageDialog
-      {...props}
-      key={cellId(cell)}
-      cell={cell}
-      onParent={onParent}
-      onBack={
-        parents.length
-          ? () => setParents((current) => current.slice(0, -1))
-          : undefined
-      }
-      onClose={props.onClose}
-    />
-  );
-}
-
-function LineageDialog({
-  worktree,
-  environment,
-  cell,
-  onClose,
-  onParent,
-  onBack,
-}: Props & { onParent: (cell: Cell) => void; onBack?: () => void }) {
+export default function LineagePanel({
+  target,
+  onChange,
+  onMap,
+  onHover,
+  onOpen,
+  onRows,
+}: {
+  target: LineageTarget;
+  onChange: (target: LineageTarget | null) => void;
+  onMap: (map: LineageMap | null) => void;
+  onHover: (node: string | null) => void;
+  onOpen: (node: string) => void;
+  onRows: (rows: ContributingRows) => void;
+}) {
   const t = useT();
-  const currentWorktree = useOptionalWorktree();
-  const navigate = useNavigate();
-  const titleId = useId();
-  const dialog = useRef<HTMLDialogElement>(null);
-  const stopped = useRef(false);
+  const { id: worktree, snapshot, environment } = useLoadedWorktree();
+  const { data: tables, error } = useApiResource<TableLineage>(
+    withQuery(`/worktrees/${worktree}/lineage/tables`, {
+      node: target.node,
+      port: target.port,
+      direction: target.direction,
+      environment,
+    }),
+    { refresh: snapshot.revision },
+  );
+  const [parents, setParents] = useState<LineageTarget[]>([]);
+  const [copied, setCopied] = useState(false);
+  const explanation = useRef("");
+  const name = displayNodeName(
+    snapshot.node_names?.[target.node],
+    target.node,
+    t,
+  );
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(explanation.current);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  };
+  return (
+    <aside
+      className="inspector lineage-panel"
+      id="node-inspector"
+      aria-label={t("lineage")}
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && !event.defaultPrevented) {
+          event.preventDefault();
+          event.stopPropagation();
+          onChange(null);
+        }
+      }}
+    >
+      <header className="lineage-header">
+        {!!parents.length && (
+          <button
+            className="icon"
+            title={t("lineageBackToPython")}
+            aria-label={t("lineageBackToPython")}
+            onClick={() => {
+              onChange(parents.at(-1)!);
+              setParents((current) => current.slice(0, -1));
+            }}
+          >
+            <ArrowLeft size={16} />
+          </button>
+        )}
+
+        <h2>
+          <GitBranch size={18} />
+          {t("lineage")}
+        </h2>
+        <div
+          className="lineage-direction"
+          role="group"
+          aria-label={t("lineageDirection")}
+        >
+          {(["origin", "impact"] as const).map((direction) => (
+            <button
+              key={direction}
+              className={target.direction === direction ? "active" : ""}
+              aria-pressed={target.direction === direction}
+              disabled={direction === "impact" && !!target.cell}
+              onClick={() => onChange({ ...target, direction })}
+            >
+              {t(direction === "origin" ? "lineageOrigin" : "lineageImpact")}
+            </button>
+          ))}
+        </div>
+        {target.cell && (
+          <button
+            className="icon"
+            title={t(copied ? "lineageCopied" : "lineageCopy")}
+            aria-label={t(copied ? "lineageCopied" : "lineageCopy")}
+            onClick={() => void copy()}
+          >
+            <Copy size={15} />
+          </button>
+        )}
+        <button
+          className="icon"
+          title={t("close")}
+          aria-label={t("close")}
+          onClick={() => onChange(null)}
+        >
+          <X size={18} />
+        </button>
+      </header>
+      <nav className="lineage-breadcrumb" aria-label={t("lineageLevels")}>
+        <button onClick={() => onChange({ ...target, cell: undefined })}>
+          {name}
+          {target.port ? ` · ${target.port}` : ""}
+        </button>
+        <span>›</span>
+        <button disabled title={t("lineageColumnSoon")}>
+          {target.cell?.column || t("columns")}
+        </button>
+        <span>›</span>
+        <span aria-current={target.cell ? "page" : undefined}>
+          {target.cell
+            ? `${t("lineageRow")} ${target.cell.row + 1}`
+            : t("lineagePickValue")}
+        </span>
+      </nav>
+      <div className="lineage-body">
+        {error && (
+          <div className="notice error" role="alert">
+            {error}
+          </div>
+        )}
+        {!tables && !error && (
+          <div role="status">
+            <Loader2 className="spin" size={18} />
+            {t("loading")}
+          </div>
+        )}
+        {tables &&
+          (target.cell ? (
+            <ValueLineage
+              key={JSON.stringify([worktree, environment, cellId(target.cell)])}
+              target={target}
+              tables={tables}
+              onMap={onMap}
+              onHover={onHover}
+              onOpen={onOpen}
+              onRows={onRows}
+              onChange={(next) => {
+                setParents((current) => [...current, target]);
+                onChange(next);
+              }}
+              onText={(text) => {
+                explanation.current = text;
+              }}
+            />
+          ) : (
+            <TableSteps
+              tables={tables}
+              direction={target.direction}
+              onMap={onMap}
+              onHover={onHover}
+              onOpen={onOpen}
+            />
+          ))}
+      </div>
+    </aside>
+  );
+}
+
+function ValueLineage({
+  target,
+  tables,
+  onMap,
+  onHover,
+  onOpen,
+  onRows,
+  onChange,
+  onText,
+}: {
+  target: LineageTarget;
+  tables: TableLineage;
+  onMap: (map: LineageMap | null) => void;
+  onHover: (node: string | null) => void;
+  onOpen: (node: string) => void;
+  onRows: (rows: ContributingRows) => void;
+  onChange: (target: LineageTarget | null) => void;
+  onText: (text: string) => void;
+}) {
+  const t = useT();
+  const {
+    id: worktree,
+    environment,
+    snapshot,
+    statuses,
+    starting,
+  } = useLoadedWorktree();
+  const cell = target.cell!;
   const cache = useRef(new Map<string, Explanation>());
+  const stopped = useRef(false);
   const controller = useRef<AbortController | null>(null);
-  const [graph, setGraph] = useState<Graph | null>(null);
-  const [pages, setPages] = useState<Record<string, Partial<Query>>>({});
-  const [budget, setBudget] = useState(60);
+  const [graph, setGraph] = useState<LineageGraph | null>(null);
+  const [choices, setChoices] = useState<Record<string, Input>>({});
+  const [opened, setOpened] = useState(new Set<string>());
   const [revision, setRevision] = useState(0);
   const [pending, setPending] = useState(true);
   const [error, setError] = useState("");
   const [interrupted, setInterrupted] = useState(false);
-  const [selected, setSelected] = useState<string | null>(null);
-  const replay = useCallback(
-    async (value: NonNullable<Explanation["replay"]>) => {
-      if (
-        !currentWorktree?.canEdit ||
-        currentWorktree.id !== worktree ||
-        currentWorktree.environment !== environment
-      )
-        return;
-      setPending(true);
-      try {
-        const key = value.partitions.keys![0];
-        let cursor: string | undefined;
-        do {
-          const page = await api<PartitionPage>(
-            withQuery(`/worktrees/${worktree}/partitions`, {
-              environment,
-              node: value.node,
-              search: String(key.value),
-              cursor,
-            }),
-          );
-          const entry = page.entries.find(
-            (entry) =>
-              entry.key.type === key.type && entry.key.value === key.value,
-          );
-          if (entry) {
-            currentWorktree.selectPartition(entry);
-            onClose();
-            navigate(
-              worktreeUrl(worktree, "flow", environment, { node: value.node }),
-            );
-            await currentWorktree.run(value.node, {
-              partitions: value.partitions,
-            });
-            return;
-          }
-          cursor = page.next_cursor || undefined;
-        } while (cursor);
-        throw new Error(t("partitionReplayMissing"));
-      } catch (error) {
-        setError((error as Error).message);
-        setPending(false);
-      }
-    },
-    [currentWorktree, environment, navigate, onClose, t, worktree],
-  );
-
+  const interrupt = useCallback(() => {
+    stopped.current = true;
+    controller.current?.abort();
+    setInterrupted(true);
+    setPending(false);
+    onMap(null);
+  }, [onMap]);
   useEffect(() => {
-    const opener = document.activeElement as HTMLElement | null;
-    const element = dialog.current!;
-    element.showModal();
-    return () => {
-      element.close();
-      opener?.focus({ preventScroll: true });
-    };
-  }, []);
-
-  // Stop exploring once the explained result is recalculated or edited.
-  // Verification pauses while an error is shown, until the user retries.
+    // The run is external state: cancel requests before any stale response can render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (statuses.active || starting) interrupt();
+  }, [statuses.active, starting, interrupt]);
   usePolling(
     useCallback(
       async (signal: AbortSignal) => {
@@ -195,245 +251,164 @@ function LineageDialog({
             }),
             { signal },
           );
-          if (signal.aborted || result.valid) return;
-          stopped.current = true;
-          controller.current?.abort();
-          setInterrupted(true);
-          setPending(false);
-          return false;
+          if (!signal.aborted && !result.valid) {
+            interrupt();
+            return false;
+          }
         } catch (e) {
-          // Temporary failures are retried; a final one stops verification.
           if (!signal.aborted && isFinal(e)) setError((e as Error).message);
           throw e;
         }
       },
-      [worktree, environment, cell.dataset],
+      [worktree, environment, cell.dataset, interrupt],
     ),
-    { interval: 2000, enabled: !error },
+    { interval: 2000, enabled: !error && !interrupted },
   );
-
+  const read = useCallback(
+    async (query: Query, signal?: AbortSignal) => {
+      const key = requestId(query),
+        cached = cache.current.get(key);
+      if (cached) return cached;
+      const result = await api<Explanation>(`/worktrees/${worktree}/lineage`, {
+        ...send({ ...query, environment }),
+        signal,
+      });
+      if (signal?.aborted || stopped.current)
+        throw new DOMException("Aborted", "AbortError");
+      cache.current.set(key, result);
+      return result;
+    },
+    [worktree, environment],
+  );
   useEffect(() => {
     if (stopped.current) return;
     const abort = new AbortController();
     controller.current = abort;
     setPending(true);
     setError("");
-    const read = async (query: Query) => {
-      if (abort.signal.aborted) throw new DOMException("Aborted", "AbortError");
-      const key = requestId(query);
-      const saved = cache.current.get(key);
-      if (saved) return saved;
-      const result = await api<Explanation>(`/worktrees/${worktree}/lineage`, {
-        ...send({ ...query, environment }),
-        signal: abort.signal,
-      });
-      if (abort.signal.aborted || stopped.current)
-        throw new DOMException("Aborted", "AbortError");
-      cache.current.set(key, result);
-      return result;
-    };
-    void buildLineageGraph(cell, pages, read, budget, t)
+    void buildLineageGraph(
+      cell,
+      choices,
+      opened,
+      (query) => read(query, abort.signal),
+      tables,
+    )
       .then((result) => {
-        if (!abort.signal.aborted && !stopped.current) setGraph(result);
+        if (!abort.signal.aborted) setGraph(result);
       })
       .catch((e) => {
-        if (!abort.signal.aborted && !stopped.current) setError(e.message);
+        if (!abort.signal.aborted) {
+          setGraph(null);
+          setError(e.message);
+        }
       })
       .finally(() => {
-        if (!abort.signal.aborted && !stopped.current) setPending(false);
+        if (!abort.signal.aborted) setPending(false);
       });
     return () => abort.abort();
-  }, [worktree, environment, cell, pages, budget, revision, t]);
-
-  const nodes = useMemo(() => {
-    // The cells of one Python result share its captured parents: its first card lists them.
-    const listed = new Set<string>();
-    return arrangeLineage<CardNode>(
-      (graph?.entries || []).map((entry) => {
-        const parents =
-          entry.result.kind === "python" && !listed.has(entry.result.dataset);
-        if (parents) listed.add(entry.result.dataset);
-        return {
-          id: entry.id,
-          type: "lineage",
-          position: { x: 0, y: 0 },
-          width: 330,
-          style: { pointerEvents: "auto" },
-          height:
-            entry.result.kind === "python"
-              ? pythonCardHeight(entry.result, parents)
-              : entry.result.kind === "source" || entry.group || entry.deferred
-                ? entry.result.origin
-                  ? 210
-                  : 132
-                : entry.result.replay
-                  ? 410
-                  : entry.result.origin || entry.result.partition_groups?.length
-                    ? 330
-                    : 260,
-          data: {
-            entry,
-            root: graph?.root === entry.id,
-            disabled: pending,
-            select: setSelected,
-            page: (id, values) => {
-              setPending(true);
-              setPages((current) => ({
-                ...current,
-                [id]: { ...current[id], ...values },
-              }));
-            },
-            expand: () => setBudget((value) => value + 60),
-            parent: onParent,
-            parents,
-            replay:
-              currentWorktree?.canEdit &&
-              !currentWorktree.statuses.active &&
-              !currentWorktree.starting
-                ? replay
-                : undefined,
-          },
-        };
-      }),
-      graph?.edges || [],
+  }, [cell, tables, choices, opened, revision, read]);
+  const map = useMemo(() => {
+    const result: LineageMap = {};
+    for (const entry of graph?.entries || []) {
+      const node = entry.result.node;
+      if (node) result[node] ??= { value: entry.result.value };
+      for (const child of entry.children) {
+        if (child.input.node)
+          result[child.input.node] ??= { value: child.input.value };
+        if (child.deferred && child.input.node) {
+          const pending = [child.input.node],
+            visited = new Set<string>();
+          while (pending.length) {
+            const node = pending.pop()!;
+            if (visited.has(node)) continue;
+            visited.add(node);
+            result[node] ??= {};
+            pending.push(
+              ...tables.edges
+                .filter((e) => e.target === node && !e.variable)
+                .map((e) => e.source),
+            );
+          }
+        }
+      }
+    }
+    return result;
+  }, [graph, tables]);
+  useEffect(() => {
+    onMap(interrupted || error ? null : map);
+    return () => onMap(null);
+  }, [map, interrupted, error, onMap]);
+  const text = graph
+    ? [
+        `Run: ${graph.original.execution || ""}\nCommit: ${graph.original.commit || ""}\nEnvironment: ${environment}`,
+        ...graph.entries.map(({ result }) =>
+          [
+            displayNodeName(
+              snapshot.node_names?.[result.node || ""],
+              result.node || "",
+              t,
+            ),
+            `${result.column} = ${result.calculation?.formula || result.expression || formatValue(result.value)}`,
+            `${result.calculation?.evaluated || ""} = ${formatValue(result.value)}`,
+            ...(result.operands || []).map(
+              (p) => `${p.formula} = ${formatValue(p.value)} (${p.total})`,
+            ),
+            ...(result.calculation?.selection || []),
+            ...(result.calculation?.selection_evaluated || []),
+            ...result.warnings,
+          ].join("\n"),
+        ),
+      ].join("\n\n")
+    : "";
+  useEffect(() => {
+    onText(text);
+  }, [text, onText]);
+  if (interrupted)
+    return (
+      <div className="notice warning" role="alert">
+        {t("lineageInterrupted")}
+      </div>
     );
-  }, [graph, pending, currentWorktree, replay, onParent]);
-  const active = graph?.entries.find((entry) => entry.id === selected);
-
-  return createPortal(
-    <dialog
-      ref={dialog}
-      className="lineage-dialog"
-      aria-labelledby={titleId}
-      onKeyDown={(event) => trapFocus(event, event.currentTarget)}
-      onCancel={(event) => {
-        event.preventDefault();
-        onClose();
-      }}
-      onMouseDown={(event) => {
-        if (event.target !== event.currentTarget) return;
-        const bounds = event.currentTarget.getBoundingClientRect();
-        if (
-          event.clientX < bounds.left ||
-          event.clientX > bounds.right ||
-          event.clientY < bounds.top ||
-          event.clientY > bounds.bottom
-        )
-          onClose();
-      }}
-    >
-      <header className="lineage-header">
-        {onBack && (
-          <button className="button secondary" onClick={onBack}>
-            <ArrowLeft size={14} />
-            {t("lineageBackToPython")}
+  return (
+    <>
+      {error && (
+        <div className="notice error" role="alert">
+          {error}
+          <button
+            className="text-button"
+            onClick={() => {
+              setError("");
+              setRevision((v) => v + 1);
+            }}
+          >
+            {t("retry")}
           </button>
-        )}
-        <div className="lineage-title">
-          <h2 id={titleId}>{t("lineageDialogTitle")}</h2>
-          <div className="lineage-selected">
-            {cell.column}
-            {graph && (
-              <>
-                {" "}
-                = <strong>{formatValue(graph.original.value)}</strong>
-              </>
-            )}
-            <span>
-              {" "}
-              · {t("lineageRow")} {cell.row + 1}
-            </span>
-          </div>
         </div>
-        <button
-          className="icon"
-          aria-label={t("close")}
-          title={t("close")}
-          onClick={onClose}
-          autoFocus
-        >
-          <X size={20} />
-        </button>
-      </header>
-      {interrupted ? (
-        <div className="notice warning lineage-message" role="alert">
-          {t("lineageInterrupted")}
-        </div>
-      ) : (
-        <>
-          <div className="lineage-legend">
-            <span>
-              <Database size={14} />
-              {t("lineageSource")}
-            </span>
-            <ArrowRight size={16} />
-            <span>
-              <GitBranch size={14} />
-              {t("lineageCalculations")}
-            </span>
-            <ArrowRight size={16} />
-            <span>{t("lineageSelectedValue")}</span>
-          </div>
-          {error && (
-            <div className="notice error" role="alert">
-              {error}
-              <button
-                className="text-button"
-                onClick={() => setRevision((value) => value + 1)}
-              >
-                {t("retry")}
-              </button>
-            </div>
-          )}
-          <div className="lineage-workspace">
-            <div className="lineage-graph" aria-label={t("lineageGraph")}>
-              {graph && (
-                <ReactFlow
-                  nodes={nodes}
-                  edges={graph.edges}
-                  nodeTypes={nodeTypes}
-                  nodesDraggable={false}
-                  nodesFocusable={false}
-                  edgesFocusable={false}
-                  ariaLabelConfig={{
-                    "controls.ariaLabel": t("canvasControls"),
-                    "controls.zoomIn.ariaLabel": t("zoomIn"),
-                    "controls.zoomOut.ariaLabel": t("zoomOut"),
-                    "controls.fitView.ariaLabel": t("fitView"),
-                  }}
-                  nodesConnectable={false}
-                  elementsSelectable={false}
-                  minZoom={0.15}
-                  maxZoom={1.6}
-                  fitView
-                  fitViewOptions={{ padding: 0.16, maxZoom: 1 }}
-                  proOptions={{ hideAttribution: true }}
-                >
-                  <Background gap={22} size={1} />
-                  <Controls showInteractive={false} />
-                  <FitGraph version={graph} />
-                </ReactFlow>
-              )}
-              {pending && (
-                <div className="lineage-loading" role="status">
-                  <Loader2 className="spin" size={18} />
-                  {t("lineageLoading")}
-                </div>
-              )}
-            </div>
-            {active && (
-              <CalculationDetails
-                key={active.id}
-                entry={active}
-                worktree={worktree}
-                environment={environment}
-                onClose={() => setSelected(null)}
-              />
-            )}
-          </div>
-        </>
       )}
-    </dialog>,
-    document.body,
+      {pending && (
+        <div className="lineage-loading" role="status">
+          <Loader2 className="spin" size={16} />
+          {t("lineageLoading")}
+        </div>
+      )}
+      {graph && !error && (
+        <LineageSteps
+          graph={graph}
+          tables={tables}
+          read={read}
+          pending={pending}
+          onChoose={(id, input) =>
+            setChoices((current) => ({ ...current, [id]: input }))
+          }
+          onExpand={(id) => setOpened((current) => new Set([...current, id]))}
+          onHover={onHover}
+          onOpen={onOpen}
+          onRows={onRows}
+          onParent={(cell) =>
+            onChange({ ...target, node: cell.node || target.node, cell })
+          }
+        />
+      )}
+    </>
   );
 }

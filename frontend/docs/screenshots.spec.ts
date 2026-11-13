@@ -1489,3 +1489,20 @@ test("assistant settings and contextual chat", async ({ page }) => {
   ).toBeVisible();
   await capture(page, "assistant-chat");
 });
+
+test("value lineage panel", async ({ page }) => {
+  await example(page);
+  await run(page);
+  await node(page, "Regional revenue").click();
+  await page.getByLabel("Output", { exact: true }).selectOption("report");
+  await page
+    .getByRole("button", { name: /Explain this value: net_share, rows 1,/ })
+    .click();
+  await expect(page.locator(".lineage-step")).toHaveCount(8);
+  await expect(page.locator(".lineage-loading")).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Hide node library", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Fit view", exact: true }).click();
+  await capture(page, "lineage");
+});

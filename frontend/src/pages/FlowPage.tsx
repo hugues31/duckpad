@@ -9,7 +9,7 @@ import {
   useState,
   type CSSProperties,
 } from "react";
-import { useLocation, useOutletContext } from "react-router";
+import { useLocation, useOutletContext, useSearchParams } from "react-router";
 import BranchResultsNotice from "../BranchResultsNotice";
 import Canvas from "../Canvas";
 import CanvasHeader from "../CanvasHeader";
@@ -38,7 +38,14 @@ import {
   type PathPart,
 } from "../graph";
 import { nodeLabel, useT } from "../i18n";
-import type { Cell } from "../lineageGraph";
+import {
+  readLineageTarget,
+  writeLineageTarget,
+  type Cell,
+  type ContributingRows,
+  type LineageTarget,
+} from "../lineageGraph";
+import type { LineageMap } from "../LineageSteps";
 import { nodeActions } from "../nodeActions";
 import { localDefinitions, nodeLocation } from "../nodeCode";
 import type { ResultsTab } from "../results";
@@ -76,6 +83,30 @@ export default function FlowPage() {
   const view = useOutletContext<FlowView>();
   const { path, selected, cell } = view;
   const location = useLocation();
+  const [params, setParams] = useSearchParams();
+  const urlTarget = useMemo(() => readLineageTarget(params), [params]);
+  const lineageTarget = useMemo(
+    () =>
+      urlTarget ||
+      (cell
+        ? {
+            node: cell.node || pathPrefix(path) + (selected || ""),
+            port: cell.port,
+            direction: "origin" as const,
+            cell,
+          }
+        : null),
+    [urlTarget, cell, path, selected],
+  );
+  const [lineageMap, setLineageMap] = useState<LineageMap | null>(null);
+  const [lineageHover, setLineageHover] = useState<string | null>(null);
+  const [contributingRows, setContributingRows] =
+    useState<ContributingRows | null>(null);
+  const changeLineage = (target: LineageTarget | null) => {
+    view.change({ cell: null });
+    setParams(writeLineageTarget(params, target));
+    if (target) panels.set({ inspector: true });
+  };
   const sizes = usePanelSizes();
   const canvas = useRef<CanvasHandle>(null);
   const paletteTrigger = useRef<HTMLButtonElement | null>(null);
@@ -214,7 +245,11 @@ export default function FlowPage() {
       select(found.id, found.path, location.key);
       if (location.state?.valueSource)
         view.change({ cell: location.state.valueSource as Cell });
-      if (found.id) setFocusRequest({ id: found.id, key: location.key });
+      if (
+        found.id &&
+        (found.id !== selected || pathPrefix(found.path) !== prefix)
+      )
+        setFocusRequest({ id: found.id, key: location.key });
     },
   );
   // Reveal the node named by a search result, once per navigation.
@@ -262,6 +297,39 @@ export default function FlowPage() {
     ]);
   }
 
+  function openLineageNode(id: string) {
+    if (!bundle) return;
+    const found = resolveNodePath(bundle, id);
+    if (!found) return;
+    const current = graphAt(bundle, found.path)?.nodes.find(
+      (n) => n.id === found.id,
+    );
+    if (current?.component) {
+      view.change({
+        path: [
+          ...found.path,
+          {
+            instance: current.id,
+            definition: current.component,
+            label:
+              current.label ||
+              bundle.components[current.component].name ||
+              current.id,
+          },
+        ],
+        selected: null,
+      });
+    } else {
+      view.change({ path: found.path, selected: found.id, paletteNode: null });
+      if (found.id)
+        setFocusRequest({
+          id: found.id,
+          key: String(Date.now()),
+          reveal: true,
+        });
+    }
+  }
+
   if (!bundle || !graph) return <InvalidProject />;
   const connections = snapshot.connections.filter(
     (connection) =>
@@ -272,11 +340,16 @@ export default function FlowPage() {
   );
   // Component instances have no code: they keep the inspector.
   const hasCode = !!node && !node.component;
-  const codeShown = !paletteChoice && view.code && hasCode && !!definition;
+  const codeShown =
+    !lineageTarget && !paletteChoice && view.code && hasCode && !!definition;
   const shown = {
     palette: panels.open.palette,
     inspector:
-      panels.open.inspector && (!!node || !!paletteChoice) && !codeShown,
+      !lineageTarget &&
+      panels.open.inspector &&
+      (!!node || !!paletteChoice) &&
+      !codeShown,
+    lineage: !!lineageTarget,
     preview: panels.open.preview && !!node,
     code: panels.open.inspector && codeShown,
   };
@@ -332,6 +405,10 @@ export default function FlowPage() {
       busy,
       bundle,
       open: openNode,
+      lineage: (target) => {
+        select(target.id);
+        changeLineage({ node: prefix + target.id, direction: "origin" });
+      },
       safe,
       parent,
       paste,
@@ -345,12 +422,12 @@ export default function FlowPage() {
     });
   return (
     <div
-      className={`flow-layout ${shown.palette ? "palette-open" : ""} ${shown.inspector || shown.code ? "inspector-open" : ""} ${shown.preview ? "preview-open" : ""} ${path.length ? "nested-flow" : ""}`}
+      className={`flow-layout ${shown.palette ? "palette-open" : ""} ${shown.inspector || shown.code || shown.lineage ? "inspector-open" : ""} ${shown.preview ? "preview-open" : ""} ${path.length ? "nested-flow" : ""}`}
       style={
         {
           "--notice-height": `${NOTICE_HEIGHT * noticeCount(snapshot, statuses.active, runDiagnostics)}px`,
           "--palette-width": `${sizes.sizes.palette}px`,
-          "--inspector-width": `${codeShown ? sizes.sizes.code : sizes.sizes.inspector}px`,
+          "--inspector-width": `${lineageTarget ? sizes.sizes.lineage : codeShown ? sizes.sizes.code : sizes.sizes.inspector}px`,
           "--preview-height": `${sizes.sizes.preview}px`,
         } as CSSProperties
       }
@@ -434,6 +511,8 @@ export default function FlowPage() {
           <Canvas
             ref={canvas}
             valueProducers={valueProducers}
+            lineage={lineageTarget ? lineageMap : null}
+            lineageHover={lineageHover}
             // Its delete keys listen on the document, which inert does not cover.
             readOnly={!canEdit || busy}
             nodes={graph.nodes}
@@ -523,7 +602,24 @@ export default function FlowPage() {
             onTab={setResultsTab}
             onClose={() => panels.set({ preview: false })}
             onRun={(options) => run(fullNode, options)}
-            onExplain={(value) => view.change({ cell: value })}
+            selectedCell={lineageTarget?.cell}
+            onExplain={(value) =>
+              changeLineage({
+                node: value.node || fullNode,
+                port: value.port,
+                direction: "origin",
+                cell: value,
+              })
+            }
+            preferredPort={
+              lineageTarget?.node === fullNode ? lineageTarget.port : undefined
+            }
+            contributingRows={
+              contributingRows?.input.node === fullNode
+                ? contributingRows
+                : null
+            }
+            onClearContributions={() => setContributingRows(null)}
             onSave={(change) => save(snapshot, change)}
             onSaveDocumentation={(change) =>
               save(snapshot, (value) => change(value.documentation))
@@ -539,57 +635,65 @@ export default function FlowPage() {
           />
         ) : null}
       </main>
-      {cell && (
+      {lineageTarget && (
         <LineagePanel
-          worktree={worktree}
-          environment={environment}
-          cell={cell}
-          onClose={() => view.change({ cell: null })}
+          target={lineageTarget}
+          onChange={changeLineage}
+          onMap={setLineageMap}
+          onHover={setLineageHover}
+          onOpen={openLineageNode}
+          onRows={(rows) => {
+            setContributingRows(rows);
+            openLineageNode(rows.input.node || "");
+            showResults("data");
+          }}
         />
       )}
-      <FlowInspector
-        paletteChoice={paletteChoice}
-        paletteFocus={!!view.paletteNode?.keyboard}
-        onClosePalette={closePaletteDetails}
-        onAddPalette={
-          canEdit && paletteChoice
-            ? () => safe(() => addNode(paletteChoice.kind, paletteChoice.id))
-            : undefined
-        }
-        panels={panels}
-        busy={busy}
-        node={node}
-        definition={definition}
-        codeShown={codeShown}
-        inspected={inspected}
-        snapshot={snapshot}
-        parent={parent}
-        fullNode={fullNode}
-        signature={signature}
-        environment={environment}
-        canEdit={canEdit}
-        statuses={statuses}
-        preview={preview}
-        codeReveal={codeReveal}
-        sample={sample}
-        setSample={setSample}
-        requestPreview={requestPreview}
-        updateDraft={updateDraft}
-        view={view}
-        setCodeReveal={setCodeReveal}
-        graph={graph}
-        local={local}
-        connections={connections}
-        fromInspector={fromInspector}
-        save={save}
-        path={path}
-        safe={safe}
-        updateGraph={updateGraph}
-        run={run}
-        actionsFor={actionsFor}
-        openModal={openModal}
-        showResults={showResults}
-      />
+      {!lineageTarget && (
+        <FlowInspector
+          paletteChoice={paletteChoice}
+          paletteFocus={!!view.paletteNode?.keyboard}
+          onClosePalette={closePaletteDetails}
+          onAddPalette={
+            canEdit && paletteChoice
+              ? () => safe(() => addNode(paletteChoice.kind, paletteChoice.id))
+              : undefined
+          }
+          panels={panels}
+          busy={busy}
+          node={node}
+          definition={definition}
+          codeShown={codeShown}
+          inspected={inspected}
+          snapshot={snapshot}
+          parent={parent}
+          fullNode={fullNode}
+          signature={signature}
+          environment={environment}
+          canEdit={canEdit}
+          statuses={statuses}
+          preview={preview}
+          codeReveal={codeReveal}
+          sample={sample}
+          setSample={setSample}
+          requestPreview={requestPreview}
+          updateDraft={updateDraft}
+          view={view}
+          setCodeReveal={setCodeReveal}
+          graph={graph}
+          local={local}
+          connections={connections}
+          fromInspector={fromInspector}
+          save={save}
+          path={path}
+          safe={safe}
+          updateGraph={updateGraph}
+          run={run}
+          actionsFor={actionsFor}
+          openModal={openModal}
+          showResults={showResults}
+        />
+      )}
       <PanelResizeHandles panels={sizes} shown={shown} />
     </div>
   );

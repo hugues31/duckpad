@@ -17,6 +17,7 @@ import {
   type LucideProps,
 } from "lucide-react";
 import { memo, useEffect, type CSSProperties } from "react";
+import { Value } from "./LineageSteps";
 import { CanvasPorts, PORT_GROUP_THRESHOLD } from "./CanvasPorts";
 import { WarningBadge } from "./ExecutionMessages";
 import { useT, type Translate } from "./i18n";
@@ -72,6 +73,7 @@ function StatusIcon({ status, ...props }: LucideProps & { status: string }) {
 
 /** What the canvas shows of a node. */
 type PipelineData = {
+  lineage?: { value: unknown; steps: number };
   muted?: boolean;
   count?: number;
   fullNode: string;
@@ -250,6 +252,19 @@ export function PipelineNodeView({
           strokeWidth={1.6}
         />
       </div>
+      {data.lineage && (
+        <div className="node-lineage-value">
+          <Value value={data.lineage.value} />
+          {data.lineage.steps > 0 && (
+            <small>
+              {t("lineageStepsInside").replace(
+                "{count}",
+                String(data.lineage.steps),
+              )}
+            </small>
+          )}
+        </div>
+      )}
       <div className="node-title" title={data.label}>
         {data.label}
       </div>

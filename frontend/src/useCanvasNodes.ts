@@ -51,7 +51,19 @@ export function useCanvasNodes(props: CanvasProps) {
           props.prefix + node.id,
           states,
         );
+        const full = props.prefix + node.id;
+        const traced = Object.entries(props.lineage || {}).filter(
+          ([id]) => id === full || id.startsWith(full + "::"),
+        );
+        const hovered =
+          props.lineageHover === full ||
+          props.lineageHover?.startsWith(full + "::");
         return {
+          className: props.lineage
+            ? traced.length
+              ? `lineage-traced ${hovered ? "lineage-hovered" : ""}`
+              : "lineage-dimmed"
+            : undefined,
           id: node.id,
           type: "pipeline" as const,
           position: node.position || { x: 0, y: 0 },
@@ -59,6 +71,13 @@ export function useCanvasNodes(props: CanvasProps) {
           // Transparent padding must let the link's reconnect handles receive drags.
           style: { pointerEvents: "none" },
           data: {
+            lineage:
+              traced.length && Object.hasOwn(traced[0][1], "value")
+                ? {
+                    value: traced[0][1].value,
+                    steps: node.component ? traced.length : 0,
+                  }
+                : undefined,
             muted: node.muted,
             fullNode: props.prefix + node.id,
             partition: partitions?.[props.prefix + node.id],
@@ -116,6 +135,8 @@ export function useCanvasNodes(props: CanvasProps) {
       }),
     [
       props.nodes,
+      props.lineage,
+      props.lineageHover,
       partitions,
       connectedInputs,
       connectedOutputs,

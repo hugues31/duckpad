@@ -42,6 +42,50 @@ def test_aggregate_pagination_is_independent_of_preview_limit(services, tmp_path
     assert len(first["contributions"]) == 5
     assert len(second["contributions"]) == 4
     assert not {c["row"] for c in first["contributions"]} & {c["row"] for c in second["contributions"]}
+    larger = lineage.explain(worktree, "dev", preview["id"], 0, "total", page_size=100)
+    assert len(larger["contributions"]) == 9
+    rows = lineage.explain(
+        worktree,
+        "dev",
+        preview["id"],
+        0,
+        "total",
+        rows_dataset=first["contributions"][0]["dataset"],
+        page_size=100,
+    )
+    assert len(rows["rows"]) == rows["count"] == 9
+    assert [c["name"] for c in rows["columns"]] == ["id", "grp", "value", "category"]
+
+
+def test_mixed_window_keeps_current_row_and_each_full_operand(services, tmp_path):
+    worktree, preview, lineage = pipeline(
+        services,
+        tmp_path,
+        "SELECT id, value / SUM(value) OVER () + AVG(value) OVER () AS share FROM {{ source }} ORDER BY id",
+    )
+    result = lineage.explain(worktree, "dev", preview["id"], 1, "share")
+    assert result["complete"], result
+    scalar, total, average = result["operands"]
+    assert scalar["value"] == 20
+    assert scalar["contributions"][0]["row"] == 1
+    assert total["value"] == 380 and total["total"] == 9
+    assert average["value"] == pytest.approx(380 / 9)
+    assert "SUM" not in result["calculation"]["evaluated"]
+    page = lineage.explain(worktree, "dev", preview["id"], 1, "share", operand=total["id"], offset=5)
+    assert len(page["contributions"]) == 4
+    assert page["value"] == result["value"]
+
+
+def test_mixed_group_aggregates_keep_separate_contributions(services, tmp_path):
+    worktree, preview, lineage = pipeline(
+        services,
+        tmp_path,
+        "SELECT grp, SUM(value) / COUNT(value) AS mean FROM {{ source }} GROUP BY grp ORDER BY grp",
+    )
+    result = lineage.explain(worktree, "dev", preview["id"], 0, "mean")
+    assert result["complete"], result
+    assert [p["value"] for p in result["operands"]] == [50, 3]
+    assert result["calculation"]["evaluated"] == "50 / 3"
 
 
 def test_unselected_group_keys_distinguish_equal_aggregate_results(services, tmp_path):

@@ -13,6 +13,7 @@ from . import builders as b
 from .aggregate import AggregateVisitor
 from .describe import describe
 from .normalize import normalize
+from .operands import trace_parts
 from .rows import DistinctVisitor, FilterVisitor, JoinVisitor, ProjectionVisitor
 from .set_operation import SetOperationVisitor
 from .step import Step
@@ -33,6 +34,8 @@ class TraceQuery:
         self.sources = {}
         self.expression, self.kind = "", "projection"
         self.step = None
+        self.operands = []
+        self.operand_values = {}
 
     def normalize(self, dataset):
         return normalize(self, dataset)
@@ -44,6 +47,26 @@ class TraceQuery:
         else:
             self.step = Step.analyze(self, tree, column_index, all_context, distinct_value)
             self.expression = explained(self.step.target)
+            self.operands = trace_parts(self, self.step, VISITORS)
+            if self.operands:
+                self.kind = "expression"
+                return (
+                    render(
+                        b.union_all(
+                            [
+                                part.contributions
+                                for _, _, part in self.operands
+                                if part.contributions is not None
+                            ]
+                        )
+                    ),
+                    render(
+                        b.union_all(
+                            [part.context for _, _, part in self.operands if part.context is not None]
+                        )
+                    ),
+                    None,
+                )
             visitor = next(visitor for visitor in VISITORS if visitor.accepts(self.step))
             self.kind = visitor.kind
             result = visitor(self).visit(self.step)

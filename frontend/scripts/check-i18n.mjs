@@ -62,13 +62,6 @@ const DYNAMIC_KEYS = [
   "recovery_unrelated",
   "recovery_unverified",
   "recovery_remote_deleted",
-  // Lineage calculation explanations: <operation>Reason.
-  "lineageSumReason",
-  "lineageAverageReason",
-  "lineageMinimumReason",
-  "lineageMaximumReason",
-  "lineageCountReason",
-  "lineageDistinctCountReason",
 ];
 
 const frontend = fileURLToPath(new URL("..", import.meta.url));

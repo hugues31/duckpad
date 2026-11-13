@@ -129,35 +129,30 @@ test("record a real pipeline, source lineage and SQL workspace", async ({
     );
     await click(page, revenue);
     await expect(
-      page.getByRole("dialog", { name: "How this value was calculated" }),
+      page.locator(".lineage-panel .lineage-step.root"),
     ).toBeVisible();
-    await page.waitForTimeout(1200);
     caption(
-      "The graph connects source amounts to the calculation, skipping unchanged values.",
+      "Every node remains visible; one contributing order is followed through the components.",
     );
-    await expect(page.locator(".lineage-dialog")).toContainText(
-      "Sum of 27 contributing values",
-      { ignoreCase: true, timeout: 30000 },
-    );
+    await expect(page.locator(".lineage-panel")).toContainText("+ 22 more", {
+      timeout: 30000,
+    });
     await expect(
-      page.locator(".lineage-dialog .lineage-card.is-source").first(),
+      page.locator(".lineage-panel .is-source").first(),
     ).toContainText("amount");
     await page.waitForTimeout(1400);
-    caption("Page through all contributing cells, five at a time.");
+    caption("Expand the contributing values or open their rows in Data.");
     await click(
       page,
       page
-        .locator(".lineage-dialog")
-        .getByRole("button", { name: "Next", exact: true }),
+        .locator(".lineage-panel")
+        .getByRole("button", { name: "Show the 27 values" }),
     );
-    await expect(page.locator(".lineage-dialog .lineage-page")).toContainText(
-      "6–10 / 27",
-      { timeout: 30000 },
-    );
+    await expect(page.locator(".lineage-panel .lineage-value")).toHaveCount(27);
     await page.waitForTimeout(1400);
     await click(
       page,
-      page.locator(".lineage-dialog").getByTitle("Close", { exact: true }),
+      page.locator(".lineage-panel").getByTitle("Close", { exact: true }),
     );
     caption(
       "Open Code to inspect the SQL and project files behind the visual flow.",

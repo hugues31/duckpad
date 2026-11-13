@@ -363,6 +363,13 @@ class Explain(BaseModel):
     group: str | None = None
     context: bool = False
     partition_context: dict | None = None
+    page_size: int = Field(default=5, ge=1, le=100)
+    operand: str | None = None
+
+
+class LineageRows(Explain):
+    input_dataset: str
+    search: str = ""
 
 
 class SourcePreview(BaseModel):

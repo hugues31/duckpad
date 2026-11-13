@@ -22,7 +22,8 @@ import { WarningBadge, warningCount } from "./ExecutionMessages";
 import { ExportDownloadButton, useExportDownload } from "./ExportDownload";
 import { nodeInterface, outputSource, type NodeInterface } from "./graph";
 import { nodeLabel, useT } from "./i18n";
-import type { Cell } from "./lineageGraph";
+import ContributingRowsData from "./ContributingRowsData";
+import type { ContributingRows, Cell } from "./lineageGraph";
 import { localDefinitions, nodeCode, nodeLocation } from "./nodeCode";
 import { displayNodeName } from "./nodeNames";
 import { PartitionStrip } from "./PartitionControls";
@@ -90,7 +91,15 @@ export default function ResultsPanel({
   onEditCode,
   preview,
   onRunAncestors,
+  contributingRows,
+  preferredPort,
+  selectedCell,
+  onClearContributions,
 }: {
+  contributingRows?: ContributingRows | null;
+  preferredPort?: string;
+  selectedCell?: Cell;
+  onClearContributions?: () => void;
   readOnly: boolean;
   user: string;
   snapshot: Snapshot;
@@ -163,9 +172,16 @@ export default function ResultsPanel({
     : tab === "preview" && tabs.includes("data")
       ? "data"
       : tabs[tabs.length - 1];
-  const defaultTarget: ResultsTarget =
-    ports.length || !inputs.length
-      ? { node: fullNode, port: ports[0] || "result" }
+  const defaultTarget: ResultsTarget = contributingRows?.input.port
+    ? { node: fullNode, port: contributingRows.input.port }
+    : ports.length || !inputs.length
+      ? {
+          node: fullNode,
+          port:
+            preferredPort && ports.includes(preferredPort)
+              ? preferredPort
+              : ports[0] || "result",
+        }
       : inputs[0];
   const [target, setTarget] = useState<ResultsTarget>(defaultTarget);
   // Follow a reconnected input, or fall back when its connection is removed.
@@ -545,35 +561,46 @@ export default function ResultsPanel({
         />
       ) : shown === "data" ? (
         <>
-          {(!failures.length || dataset) && (
-            <ResultsData
-              key={datasetKey}
-              snapshot={snapshot}
-              environment={environment}
-              target={target}
-              dataset={dataset}
-              run={runState}
-              sample={shownSample.sample}
-              view={shownSample.view}
-              failing={failing}
-              tests={tests}
-              onSample={(sample, view) => {
-                setShownSample({
-                  environment,
-                  target: outputKey(target),
-                  sample,
-                  view,
-                });
-                storeSample(storage(target), sample, view);
-              }}
-              onFailing={setFailing}
-              onExplain={onExplain}
-              onSave={onSave}
-              onAddFilter={(condition) => onAddFilter(target.port, condition)}
-              onEditCode={() => onEditCode()}
-              inspected={{ node, parent, fullNode }}
-            />
-          )}
+          {(!failures.length || dataset) &&
+            (contributingRows ? (
+              <ContributingRowsData
+                key={JSON.stringify(contributingRows)}
+                value={contributingRows}
+                worktree={snapshot.worktree.id}
+                environment={environment}
+                onClose={() => onClearContributions?.()}
+                onExplain={onExplain}
+              />
+            ) : (
+              <ResultsData
+                key={datasetKey}
+                snapshot={snapshot}
+                environment={environment}
+                target={target}
+                dataset={dataset}
+                run={runState}
+                sample={shownSample.sample}
+                view={shownSample.view}
+                failing={failing}
+                tests={tests}
+                onSample={(sample, view) => {
+                  setShownSample({
+                    environment,
+                    target: outputKey(target),
+                    sample,
+                    view,
+                  });
+                  storeSample(storage(target), sample, view);
+                }}
+                onFailing={setFailing}
+                selectedCell={selectedCell}
+                onExplain={onExplain}
+                onSave={onSave}
+                onAddFilter={(condition) => onAddFilter(target.port, condition)}
+                onEditCode={() => onEditCode()}
+                inspected={{ node, parent, fullNode }}
+              />
+            ))}
         </>
       ) : shown === "chart" ? (
         <>

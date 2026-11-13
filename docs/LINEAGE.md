@@ -2,15 +2,19 @@
 
 Lineage explains the materialized execution, not today's external resource. A result identifies its execution, dataset generation, column and stable storage row. Sorting, filtering or sampling the displayed rows does not change those identities or restrict the provenance search.
 
-Clicking a cell opens a dependency graph: source cells on the left, calculations on the right. All inputs on the current page are traced automatically; shared source cells appear once, connected to each calculation that uses them.
+The **Lineage** side panel replaces the inspector while it is open. The canvas and Data grid remain usable; clicking another cell updates the explanation. Its table › column › value breadcrumb returns to the table level. Column analysis and value Impact are reserved for a later release.
 
-Calculation cards show the expression, its captured operand values when they can be bound unambiguously, and the result. For example, `amount * 2` becomes `10 * 2 = 20`. Small sums and averages show their complete numeric equation. Larger aggregates show their formula, the full contribution count and an explicit range for the five displayed inputs; a page is never presented as the entire calculation. Distinct value groups open their original rows while preserving the selected count.
+**Table Origin** lists source files or tables and connections, followed by the upstream node tree. **Impact** lists downstream nodes and exports, including dependencies through computed variables. This analysis reads saved definitions and works before any run. Open it from a node's inspector actions or canvas context menu.
 
-An unchanged column passed through a projection, filter or join does not add a calculation node. This is determined from the parsed expression, not from equal values: `amount * 1` remains a calculation. Row-selection context from the collapsed steps stays available in source and calculation details. Coverage limits are explicit; source values, constants and unsupported steps terminate traversal.
+**Value Origin** keeps every node on the path, including unchanged projections, filters and joins. Each calculation shows its formula, captured operands and result. A transport step also shows the condition selecting its row. Components and nested components have named headers; **Open on the canvas** opens their contents while retaining the trace. A trace started inside a component continues through its external inputs.
 
-Automatic tracing has a request budget; an unexplored value offers **Trace earlier inputs** to continue. Recalculation interrupts all graph requests and navigation.
+Aggregates initially show five contributing values and the full result. **Show the N values** loads further pages, and **Open the N rows in Data** opens the contributing rows in the upstream node's grid, with search and pagination. These rows are recomputed from captured witnesses, never stored or read again from an external source. Distinct groups first open the corresponding original cells.
 
-![Five source amounts and the sum they contribute to, with pagination for all 27 values](images/lineage.png)
+Only one contributing value is followed after an aggregate, initially the first. Selecting another value replaces that path. Mixed expressions such as `net_revenue / SUM(net_revenue) OVER ()` show the scalar operand and the complete window total separately, each with its own contributions. Other branches with at most three nodes open automatically; longer branches load on demand. Shared ancestors appear once with links back to them.
+
+The canvas highlights the path, dims unrelated nodes and shows captured values. Numbers are rounded for display; hover shows the exact value. **Copy** exports the explanation as text with exact values, run, commit and environment. The URL preserves the node, output, generation and selected cell, so it can be shared and navigated with browser Back. Reopening an invalidated generation asks for a new selection rather than explaining a different result row.
+
+![Northstar value lineage through nested components and a channel-fee branch](images/lineage.png)
 
 An output whose query reads an external resource, or no flow data at all, is a lineage source: explanations stop at its rows and never reread the resource. To trace a calculation through external rows joined with an input, load them into an earlier output first.
 
@@ -28,6 +32,7 @@ An output whose query reads an external resource, or no flow data at all, is a l
 | `SELECT DISTINCT` | Supported | All rows contributing to the surviving value remain traceable |
 | `UNION`, `INTERSECT`, `EXCEPT` (distinct semantics) | Supported | Both operands are explainable stages; `EXCEPT` separates the compared right side as context |
 | Window `SUM`, `AVG`, `MIN`, `MAX`, `COUNT` | Supported | Frame membership is replayed over materialized inputs; extrema retain ties and aggregate null rules |
+| Mixed scalar expressions and independent aggregate/window operands | Supported | Every operand has its own complete value and contribution page |
 | Window `COUNT(DISTINCT ...)` | Supported | Distinct groups preserve duplicate source identities |
 | `ROW_NUMBER`, `RANK`, `DENSE_RANK`, `PERCENT_RANK`, `CUME_DIST`, `NTILE` | Supported | Ordering and partition inputs explain the ranking |
 | `LAG`, `LEAD`, `FIRST_VALUE`, `LAST_VALUE`, `NTH_VALUE` | Supported | The selected neighboring/frame cell is traced |
@@ -45,9 +50,9 @@ These constructs remain executable when they satisfy the template contract, but 
 - `UNION ALL`, `INTERSECT ALL` and `EXCEPT ALL`: duplicate-occurrence assignment is not implemented.
 - Recursive CTEs, `QUALIFY`, grouping sets, `ROLLUP` and `CUBE`.
 - SEMI/ANTI join selection provenance. The built-in join form offers inner/left/right/full joins.
-- Multiple independent windows in one output expression, unsupported specialized windows or `IGNORE NULLS` wrappers.
+- Unsupported specialized windows or `IGNORE NULLS` wrappers.
 - Window arguments that combine columns from multiple joined relations without an intermediate projection.
-- Expressions combining several extrema into one cell, and multi-expression distinct aggregates/windows.
+- Multi-expression distinct aggregates/windows.
 - Volatile expressions such as random values, UUIDs or current timestamps: replay must not invent an explanation from a new evaluation.
 - Projections that expand into several columns, such as `COLUMNS(...)`, `struct.*` or `UNNEST` of a struct: the step runs its native query without captured row witnesses, and lineage reports this limitation for its cells.
 - Indistinguishable duplicate occurrences in a composed CTE/derived projection when no original row witness was captured. Use separate pipeline nodes to capture each stage's witnesses.
