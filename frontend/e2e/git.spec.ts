@@ -482,7 +482,9 @@ test("review and resolve a field conflict with base evidence, reject stale heads
     b.documentation.project = "Concurrent edit";
   });
   await dialog.getByRole("button", { name: "Apply reviewed merge" }).click();
-  await expect(dialog.getByRole("alert")).toContainText("heads changed");
+  await expect(
+    dialog.locator('.git-review-panel > [role="alert"]'),
+  ).toContainText("heads changed");
   await dialog.getByRole("button", { name: "Branches", exact: true }).click();
   await dialog
     .getByRole("button", { name: "Review merge", exact: true })
