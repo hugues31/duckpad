@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from starlette.background import BackgroundTask
 
-from .. import column_impact, row_impact, schemas, table_lineage
+from .. import column_impact, row_impact, schema_impact, schemas, table_lineage
 from ..artifacts import CHUNK_SIZE
 from ..execution.launch import launch_worktree
 from ..execution.samples import Sample
@@ -92,6 +92,14 @@ def router(ctx: Context) -> APIRouter:
         name: str | None = None,
     ) -> Record:
         return column_impact.inspect(engine, worktree, environment, node, port, column, new_name=name)[0]
+
+    @api.post(
+        "/api/worktrees/{worktree}/lineage/simulate-type",
+        response_model=None,
+        dependencies=[Depends(worktree_role("reader"))],
+    )
+    def simulate_type(worktree: str, data: schemas.TypeSimulation) -> Record:
+        return schema_impact.simulate(engine, worktree, **data.model_dump())
 
     @api.post(
         "/api/worktrees/{worktree}/lineage/rename",

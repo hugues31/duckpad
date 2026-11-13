@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query, Request
 
-from .. import data_comparison, schemas
+from .. import data_comparison, schema_impact, schemas
 from ..types import Record
 from ..util import Problem
 from .context import Context
@@ -164,6 +164,24 @@ def router(ctx: Context) -> APIRouter:
     )
     def git_remote(worktree: str) -> Record:
         return projects.remotes.status(worktree)
+
+    @api.post(
+        "/api/worktrees/{worktree}/git/reviews/{review}/schema-impact",
+        response_model=None,
+        dependencies=[Depends(worktree_role("reader"))],
+    )
+    def git_schema_impact(worktree: str, review: str, data: schemas.GitSchemaImpact) -> Record:
+        with projects.locked(worktree):
+            current = projects.versioning.review(worktree, review)
+            projects.versioning.verify_review(current)
+            proposal = projects.versioning.proposal(worktree, review, data.choices)
+            if proposal["proposal_revision"] != data.proposal_revision:
+                raise Problem("The merge proposal changed. Reload the review.", 409)
+            if proposal["unresolved"] or proposal["diagnostics"]:
+                raise Problem("Resolve merge conflicts before inspecting schema impact.", 422)
+            return schema_impact.review_impact(
+                engine, worktree, data.environment, current["current"], proposal["files"]
+            )
 
     @api.put(
         "/api/worktrees/{worktree}/git/remote",
