@@ -67,6 +67,12 @@ export const sections = [
           "Use typed Python nodes, locked environments and managed files alongside SQL.",
       },
       {
+        slug: "icons",
+        title: "Node icons & colors",
+        description:
+          "Give nodes an icon and a color from the library, in the inspector or in code.",
+      },
+      {
         slug: "data_preparation",
         title: "Prepare columns & values",
         description: "Select, rename, cast and clean data with guided forms.",

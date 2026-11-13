@@ -8,7 +8,8 @@ an independent copy of the code; **Add linked** (right-click the
 palette entry) creates instances that share the template. Results, parameters, messages and downloads use the same panels.
 Operators run reviewed jobs; they cannot activate Python or edit its code.
 
-Use a `# @label My transform` comment to name the template's palette entry.
+Use a `# @label My transform` comment to name the template's palette entry, and
+`# @icon` and `# @color` comments to choose its [icon and color](ICONS.md).
 
 The editor completes the SDK after `dp.`, the node's parameters and methods after
 `self.`, `dp.param` options, and the DuckDB relation API after an input name,
