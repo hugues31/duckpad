@@ -68,6 +68,9 @@ def test_unknown_semantics_are_incomplete():
     for projection in ("COLUMNS('amount')", "COLUMNS(c -> c LIKE 'a%')", "UNNEST([amount, 1])"):
         with pytest.raises(Incomplete):
             analyze(f"SELECT {projection} FROM a", SCHEMA)
+    # A table alias column list renames by position: `x.amount` below is `a.id`.
+    with pytest.raises(Incomplete):
+        analyze("SELECT x.amount AS y FROM a AS x(amount)", SCHEMA)
 
 
 def test_northstar_origins_cache_and_limits(services, monkeypatch):

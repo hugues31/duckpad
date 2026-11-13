@@ -290,3 +290,55 @@
 .column-lineage-button {
   margin-left: 8px;
 }
+.column-impact pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.impact-group,
+.impact-rename {
+  margin-block: 16px;
+}
+
+.impact-actions,
+.impact-code {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.impact-actions {
+  margin-block: 10px;
+}
+
+.impact-rename label {
+  display: grid;
+  gap: 6px;
+}
+
+.impact-file {
+  margin-block: 10px;
+}
+
+.impact-follows .lineage-step,
+.impact-derived .lineage-step,
+.impact-unaffected .lineage-step {
+  padding: 6px 8px;
+  margin-block: 4px;
+}
+
+.impact-follows .lineage-step,
+.impact-derived .lineage-step {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+
+.impact-unaffected,
+.impact-mentions {
+  opacity: 0.75;
+}

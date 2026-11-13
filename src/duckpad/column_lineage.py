@@ -21,13 +21,22 @@ def identity(node, port, column):
     return f"{node}/{port}/{column}"
 
 
+def static_nodes(bundle, environment, computed):
+    """A partition filter does not change a schema; unresolved partition expressions do."""
+    nodes, edges, boundaries = expand_for(bundle, environment, computed=computed)
+    for node in nodes.values():
+        if node.get("partition_error") == "partition_not_calculated":
+            node.pop("error", None)
+    return nodes, edges, boundaries
+
+
 class ColumnLineage:
     def __init__(self, engine):
         self.engine = engine
         self.cache = OrderedDict()
         self.lock = RLock()
 
-    def describe(self, worktree, environment, node, port=None, column=None, *, snapshot=None):
+    def analysis(self, worktree, environment, *, snapshot=None):
         engine = self.engine
         snapshot = snapshot or engine.projects.snapshot(worktree)
         bundle = snapshot["bundle"]
@@ -53,7 +62,10 @@ class ColumnLineage:
                 while len(self.cache) > 8:
                     self.cache.popitem(last=False)
             self.cache.move_to_end(key)
-        outputs, steps, boundaries = analysis
+        return analysis
+
+    def describe(self, worktree, environment, node, port=None, column=None, *, snapshot=None):
+        outputs, steps, boundaries = self.analysis(worktree, environment, snapshot=snapshot)
         if node in boundaries:
             ports = boundaries[node]["outputs"]
             chosen = {
@@ -103,7 +115,7 @@ class ColumnLineage:
     def _build(self, worktree, environment, snapshot, schemas, computed):
         engine = self.engine
         bundle = snapshot["bundle"]
-        nodes, edges, boundaries = expand_for(bundle, environment, computed=computed)
+        nodes, edges, boundaries = static_nodes(bundle, environment, computed)
         project = snapshot["worktree"]["project"]
         files = engine.store.paths.project_files(project, worktree, environment)
         outputs, steps, relations = {}, {}, {}
@@ -138,7 +150,7 @@ class ColumnLineage:
                 }
                 statements = {}
                 reason = "python" if node.get("language") == "python" else "incomplete"
-                if not node.get("error") and reason != "python" and not node.get("partitioned"):
+                if not node.get("error") and reason != "python":
                     try:
                         captured, _ = engine.pool.connections.capture(
                             worktree, connection_references(node), environment

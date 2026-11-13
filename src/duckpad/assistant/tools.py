@@ -692,6 +692,45 @@ def explain_column(
     }
 
 
+@tool
+def column_impact(
+    ctx: RunContext[Dependencies],
+    node: str,
+    column: str,
+    port: str = "result",
+    offset: int = 0,
+    worktree: str = "",
+) -> dict:
+    """Explain what renaming or changing a column affects, without reading data.
+
+    Returns references to edit, outputs that follow automatically, derived columns,
+    exports, unaffected nodes and manual checks. Follow next_offset in each group.
+    Use this before answering what a column rename would break.
+    """
+    from ..column_impact import inspect
+
+    branch = reading(ctx, worktree)
+    branch.require_results()
+    result, _ = inspect(
+        ctx.deps.services.engine,
+        branch.worktree,
+        branch.environment,
+        node,
+        port,
+        column,
+        snapshot=branch.snapshot(),
+    )
+    groups = ("edit", "follows", "derived", "exports", "manual", "unaffected", "mentions")
+    return {
+        "node": node,
+        "port": port,
+        "column": column,
+        "source": result["source"],
+        "complete": result["complete"],
+        **{group: page(result[group], offset, 20) for group in groups},
+    }
+
+
 @tool(needs="data")
 def explain_value(
     ctx: RunContext[Dependencies],

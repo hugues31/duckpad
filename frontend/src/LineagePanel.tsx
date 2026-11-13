@@ -21,6 +21,7 @@ import { isFinal, usePolling } from "./usePolling";
 import { useLoadedWorktree } from "./worktree";
 import { LineageSteps, TableSteps, type LineageMap } from "./LineageSteps";
 import { ColumnLineage, ColumnList } from "./ColumnLineage";
+import { ColumnImpact } from "./ColumnImpact";
 
 export default function LineagePanel({
   target,
@@ -129,9 +130,7 @@ export default function LineagePanel({
               key={direction}
               className={target.direction === direction ? "active" : ""}
               aria-pressed={target.direction === direction}
-              disabled={
-                direction === "impact" && (!!target.cell || !!target.column)
-              }
+              disabled={direction === "impact" && !!target.cell}
               onClick={() => onChange({ ...target, direction })}
             >
               {t(direction === "origin" ? "lineageOrigin" : "lineageImpact")}
@@ -220,6 +219,21 @@ export default function LineagePanel({
               onText={(text) => {
                 explanation.current = text;
               }}
+            />
+          ) : target.column && target.direction === "impact" ? (
+            <ColumnImpact
+              key={JSON.stringify([
+                worktree,
+                environment,
+                target.node,
+                target.port,
+                target.column,
+              ])}
+              target={target}
+              onMap={onMap}
+              onHover={onHover}
+              onOpen={onOpen}
+              onChange={onChange}
             />
           ) : target.column ? (
             <ColumnLineage
