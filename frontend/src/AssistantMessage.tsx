@@ -37,6 +37,7 @@ const toolLabels: Record<string, TranslationKey> = {
   explain_value: "assistantLineage",
   explain_column: "assistantColumnLineage",
   column_impact: "assistantColumnImpact",
+  trace_row: "assistantTraceRow",
   edit_flow: "assistantEditFlow",
   write_sql: "assistantWriteSql",
   write_documentation: "assistantWriteDocs",

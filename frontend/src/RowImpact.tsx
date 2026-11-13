@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { api, send, withQuery } from "./api";
 import { formatValue } from "./graph";
-import { useT } from "./i18n";
+import { countLabel, useT } from "./i18n";
 import {
   ComponentHeading,
   componentPaths,
@@ -146,8 +146,22 @@ export function RowImpact({
       : t(r.kind === "having" ? "rowImpactHaving" : "rowImpactFalse")
           .replace("{condition}", r.evaluated)
           .replace("{result}", r.result === null ? "NULL" : "false");
+  const reaches = (ids: string[]) =>
+    ids.length
+      ? [
+          t("rowImpactReaches").replace(
+            "{nodes}",
+            [...new Set(ids.map((id) => name(byId.get(id)!.node)))].join(", "),
+          ),
+        ]
+      : [];
+  // A row written to an export leads with the outputs it reaches; side-branch filters follow.
+  const written = !!data?.reached.some(
+    (id) => byId.get(id)?.state === "written",
+  );
   const verdict = data
     ? [
+        ...(written ? reaches(data.reached) : []),
         ...data.stops.map((id) => {
           const s = byId.get(id)!;
           return t("rowImpactStops")
@@ -157,18 +171,7 @@ export function RowImpact({
             )
             .replace("{reason}", s.reason ? reason(s.reason) : "");
         }),
-        ...(data.reached.length
-          ? [
-              t("rowImpactReaches").replace(
-                "{nodes}",
-                [
-                  ...new Set(
-                    data.reached.map((id) => name(byId.get(id)!.node)),
-                  ),
-                ].join(", "),
-              ),
-            ]
-          : []),
+        ...(written ? [] : reaches(data.reached)),
         ...new Set(
           data.steps
             .filter((s) => s.state === "unknown")
@@ -260,9 +263,12 @@ export function RowImpact({
     let count = 0;
     while (current) {
       if (current.state === "discarded")
-        return t(
-          count === 1 ? "rowImpactStopsAfterOne" : "rowImpactStopsAfter",
-        ).replace("{count}", String(count));
+        return countLabel(
+          t,
+          count,
+          "rowImpactStopsAfterOne",
+          "rowImpactStopsAfter",
+        );
       if (current.state === "unknown") return t("rowImpactUnknown");
       count += 1;
       current = byId.get(current.children[0]);
@@ -329,9 +335,11 @@ export function RowImpact({
             ))}
           {step.other_rows !== undefined && (
             <p>
-              {t("rowImpactOtherRows").replace(
-                "{count}",
-                String(step.other_rows),
+              {countLabel(
+                t,
+                step.other_rows,
+                "rowImpactOtherRow",
+                "rowImpactOtherRows",
               )}
             </p>
           )}
@@ -422,7 +430,9 @@ export function RowImpact({
   };
   return (
     <div className="row-impact">
-      <p className={`notice ${data.stops.length ? "error" : ""}`}>{verdict}</p>
+      <p className={`notice ${data.stops.length && !written ? "error" : ""}`}>
+        {verdict}
+      </p>
       {pending && <span role="status">{t("lineageLoading")}</span>}
       {data.roots.map((root) => (
         <section key={root}>

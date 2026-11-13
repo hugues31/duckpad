@@ -46,7 +46,7 @@ def test_inner_join_missing_key_and_duplicate_rows(context):
     assert not rows
     reason = matcher.rejection()
     assert reason["kind"] == "join" and reason["missing_node"] == "other"
-    assert reason["evaluated"] == '1 = "b"."id"'
+    assert reason["evaluated"] == "1 = b.id"
     matcher = Matcher(context, context.db, context.datasets["target"], context.datasets["src"], 1)
     query, params, _ = matcher.match()
     assert len(context.db.execute(query, params).fetchall()) == 8
@@ -150,6 +150,8 @@ def test_duplicate_pages_and_selected_row_control_the_continuation(services):
         "SELECT * FROM src QUALIFY row_number() OVER ()=1",
         "WITH a AS (SELECT * FROM src) SELECT * FROM a",
         "SELECT random(), id FROM src",
+        # No captured keys: an empty key list must not match every group.
+        "SELECT grp, sum(value) AS total FROM src GROUP BY ALL",
     ],
 )
 def test_unsupported_does_not_guess(context, query):
@@ -178,6 +180,7 @@ def test_northstar_orders_paths_and_no_source_replay(services, monkeypatch):
     paid = trace(engine, worktree, "dev", source.id, 1)
     steps = {e["node"]: e for e in reversed(paid["steps"])}
     assert steps["export"]["state"] == "written", paid
+    assert paid["verdict"].startswith("Reaches ") and "Export revenue" in paid["verdict"].split(".")[0]
     assert steps["report::summary::metrics"]["other_rows"] == 26
     assert steps["report::summary::metrics"]["group"][0]["value"] == "South"
     assert all(

@@ -63,7 +63,12 @@ def trace(engine, worktree, environment, dataset, row, *, choices=None, offsets=
         unknown = [e for e in entries if e["state"] == "unknown"]
         verdicts = [f"Stops at {e['name']}: {reason_text(e['reason'])}." for e in stops]
         if reached:
-            verdicts.append("Reaches " + ", ".join(e["name"] for e in reached) + ".")
+            # A row written to an export leads with the outputs it reaches; side-branch filters follow.
+            written = any(e["state"] == "written" for e in reached)
+            verdicts.insert(
+                0 if written else len(verdicts),
+                "Reaches " + ", ".join(dict.fromkeys(e["name"] for e in reached)) + ".",
+            )
         if unknown:
             verdicts.append("Cannot follow at " + ", ".join(e["name"] for e in unknown) + ".")
         evidence = engine.store.get("run", source.run) or {}

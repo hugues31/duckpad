@@ -89,7 +89,7 @@ class Matcher:
                     return {
                         "kind": "join",
                         "condition": self.display(predicate),
-                        "evaluated": sql(
+                        "evaluated": self.display(
                             predicate.transform(lambda e: values[sql(e)].copy() if sql(e) in values else e)
                         ),
                         "missing_node": other.node,
@@ -135,7 +135,8 @@ class Matcher:
     def grouped(self):
         group = self.tree.args.get("group")
         keys = group.expressions if group else []
-        if len(keys) != len(self.data.groups):
+        # GROUP BY ALL and grouping sets capture no keys: an empty key list would match every group.
+        if (group and not keys) or len(keys) != len(self.data.groups):
             raise Coverage("The group keys have no exact captured mapping.")
         if self.tree.find(exp.Window):
             raise Coverage("Combined grouping and windows have no exact forward row mapping.")
