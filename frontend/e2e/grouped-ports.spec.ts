@@ -169,10 +169,17 @@ test("dragging to a collapsed group chooses the exact port and survives folding,
     "true",
   );
   const end = await center(handle(page, "filtered", "input8"));
-  await autosaved(page, async () => {
-    await page.mouse.move(end.x, end.y, { steps: 8 });
-    await page.mouse.up();
-  });
+  await autosaved(
+    page,
+    async () => {
+      await page.mouse.move(end.x, end.y, { steps: 8 });
+      await page.mouse.up();
+    },
+    true,
+  );
+  // The pressed socket is hidden once folded: it must not keep the focus,
+  // where it would swallow the canvas shortcuts.
+  await expect(node(page, "rows")).toBeFocused();
   await page.mouse.move(0, 0);
   await expect(group(page, "rows", "out")).toHaveAttribute(
     "data-expanded",
@@ -223,7 +230,7 @@ test("keyboard focus reveals ports, Escape dismisses them, and keyboard connecti
   await page.keyboard.press("Enter");
   await group(page, "output", "in").locator(".node-port-toggle").focus();
   await handle(page, "output", "input5").focus();
-  await autosaved(page, () => page.keyboard.press("Space"));
+  await autosaved(page, () => page.keyboard.press("Space"), true);
   expect((await read()).bundle!.flow.edges.at(-1)).toMatchObject({
     source: "rows",
     sourceHandle: "out5",
@@ -231,6 +238,12 @@ test("keyboard focus reveals ports, Escape dismisses them, and keyboard connecti
     targetHandle: "input5",
   });
   expect((await read()).bundle!.flow.nodes).toEqual(before.bundle!.flow.nodes);
+  // Undo still applies while a socket has the focus.
+  await expect(handle(page, "output", "input5")).toBeFocused();
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect
+    .poll(async () => (await read()).bundle!.flow)
+    .toEqual(before.bundle!.flow);
 });
 
 test.describe("touch", () => {
@@ -266,18 +279,22 @@ test.describe("touch", () => {
   });
 });
 
-test("an expanded socket keeps its link endpoint available for reconnection", async ({
+test("a link end beside an expanded socket can be dragged to another port", async ({
   page,
 }) => {
   const { read } = await crowdedProject(page);
   const before = (await read()).bundle!.flow;
-  await group(page, "filtered", "in").locator(".node-port-toggle").focus();
+  await group(page, "filtered", "in").hover();
   const endpoint = page.locator(
     '.react-flow__edge[data-id="first"] .react-flow__edgeupdater-target',
   );
+  // The link end lies outside the list, which stays open while the pointer rests there.
   await endpoint.hover();
-  const start = await center(endpoint);
-  await page.mouse.move(start.x, start.y);
+  await page.waitForTimeout(400);
+  await expect(group(page, "filtered", "in")).toHaveAttribute(
+    "data-expanded",
+    "true",
+  );
   await page.mouse.down();
   const target = await center(group(page, "output", "in"));
   await page.mouse.move(target.x, target.y, { steps: 8 });

@@ -10,6 +10,8 @@ import { useEffect, useId, useRef, useState, type ComponentProps } from "react";
 import { useT } from "./i18n";
 
 export const PORT_GROUP_THRESHOLD = 5;
+/** How far beside the list a link end can be grabbed (see `reconnectRadius`). */
+const LINK_END_REACH = 28;
 
 type Port = ComponentProps<typeof Handle>;
 type PortsProps = {
@@ -53,13 +55,28 @@ function PortGroup({ ports, type, inset }: PortsProps) {
   const store = useStoreApi();
   const nodeId = useNodeId()!;
   const listId = useId();
+  const root = useRef<HTMLDivElement>(null);
   const toggle = useRef<HTMLButtonElement>(null);
   const touch = useRef(false);
-  const leaveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
-    undefined,
-  );
-  useEffect(() => () => clearTimeout(leaveTimer.current), []);
   const [hovered, setHovered] = useState(false);
+  useEffect(() => {
+    if (!hovered) return;
+    // Link ends are dragged from just beside their socket, outside the list:
+    // it stays open while the pointer remains that close.
+    const track = (event: PointerEvent) => {
+      const box = root.current!.getBoundingClientRect();
+      const zoom = box.width / root.current!.offsetWidth;
+      if (
+        Math.abs(event.clientX - (box.left + box.right) / 2) >
+          box.width / 2 + LINK_END_REACH * zoom ||
+        event.clientY < box.top - 10 * zoom ||
+        event.clientY > box.bottom + 10 * zoom
+      )
+        setHovered(false);
+    };
+    document.addEventListener("pointermove", track);
+    return () => document.removeEventListener("pointermove", track);
+  }, [hovered]);
   const [focused, setFocused] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const connecting = useStore((state) => {
@@ -70,16 +87,20 @@ function PortGroup({ ports, type, inset }: PortsProps) {
   const connectable = useStore((state) => state.nodesConnectable);
   const expanded = !dismissed && (hovered || focused || connecting);
   const updateNodeInternals = useUpdateNodeInternals();
-  const portIds = JSON.stringify(ports.map((port) => port.id));
   useEffect(() => {
+    // Folding moves every socket, and the links that end there.
     updateNodeInternals(nodeId);
-  }, [nodeId, expanded, portIds, inset, updateNodeInternals]);
+  }, [nodeId, expanded, updateNodeInternals]);
   const input = type === "target";
   const missing = ports.some((port) => port.className === "missing-input");
   const connected = ports.some((port) => port.className === "is-connected");
-  const label = `${ports.length} ${t(input ? "inputs" : "outputs")}`;
+  const label = t(input ? "summaryInputs" : "summaryOutputs").replace(
+    "{count}",
+    String(ports.length),
+  );
   return (
     <div
+      ref={root}
       className={`node-port-group nodrag nopan ${input ? "in" : "out"} ${missing ? "missing-input" : connected ? "is-connected" : ""}`}
       data-expanded={expanded}
       style={{
@@ -88,24 +109,24 @@ function PortGroup({ ports, type, inset }: PortsProps) {
       }}
       onPointerEnter={(event) => {
         if (event.pointerType !== "touch") {
-          clearTimeout(leaveTimer.current);
           setHovered(true);
           setDismissed(false);
         }
-      }}
-      onPointerLeave={() => {
-        // Leave time to reach an adjacent link endpoint without folding under the pointer.
-        leaveTimer.current = setTimeout(() => setHovered(false), 150);
       }}
       onPointerDownCapture={(event) => {
         touch.current = event.pointerType === "touch";
       }}
       onFocus={(event) => {
-        // Dragging a socket also focuses it; only deliberate focus pins the list.
-        setFocused(
+        // Only deliberate focus pins the list. A mouse press on a socket hands
+        // its focus to the node, where canvas shortcuts such as undo apply.
+        const deliberate =
           touch.current ||
-            event.target.matches(".node-port-toggle, :focus-visible"),
-        );
+          event.target.matches(".node-port-toggle, :focus-visible");
+        if (!deliberate)
+          event.target
+            .closest<HTMLElement>(".react-flow__node")
+            ?.focus({ preventScroll: true });
+        setFocused(deliberate);
         setDismissed(false);
       }}
       onBlur={(event) => {
@@ -115,8 +136,9 @@ function PortGroup({ ports, type, inset }: PortsProps) {
       onClick={(event) => event.stopPropagation()}
       onDoubleClick={(event) => event.stopPropagation()}
       onKeyDown={(event) => {
-        // Port navigation must not move or delete the containing node.
-        event.stopPropagation();
+        // Port navigation must not move or delete the containing node, while
+        // shortcuts such as undo and copy still reach the canvas.
+        if (!event.ctrlKey && !event.metaKey) event.stopPropagation();
         if (event.key === "Escape") {
           store.getState().cancelConnection();
           store.setState({ connectionClickStartHandle: null });
@@ -133,7 +155,11 @@ function PortGroup({ ports, type, inset }: PortsProps) {
         aria-expanded={expanded}
         aria-controls={listId}
         title={label}
-        onClick={() => setDismissed(false)}
+        onClick={(event) => {
+          // Safari does not focus a button on click or tap.
+          event.currentTarget.focus();
+          setDismissed(false);
+        }}
       >
         {ports.length}
       </button>
