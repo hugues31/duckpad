@@ -381,7 +381,7 @@ test("use a production value, confirm its run and explain it in History (workflo
   await expect(prod).toBeEnabled();
   await prod.selectOption("refunded");
   await expect(editor.getByRole("status")).toHaveText(
-    "Saving marks Paid orders and 5 descendants as stale in prod. Nothing runs automatically.",
+    "Saving marks Paid orders and 6 descendants as stale in prod. Nothing runs automatically.",
   );
   await editor
     .getByRole("button", { name: "Save changes", exact: true })

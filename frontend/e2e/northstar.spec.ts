@@ -60,10 +60,30 @@ test("Northstar runs its data tests, computed variable and shared view", async (
     "10 of 107 rows match",
   );
 
+  await node("net").locator(".node-shape").click();
+  await results.getByRole("tab", { name: /^Tests/ }).click();
+  await expect(
+    results
+      .locator(".test-row")
+      .filter({ hasText: "every_order_matched" })
+      .locator(".test-status"),
+  ).toHaveText("OK");
+
   // Regional revenue charts its ranked regions, the leading region first, on
   // a revenue axis that does not start at 0.
   await node("report").locator(".node-shape").click();
   await page.getByLabel("Output", { exact: true }).selectOption("report");
+  await results.getByRole("tab", { name: /^Data/ }).click();
+  await expect(
+    results.getByRole("button", {
+      name: /Explain this value: net_share, rows 1,/,
+    }),
+  ).toContainText("25.6");
+  await expect(
+    results.getByRole("button", {
+      name: /Explain this value: net_revenue, rows 1,/,
+    }),
+  ).toContainText("6643.32");
   await results.getByRole("tab", { name: "Chart", exact: true }).click();
   await expect(results.getByRole("figure")).toHaveAccessibleName(
     "Revenue by region",

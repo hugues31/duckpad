@@ -14,15 +14,18 @@ README = """# Northstar · Revenue operations
 
 A complete example of a documented, tested and reusable sales pipeline.
 
-1. Read orders from CSV and customers from Parquet.
+1. Read orders and channel fees from CSV and customers from Parquet.
 2. Join customers, keep paid orders and compute two ordered outputs.
-3. Reuse one nested report component for all orders and high-value orders.
-4. Explain aggregates, distinct customers, extrema, windows and set operations.
+3. Deduct each channel's fee in Net amounts, then reuse one nested report component
+   for all orders and high-value orders.
+4. Follow net_share through the report's ranking, Regional summary's net_revenue
+   aggregate and Net amounts, branching to Orders.amount and Channel fees.fee_rate.
+   Also explain distinct customers, extrema, windows and set operations.
 5. Export both reports as CSV, named after the reporting month.
 
 ## Checks
 
-- Data tests guard the join, order identifiers, amounts, the reporting period and
+- Data tests guard both joins, order identifiers, amounts, the reporting period and
   each export before it writes. Orders above `review_threshold` raise a warning
   without failing the run: open **Tests** on Paid orders to see the failing rows,
   or the shared **Orders to review** view.
@@ -35,6 +38,7 @@ A complete example of a documented, tested and reusable sales pipeline.
 
 - `high_value_threshold` and `review_threshold` take larger values in prod, where
   source amounts are three times higher, so both environments select the same orders.
+- Channel fees are the same in both environments: Web 3%, Retail 0%, Partner 15%.
 - `report_month` is computed from Reporting period at each run, then names the
   exported files, such as `regional-revenue-2026-10.csv`.
 
@@ -43,10 +47,13 @@ Create a branch to experiment; no computation starts automatically.
 
 
 def write_samples(root):
-    """Synthetic orders and customers for each environment; prod amounts are larger."""
+    """Synthetic orders, customers and channel fees; prod order amounts are larger."""
     for environment, multiplier in (("dev", 1), ("prod", 3)):
         folder = root / environment
         folder.mkdir(parents=True, exist_ok=True)
+        with (folder / "channel_fees.csv").open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.writer(stream)
+            writer.writerows([("channel", "fee_rate"), ("Web", 0.03), ("Retail", 0.0), ("Partner", 0.15)])
         with (folder / "orders.csv").open("w", newline="", encoding="utf-8") as stream:
             writer = csv.writer(stream)
             writer.writerow(["order_id", "customer_id", "order_date", "amount", "status", "channel"])
@@ -145,19 +152,31 @@ FROM {{ source }};
 -- @test single_month
 SELECT * FROM {{ result }} WHERE strftime(last_order, '%Y-%m') <> month;
 """
+    templates["net_amounts"] = """-- @label Net amounts
+-- @description Deduct the sales channel fee from each order.
+-- @input orders
+-- @input fees
+-- @output result
+SELECT o.*, ROUND(o.amount * (1 - f.fee_rate), 2) AS net_amount
+FROM {{ orders }} AS o JOIN {{ fees }} AS f ON o.channel = f.channel;
+-- @test every_order_matched
+SELECT o.* FROM {{ orders }} AS o ANTI JOIN {{ fees }} AS f ON o.channel = f.channel;
+"""
     templates["regional_metrics"] = """-- @label Regional metrics
 -- @input source
 -- @output result
 SELECT region, SUM(amount) AS revenue, AVG(amount) AS average_order,
        MIN(amount) AS smallest_order, MAX(amount) AS largest_order,
-       COUNT(*) AS orders, COUNT(DISTINCT customer_id) AS customers
+       COUNT(*) AS orders, COUNT(DISTINCT customer_id) AS customers,
+       SUM(net_amount) AS net_revenue
 FROM {{ source }} GROUP BY region;
 """
     templates["rank_regions"] = """-- @label Rank regions
 -- @input source
 -- @output result
 SELECT *, DENSE_RANK() OVER (ORDER BY revenue DESC) AS revenue_rank,
-       SUM(revenue) OVER (ORDER BY revenue DESC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cumulative_revenue
+       SUM(revenue) OVER (ORDER BY revenue DESC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cumulative_revenue,
+       ROUND(100 * net_revenue / SUM(net_revenue) OVER (), 1) AS net_share
 FROM {{ source }} ORDER BY revenue DESC;
 -- @message
 SELECT 'info' AS level,
@@ -259,13 +278,14 @@ SELECT 'The report has no rows' AS problem FROM {{ source }} HAVING COUNT(*) = 0
     }
     # Start with the positions produced by the canvas's automatic layout.
     nodes = [
-        node("orders", "load_csv", "Orders", 0, 79, connection=connection_id, file="orders.csv"),
+        node("orders", "load_csv", "Orders", 0, 67, connection=connection_id, file="orders.csv"),
+        node("fees", "load_csv", "Channel fees", 0, 527, connection=connection_id, file="channel_fees.csv"),
         node(
             "customers",
             "load_parquet",
             "Customers",
             0,
-            309,
+            297,
             connection=connection_id,
             file="customers.parquet",
         ),
@@ -274,49 +294,50 @@ SELECT 'The report has no rows' AS problem FROM {{ source }} HAVING COUNT(*) = 0
             "join",
             "Enrich orders",
             260,
-            227,
+            215,
             condition="l.customer_id = r.customer_id",
             columns="l.*, r.customer_name, r.region, r.segment",
         ),
-        node("period", "reporting_period", "Reporting period", 260, 12),
+        node("period", "reporting_period", "Reporting period", 260, 0),
         node(
             "validated",
             "validated_orders",
             "Paid orders",
             520,
-            227,
+            215,
             status="paid",
             review_threshold={"$var": "review_threshold"},
         ),
+        node("net", "net_amounts", "Net amounts", 780, 509),
         {
             "id": "report",
             "component": "regional_report",
             "label": "Regional revenue",
             "params": {"condition": "amount >= 0"},
-            "position": {"x": 780, "y": 0},
+            "position": {"x": 1040, "y": 401},
         },
         {
             "id": "premium",
             "component": "regional_report",
             "label": "High-value orders",
             "params": {"condition": "amount >= {{ var.high_value_threshold }}"},
-            "position": {"x": 780, "y": 215},
+            "position": {"x": 1040, "y": 616},
         },
-        node("reach", "channel_sets", "Customer reach", 780, 430),
+        node("reach", "channel_sets", "Customer reach", 780, 203),
         node(
             "export",
             "export_report",
             "Export revenue",
-            1040,
-            4,
+            1300,
+            406,
             destination="regional-revenue-{{ var.report_month }}.csv",
         ),
         node(
             "export_premium",
             "export_report",
             "Export high-value",
-            1040,
-            234,
+            1300,
+            636,
             destination="high-value-orders-{{ var.report_month }}.csv",
         ),
     ]
@@ -325,8 +346,10 @@ SELECT 'The report has no rows' AS problem FROM {{ source }} HAVING COUNT(*) = 0
         edge("customers", "enriched", input_name="right"),
         edge("orders", "period"),
         edge("enriched", "validated"),
-        edge("validated", "report", "orders", "orders"),
-        edge("validated", "premium", "orders", "orders"),
+        edge("validated", "net", "orders", "orders"),
+        edge("fees", "net", input_name="fees"),
+        edge("net", "report", input_name="orders"),
+        edge("net", "premium", input_name="orders"),
         edge("validated", "reach", "orders"),
         edge("report", "export", "report"),
         edge("premium", "export_premium", "report"),
@@ -335,15 +358,21 @@ SELECT 'The report has no rows' AS problem FROM {{ source }} HAVING COUNT(*) = 0
         "project": README,
         "nodes": {
             "orders": "120 synthetic orders; refunds are excluded downstream.",
+            "fees": "Sales channel fee rates, identical in dev and prod: Web 3%, Retail 0%, Partner 15%.",
+            "net": "Deducts the channel fee from each paid order, rounded to cents. "
+            "A data test fails the join if an order has no matching channel fee.",
             "period": "Computes the report_month variable before the rest of the pipeline runs.",
             "enriched": "A data test fails the join if an order has no matching customer.",
             "validated": "Only paid orders contribute to revenue. The overview reads the newly computed orders output. "
             "Tests guard identifiers and amounts; orders above review_threshold raise a warning.",
-            "report": "Business definition: gross revenue from paid orders, grouped by customer region.",
+            "report": "Gross and net revenue from paid orders, grouped by customer region, "
+            "with each region's percentage of total net revenue.",
             "premium": "Keeps orders of at least high_value_threshold, set per environment.",
         },
         "datasets": {
             "orders:result": "Synthetic transaction ledger; each row represents one order.",
+            "fees:result": "One fee rate per sales channel.",
+            "net:result": "Paid orders with net amounts after channel fees; gross amounts are preserved.",
             "period:result": "One row describing the month covered by the orders.",
         },
         "columns": {
@@ -352,12 +381,29 @@ SELECT 'The report has no rows' AS problem FROM {{ source }} HAVING COUNT(*) = 0
                 "order_id": "Unique order identifier.",
             },
             "period:result": {"month": "Reporting month, as YYYY-MM; names the exported files."},
+            "fees:result": {
+                "channel": "Sales channel matching Orders.channel.",
+                "fee_rate": "Fraction of the gross amount charged as a channel fee (0.03 means 3%).",
+            },
+            "net:result": {
+                "net_amount": "Gross order amount multiplied by (1 - fee_rate), rounded to cents, in EUR.",
+            },
             "report:report": {
                 "revenue": "Sum of qualifying order amounts, in EUR.",
                 "customers": "Distinct customers with at least one qualifying order.",
+                "net_revenue": "Sum of qualifying net order amounts after channel fees, in EUR.",
+                "net_share": "Percentage of total net revenue for this region, rounded to one decimal place.",
             },
         },
     }
+    for instance in ("report", "premium"):
+        documentation["columns"][f"{instance}::summary::metrics:result"] = {
+            "net_revenue": documentation["columns"]["report:report"]["net_revenue"],
+        }
+        documentation["columns"][f"{instance}::rank:result"] = {
+            key: documentation["columns"]["report:report"][key] for key in ("net_revenue", "net_share")
+        }
+    documentation["columns"]["premium:report"] = documentation["columns"]["report:report"].copy()
     bundle: Record = {
         "flow": {
             "name": name or "Northstar analytics",
