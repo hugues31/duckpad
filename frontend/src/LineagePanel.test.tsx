@@ -1,9 +1,20 @@
 // @vitest-environment happy-dom
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
+import type { LineageTarget } from "./lineageGraph";
 import { MemoryRouter } from "react-router";
 import LineagePanel from "./LineagePanel";
 import type { Explanation } from "./lineageGraph";
+
+const worktree = {
+  id: "tree",
+  environment: "dev",
+  snapshot: { node_names: {}, connections: [], revision: "revision" },
+  statuses: {},
+  starting: false,
+};
+vi.mock("./worktree", () => ({ useLoadedWorktree: () => worktree }));
 
 afterEach(() => {
   cleanup();
@@ -41,6 +52,8 @@ function serve(explanations: Record<string, Explanation>) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, options?: RequestInit) => {
+      if (url.includes("/lineage/tables"))
+        return json({ node: "total", seeds: ["total"], nodes: {}, edges: [] });
       if (url.includes("/generations/")) return json({ valid: true });
       const query = JSON.parse(String(options?.body));
       return json(explanations[`${query.dataset}:${query.row}`]);
@@ -48,15 +61,31 @@ function serve(explanations: Record<string, Explanation>) {
   );
 }
 
+function Explorer({ dataset, row }: { dataset: string; row: number }) {
+  const [target, onChange] = useState<LineageTarget | null>({
+    node: "total",
+    direction: "origin",
+    cell: { dataset, row, column: "amount" },
+  });
+  return (
+    target && (
+      <LineagePanel
+        target={target}
+        onChange={onChange}
+        onClose={() => onChange(null)}
+        onMap={ignore}
+        onHover={ignore}
+        onOpen={ignore}
+        onRows={ignore}
+      />
+    )
+  );
+}
+const ignore = () => {};
 const open = (dataset: string, row: number) =>
   render(
     <MemoryRouter>
-      <LineagePanel
-        worktree="tree"
-        environment="dev"
-        cell={{ dataset, row, column: "amount" }}
-        onClose={() => {}}
-      />
+      <Explorer dataset={dataset} row={row} />
     </MemoryRouter>,
   );
 
@@ -111,30 +140,13 @@ it("names the Python boundary once and lists its parents on one card", async () 
   });
   open("total", 0);
   await screen.findAllByText("Opaque Python operation");
-  const cards = [...document.querySelectorAll(".lineage-card.python")];
-  expect(cards).toHaveLength(2);
-  for (const card of cards) {
-    expect(card.textContent?.match(/Opaque Python operation/g)).toHaveLength(1);
-    expect(card.textContent).not.toContain("Coverage limitation");
-  }
-  // The cells of one Python result share its parents: one card lists them.
   expect(document.querySelectorAll(".lineage-parents")).toHaveLength(1);
   expect(
     screen.getAllByText(/Select a cell from these captured parent results/),
   ).toHaveLength(1);
-
   fireEvent.click(screen.getByRole("button", { name: "Trace amount, row 1" }));
-  const back = await screen.findByRole("button", {
-    name: "Back to Python step",
-  });
-  expect(
-    await screen.findByText("Source data", { selector: ".lineage-card-kind" }),
-  ).toBeTruthy();
-  fireEvent.click(back);
-  await screen.findAllByText("Opaque Python operation");
-  expect(
-    screen.queryByRole("button", { name: "Back to Python step" }),
-  ).toBeNull();
+  await screen.findByText("10.5", { selector: ".lineage-formula span" });
+  expect(document.querySelector(".lineage-parents")).toBeNull();
 });
 
 it("does not ask to select parent cells of a Python source", async () => {

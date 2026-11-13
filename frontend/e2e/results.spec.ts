@@ -67,9 +67,13 @@ test("a sample filters, sorts and limits displayed rows without changing the res
   await panel
     .getByRole("button", { name: /Explain this value: amount, rows \d+, 499/ })
     .click();
-  await expect(page.locator(".lineage-card.root")).toContainText("499");
-  await page.keyboard.press("Escape");
-  await expect(page.locator(".lineage-card.root")).toHaveCount(0);
+  const lineage = page.getByRole("complementary", {
+    name: "Lineage",
+    exact: true,
+  });
+  await expect(lineage.locator(".lineage-step.root")).toContainText("499");
+  await lineage.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(lineage).toHaveCount(0);
 
   // The sample is remembered for this user and output after a reload.
   await page.reload();

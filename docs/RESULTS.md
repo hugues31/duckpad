@@ -188,3 +188,9 @@ Database and remote-storage destinations do not offer browser downloads.
 **Code → Download project ZIP** shares the pipeline definitions, excluding data
 and Git history. It does not download the displayed table. See
 [project files and imports](AUTHORING.md#edit-and-share-project-files).
+
+## Lineage beside Data
+
+Click a value in a valid result to open the Lineage side panel in place of the inspector. The grid remains available, and another click changes the selection. Each node retains its own calculation or unchanged-value step; aggregates follow one contributing row at a time.
+
+**Open the N rows in Data** switches to the upstream node and shows its contributing rows, with search and pagination. **All rows** returns to the regular grid. Contribution queries use the captured result generation; a recalculation interrupts exploration and requires selecting a value in the new result. See [Lineage coverage](LINEAGE.md) for supported SQL and limitations.

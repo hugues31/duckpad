@@ -43,11 +43,15 @@ Variables** shows the run that produced it. See [project variables](VARIABLES.md
 
 ## Explain a value
 
-![Source amounts contributing to regional revenue](images/lineage.png)
+![Northstar lineage through nested components](images/lineage.png)
 
-Select Regional revenue and its `report` output. Click a revenue cell. The calculation modal connects source amounts directly to the aggregate, collapsing the rank projection and other steps that merely carry the value forward. Use Next to display another five inputs; the exact total covers all contributions, regardless of the preview row limit.
+Select **Regional revenue**, choose its **report** output, and click South's `net_share` value in Data. The Lineage side panel shows Rank regions, Revenue by region, Eligible orders, Net amounts, Paid orders, Enrich orders and Orders, with Channel fees as a branch.
 
-For a distinct customer count, value-group cards show the count of original rows. Open a group to see its source cells. Repeated purchases remain separate cells. For a maximum, all tied extrema are shown; calculation details expose the full examined group as row-selection context.
+Rank regions substitutes South's `net_revenue` and the complete window total into its formula. Revenue by region shows five of its 27 contributing amounts and the full total. **Show the 27 values** reveals the remaining values; click one to follow that order, or **Open the 27 rows in Data** to inspect all contributing orders.
+
+Component headers expose their internal steps. **Open on the canvas** opens Regional report or Regional summary while keeping the path highlighted. Hovering a step highlights its node. **Copy** includes exact values and execution metadata; the address bar preserves the selected generation and cell.
+
+For an overview without executing anything, use a node's **Lineage** action. **Origin** lists its sources and upstream dependencies; **Impact** lists downstream consumers and exports. Export revenue also depends on Reporting period through the computed `report_month` variable.
 
 Write project and node descriptions in their **Documentation** tabs; edit
 dataset and column descriptions in **Results → Columns**.

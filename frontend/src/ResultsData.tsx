@@ -45,6 +45,7 @@ export default function ResultsData({
   onSample,
   onFailing,
   onExplain,
+  selectedCell,
   onSave,
   onAddFilter,
   onEditCode,
@@ -62,6 +63,7 @@ export default function ResultsData({
   onSample: (sample: Sample, view?: string) => void;
   onFailing: (failing: FailingRows | null) => void;
   onExplain: (cell: Cell) => void;
+  selectedCell?: Cell;
   onSave: SaveProject;
   onAddFilter: (condition: string) => Promise<unknown>;
   onEditCode: () => void;
@@ -175,13 +177,15 @@ export default function ResultsData({
         cell={(value, column, row) =>
           page ? (
             <button
-              className={`cell ${value === null ? "null" : ""}`}
+              className={`cell ${value === null ? "null" : ""} ${selectedCell?.dataset === page.id && selectedCell.row === row.id && selectedCell.column === column.name ? "lineage-selected-cell" : ""}`}
               disabled={page.status !== "valid" || run.active}
               title={page.status === "valid" ? t("explain") : t("staleHint")}
               aria-label={`${t("explain")}: ${column.name}, ${t("rows")} ${row.id + 1}, ${formatValue(value)}`}
               onClick={() =>
                 onExplain({
                   dataset: page.id,
+                  node: target.node,
+                  port: target.port,
                   row: row.id,
                   column: column.name,
                   partition_context: page.partition_context,

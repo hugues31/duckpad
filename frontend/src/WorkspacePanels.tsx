@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useT } from "./i18n";
 
 // The code panel takes the inspector's place, with its own width.
-const PANELS = ["palette", "inspector", "preview", "code"] as const;
+const PANELS = ["palette", "inspector", "preview", "code", "lineage"] as const;
 export type Panel = (typeof PANELS)[number];
 type Sizes = Partial<Record<Panel, number>>;
 const WIDE_LAYOUT = "(min-width: 1100px)";
@@ -75,7 +75,12 @@ export function usePanelSizes() {
     180,
     previewMax,
   );
-  const sizes = { palette, inspector, preview, code };
+  const lineage = clamp(
+    preferences.lineage ?? clamp(width * 0.4, 440, 540),
+    Math.min(360, codeMax),
+    codeMax,
+  );
+  const sizes = { palette, inspector, preview, code, lineage };
   const limits: Record<Panel, [number, number]> = {
     palette: [
       180,
@@ -90,6 +95,7 @@ export function usePanelSizes() {
     ],
     preview: [180, previewMax],
     code: [Math.min(360, codeMax), codeMax],
+    lineage: [Math.min(360, codeMax), codeMax],
   };
   return {
     sizes,
@@ -114,7 +120,7 @@ export type PanelSizes = ReturnType<typeof usePanelSizes>;
 export const isWideLayout = () => window.matchMedia(WIDE_LAYOUT).matches;
 
 /** A panel that can be hidden; the code panel shows in the inspector's place. */
-type FloatingPanel = Exclude<Panel, "code">;
+type FloatingPanel = Exclude<Panel, "code" | "lineage">;
 
 /** Which floating panels of the flow are open. */
 export function usePanelVisibility() {
@@ -138,7 +144,7 @@ export function PanelResizeHandles({
   shown,
 }: {
   panels: PanelSizes;
-  shown: Record<Panel, boolean>;
+  shown: Partial<Record<Panel, boolean>>;
 }) {
   return PANELS.filter((panel) => shown[panel]).map((panel) => (
     <PanelResizeHandle
@@ -168,7 +174,7 @@ function PanelResizeHandle({
   const t = useT();
   const horizontal = panel === "preview";
   // The code panel is resized from the inspector's edge.
-  const side = panel === "code" ? "inspector" : panel;
+  const side = panel === "code" || panel === "lineage" ? "inspector" : panel;
   const drag = useRef<{
     pointer: number;
     coordinate: number;
@@ -180,9 +186,11 @@ function PanelResizeHandle({
       ? "resizeNodes"
       : panel === "inspector"
         ? "resizeInspector"
-        : panel === "code"
-          ? "resizeCodePanel"
-          : "resizePreview",
+        : panel === "lineage"
+          ? "resizeLineage"
+          : panel === "code"
+            ? "resizeCodePanel"
+            : "resizePreview",
   );
   return (
     <div

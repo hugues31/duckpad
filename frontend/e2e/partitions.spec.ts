@@ -83,8 +83,8 @@ test("inspect retained keys, unavailable previews and global collectors without 
       exact: true,
     })
     .click();
-  const lineage = page.getByRole("dialog", {
-    name: "How this value was calculated",
+  const lineage = page.getByRole("complementary", {
+    name: "Lineage",
     exact: true,
   });
   await expect(lineage).toContainText(

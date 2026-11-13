@@ -151,26 +151,28 @@ class Filter(dp.Node):
   await page
     .getByRole("button", { name: /Explain this value: x, rows 1,/ })
     .click();
-  await expect(page.locator(".lineage-dialog")).toContainText(
+  await expect(page.locator(".lineage-panel")).toContainText(
     "Opaque Python operation",
   );
-  await expect(page.locator(".lineage-dialog")).toContainText(
+  await expect(page.locator(".lineage-panel")).toContainText(
     "captured parent results",
   );
-  const parent = page.locator(".lineage-dialog details").first();
+  const parent = page.locator(".lineage-panel details").first();
   await parent
     .getByRole("button", { name: "Trace x, row 1", exact: true })
     .click();
-  await expect(page.locator(".lineage-dialog .is-source")).toBeVisible();
+  await expect(
+    page.locator(".lineage-panel .lineage-step.is-source"),
+  ).toBeVisible();
   await page
-    .locator(".lineage-dialog")
+    .locator(".lineage-panel")
     .getByRole("button", { name: "Back to Python step", exact: true })
     .click();
-  await expect(page.locator(".lineage-dialog")).toContainText(
+  await expect(page.locator(".lineage-panel")).toContainText(
     "Opaque Python operation",
   );
   await page
-    .locator(".lineage-dialog")
+    .locator(".lineage-panel")
     .getByTitle("Close", { exact: true })
     .click();
   await page.getByRole("tab", { name: "Log", exact: true }).click();

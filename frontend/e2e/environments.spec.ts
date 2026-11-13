@@ -133,11 +133,12 @@ test("selects a surviving environment before requesting results when dev is abse
     await page
       .getByRole("button", { name: /Explain this value: value, rows 1,/ })
       .click();
-    await expect(page.locator(".lineage-card.root")).toBeVisible();
-    await page
-      .getByRole("dialog")
-      .getByRole("button", { name: "Close", exact: true })
-      .click();
+    const lineage = page.getByRole("complementary", {
+      name: "Lineage",
+      exact: true,
+    });
+    await expect(lineage.locator(".lineage-step.root")).toBeVisible();
+    await lineage.getByRole("button", { name: "Close", exact: true }).click();
     await page
       .locator(".inspector")
       .getByRole("button", { name: "SQL", exact: true })

@@ -25,6 +25,25 @@ def describe(tracer, response):
     selection.extend(group_selection(tracer, step, display))
     if selection:
         calculation["selection"] = selection
+        evaluated_selection = []
+        for predicate in step.predicates():
+            operands = {
+                (c.table, c.name): captured_operand(tracer, c, response.get("context", []))
+                for c in predicate.find_all(exp.Column)
+            }
+            if any(value is None for value in operands.values()):
+                continue
+            evaluated_selection.append(
+                explained(
+                    predicate.transform(
+                        lambda node, captured=operands: (
+                            captured[(node.table, node.name)].copy() if isinstance(node, exp.Column) else node
+                        )
+                    )
+                )
+            )
+        if evaluated_selection:
+            calculation["selection_evaluated"] = evaluated_selection
     operation = aggregate_operation(step.target)
     if operation:
         calculation["operation"] = operation
@@ -93,10 +112,15 @@ def evaluate(tracer, step, response):
     windows, paginated operands and ambiguous self-joins keep their formula.
     """
     target = step.target
+    if tracer.operands:
+        replacements = {
+            expression: b.value(tracer.operand_values[key]) for key, expression, _ in tracer.operands
+        }
+        return target.transform(lambda node: replacements[node].copy() if node in replacements else node)
     if (
         target.find(exp.AggFunc, exp.Window)
         or response["offset"]
-        or response["total"] != len(response["contributions"])
+        or (response["total"] != len(response["contributions"]) and not tracer.dataset.witnesses)
     ):
         return None
     operands = {}
@@ -122,7 +146,12 @@ def captured_operand(tracer, column, contributions):
         witnessed_row = tracer.lookup(tracer.dataset.relation, witness["column"], tracer.row)
         if witnessed_row is None:
             return exp.Null()
-        inputs = [item for item in inputs if item["row"] == witnessed_row]
+        # A captured witness also identifies predicate operands absent from the value page.
+        value = tracer.lookup(data.relation, column.name, witnessed_row)
+        try:
+            return b.value(value)
+        except (Problem, ValueError):
+            return None
     if len(inputs) != 1:
         return None
     value = tracer.lookup(data.relation, column.name, inputs[0]["row"])

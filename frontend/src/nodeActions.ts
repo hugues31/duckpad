@@ -3,6 +3,7 @@ import {
   Boxes,
   Code2,
   Copy,
+  GitBranch,
   Link,
   Link2,
   Trash2,
@@ -37,6 +38,7 @@ export function nodeActions(
     busy,
     bundle,
     open,
+    lineage,
     safe,
     parent,
     paste,
@@ -53,6 +55,7 @@ export function nodeActions(
     busy: boolean;
     bundle: Bundle;
     open: (target: FlowNode) => void;
+    lineage: (target: FlowNode) => void;
     safe: (action: () => Promise<unknown>) => void;
     parent: string | undefined;
     paste: (copied: CopiedNodes, detach?: boolean) => Promise<void>;
@@ -89,6 +92,13 @@ export function nodeActions(
       () => open(target),
     ),
   ];
+  actions.push({
+    id: "lineage",
+    icon: GitBranch,
+    label: t("lineage"),
+    run: () => lineage(target),
+    disabled: busy,
+  });
   actions.push(
     {
       ...item("mute", Ban, t(target.muted ? "unmuteNode" : "muteNode"), () =>

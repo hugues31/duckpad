@@ -193,9 +193,16 @@ def test_count_distinct_groups_values_and_selects_one_value(explain):
     assert result.contributions == [("src", 0, "category"), ("src", 1, "category")]
 
 
-def test_aggregate_refuses_combined_extrema(explain):
-    with pytest.raises(Coverage, match="multiple extrema"):
-        explain("SELECT MAX(value) - MIN(value) FROM src")
+def test_aggregate_explains_each_extremum_separately(explain):
+    result = explain("SELECT MAX(value) - MIN(value) FROM src")
+    assert result.contributions == [("src", 0, "value"), ("src", 4, "value")]
+    assert len(result.tracer.operands) == 2
+
+
+def test_independent_windows_keep_their_own_contributions(explain):
+    result = explain("SELECT SUM(value) OVER () + MIN(value) OVER () FROM src")
+    assert result.contributions == [("src", i, "value") for i in range(5)]
+    assert len(result.tracer.operands) == 2
 
 
 def test_window_reads_its_frame(explain):
@@ -238,7 +245,6 @@ def test_distinct_window_groups_frame_values(explain):
 @pytest.mark.parametrize(
     ("query", "message"),
     [
-        ("SELECT SUM(value) OVER () + MIN(value) OVER () FROM src", "multiple independent windows"),
         ("SELECT STRING_AGG(category, ',') OVER () FROM src", "does not yet have an exact provenance rule"),
         (
             "SELECT SUM(a.value + b.value) OVER () FROM src a JOIN src b ON a.id = b.id",

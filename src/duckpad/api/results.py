@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from starlette.background import BackgroundTask
 
-from .. import schemas
+from .. import schemas, table_lineage
 from ..artifacts import CHUNK_SIZE
 from ..execution.launch import launch_worktree
 from ..execution.samples import Sample
@@ -45,6 +45,50 @@ def router(ctx: Context) -> APIRouter:
     )
     def status(worktree: str, environment: str) -> Record:
         return engine.statuses(worktree, environment)
+
+    @api.get(
+        "/api/worktrees/{worktree}/lineage/tables",
+        response_model=None,
+        dependencies=[Depends(worktree_role("reader"))],
+    )
+    def tables(
+        worktree: str,
+        node: str,
+        port: str | None = None,
+        direction: str = "origin",
+        environment: str = "dev",
+    ) -> Record:
+        if direction not in {"origin", "impact"}:
+            raise Problem("Unknown lineage direction", 422)
+        return table_lineage.describe(
+            services.projects.snapshot(worktree)["bundle"], node, port, direction, environment
+        )
+
+    @api.post(
+        "/api/worktrees/{worktree}/lineage/rows",
+        response_model=None,
+        dependencies=[Depends(worktree_role("reader"))],
+    )
+    def lineage_rows(worktree: str, data: schemas.LineageRows) -> Record:
+        result = services.lineage.explain(
+            worktree,
+            data.environment,
+            data.dataset,
+            data.row,
+            data.column,
+            data.offset,
+            data.group,
+            data.context,
+            page_size=data.page_size,
+            partition_context=data.partition_context,
+            operand=data.operand,
+            rows_dataset=data.input_dataset,
+            search=data.search,
+        )
+        # Sources, Python steps and retained partition origins have no contributing rows.
+        if "rows" not in result:
+            raise Problem("This value has no contributing rows to open", 422)
+        return result
 
     @api.post(
         "/api/worktrees/{worktree}/runs", response_model=None, dependencies=[Depends(worktree_role("editor"))]
@@ -365,6 +409,8 @@ def router(ctx: Context) -> APIRouter:
             data.group,
             data.context,
             partition_context=data.partition_context,
+            page_size=data.page_size,
+            operand=data.operand,
         )
 
     return api

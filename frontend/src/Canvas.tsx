@@ -303,7 +303,17 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
       const travelled =
         phases.get(e.source) === "done" &&
         (target === "done" || target === "running");
+      const traced =
+        props.lineage &&
+        [e.source, e.target].every((id) =>
+          Object.keys(props.lineage!).some(
+            (key) =>
+              key === props.prefix + id ||
+              key.startsWith(props.prefix + id + "::"),
+          ),
+        );
       const highlighted =
+        traced ||
         edgeSelected ||
         connected ||
         pointed ||
@@ -318,6 +328,7 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
         animated: connected || flowing,
         className:
           [
+            props.lineage && (traced ? "lineage-traced" : "lineage-dimmed"),
             connected && "node-connected",
             pointed && "node-hovered",
             flowing && "is-flowing",
@@ -343,6 +354,8 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
       ...drawn.filter((edge) => edge.selected),
     ];
   }, [
+    props.lineage,
+    props.prefix,
     props.edges,
     nodes,
     hovered,

@@ -1,6 +1,4 @@
-import type { Node, Edge } from "@xyflow/react";
 import type { VariableValue } from "./types";
-import type { Translate } from "./i18n";
 import type {
   PartitionContext,
   PartitionEntry,
@@ -21,10 +19,27 @@ export type Cell = {
 export type Input = Cell & { value: unknown; source?: boolean };
 export type Query = Cell & {
   offset?: number;
+  operand?: string;
+  page_size?: number;
   group?: string;
   context?: boolean;
 };
+export type Operand = {
+  id: string;
+  formula: string;
+  value: unknown;
+  aggregate: boolean;
+  operation: string;
+  total: number;
+  contributions: Input[];
+};
 export type Explanation = Input & {
+  offset?: number;
+  execution?: string;
+  commit?: string;
+  operands?: Operand[];
+  first_inputs?: Input[];
+  input_order?: { dataset: string; column: string }[];
   parents?: {
     dataset: string;
     node: string;
@@ -48,6 +63,7 @@ export type Explanation = Input & {
     formula: string;
     evaluated?: string;
     selection?: string[];
+    selection_evaluated?: string[];
     passthrough: boolean;
   };
   complete: boolean;
@@ -59,13 +75,40 @@ export type Explanation = Input & {
   groups?: { key: string; value: unknown; rows: number }[];
   group?: unknown;
 };
+
+export type TableLineage = {
+  node: string;
+  seeds: string[];
+  nodes: Record<
+    string,
+    {
+      id: string;
+      source: boolean;
+      export: boolean;
+      resource: Record<string, unknown>;
+      variables: { name: string; node?: string }[];
+      error?: string;
+    }
+  >;
+  edges: { source: string; target: string; variable?: string }[];
+};
+export type LineageTarget = {
+  node: string;
+  port?: string;
+  direction: "origin" | "impact";
+  cell?: Cell;
+};
+export type ContributingRows = { query: Query; input: Input };
 export type Entry = {
   id: string;
   query: Query;
   result: Explanation;
-  hidden: Explanation[];
-  deferred?: boolean;
-  group?: { parent: string; key: string; rows: number };
+  children: { id: string; input: Input; deferred: boolean }[];
+};
+export type LineageGraph = {
+  root: string;
+  original: Explanation;
+  entries: Entry[];
 };
 export const cellId = (cell: Cell) =>
   JSON.stringify([cell.dataset, cell.row, cell.column]);
@@ -74,170 +117,179 @@ export const requestId = (query: Query) =>
     cellId(query),
     query.offset || 0,
     query.group,
+    query.operand,
+    query.page_size,
     !!query.context,
     query.partition_context,
   ]);
 
-const sourceResult = (cell: Input): Explanation => ({
-  ...cell,
-  kind: "source",
-  complete: true,
-  warnings: [],
-  total: 0,
-  contributions: [],
-  context_total: 0,
-  page_size: 5,
-});
-
-/** Build the visible dependency DAG; identity projections remain available as selection details. */
+/** Follow one row per input, keeping transport steps and loading long side branches on demand. */
 export async function buildLineageGraph(
   cell: Cell,
-  pages: Record<string, Partial<Query>>,
+  choices: Record<string, Input>,
+  opened: Set<string>,
   read: (query: Query) => Promise<Explanation>,
-  budget: number,
-  t: Translate,
-) {
+  tables: TableLineage,
+): Promise<LineageGraph> {
   const entries = new Map<string, Entry>();
-  const edges = new Map<string, Edge>();
-  let remaining = budget;
+  const depth = (node: string, seen = new Set<string>()): number => {
+    if (seen.has(node)) return 0;
+    if (seen.size >= 3) return 1;
+    const next = new Set([...seen, node]);
+    return (
+      1 +
+      Math.max(
+        0,
+        ...tables.edges
+          .filter((e) => e.target === node && !e.variable)
+          .map((e) => depth(e.source, next)),
+      )
+    );
+  };
   const original = await read(cell);
   const visit = async (
     input: Input,
     ancestors: Set<string>,
   ): Promise<string> => {
-    let current = input;
-    const hidden: Explanation[] = [];
-    const visited = new Set(ancestors);
-    while (true) {
-      const id = cellId(current);
-      if (visited.has(id)) throw new Error(t("lineageCircularReference"));
-      visited.add(id);
-      const existing = entries.get(id);
-      if (existing) {
-        existing.hidden = [
-          ...new Map(
-            [...existing.hidden, ...hidden].map((item) => [cellId(item), item]),
-          ).values(),
-        ];
-        return id;
-      }
-      const query: Query = {
-        dataset: current.dataset,
-        row: current.row,
-        column: current.column,
-        partition_context: current.partition_context,
-        ...pages[id],
-      };
-      const deferred = !current.source && remaining-- <= 0;
-      const result =
-        current.source || deferred ? sourceResult(current) : await read(query);
-      if (
-        !deferred &&
-        result.complete &&
-        result.calculation?.passthrough &&
-        result.total === 1 &&
-        result.contributions.length === 1
-      ) {
-        hidden.push(result);
-        current = result.contributions[0];
-        continue;
-      }
-      const entry: Entry = { id, query, result, hidden, deferred };
-      entries.set(id, entry);
-      const connect = (source: string) => {
-        const edgeId = JSON.stringify([source, id]);
-        edges.set(edgeId, {
-          id: edgeId,
-          source,
-          target: id,
-          type: "smoothstep",
-          markerEnd: { type: "arrowclosed" as const },
-          selectable: false,
-        });
-      };
-      if (!deferred && result.complete && result.kind !== "source") {
-        if (result.groups) {
-          for (const group of result.groups) {
-            const groupId = JSON.stringify([id, "group", group.key]);
-            entries.set(groupId, {
-              id: groupId,
-              query,
-              hidden: [],
-              result: {
-                ...sourceResult({ ...result, value: group.value }),
-                kind: "group",
-              },
-              group: { parent: id, key: group.key, rows: group.rows },
-            });
-            connect(groupId);
-          }
-        } else {
-          // Sequential traversal bounds backend work and shares already-resolved source cells.
-          for (const contribution of result.contributions)
-            connect(await visit(contribution, visited));
+    const id = cellId(input);
+    if (ancestors.has(id)) throw new Error("Circular lineage reference");
+    if (entries.has(id)) return id;
+    const query: Query = {
+      dataset: input.dataset,
+      row: input.row,
+      column: input.column,
+      partition_context: input.partition_context,
+    };
+    const result: Explanation = input.source
+      ? {
+          ...input,
+          kind: "source",
+          complete: true,
+          warnings: [],
+          total: 0,
+          contributions: [],
+          context_total: 0,
+          page_size: 5,
         }
-      }
+      : await read(query);
+    const entry: Entry = { id, query, result, children: [] };
+    entries.set(id, entry);
+    if (
+      !result.complete ||
+      result.kind === "source" ||
+      result.kind === "python"
+    )
       return id;
+    // Scalar operands identify the selected row; a window's other rows are explored on click.
+    const operands = result.operands;
+    const scalar =
+      operands?.filter((p) => !p.aggregate).flatMap((p) => p.contributions) ||
+      [];
+    const firstGroup = result.groups?.[0];
+    const contributions =
+      firstGroup && !choices[id]
+        ? (await read({ ...query, group: firstGroup.key })).contributions
+        : result.contributions;
+    const inputs = choices[id]
+      ? [choices[id]]
+      : scalar.length
+        ? scalar
+        : operands?.[0]?.contributions ||
+          (firstGroup ? contributions : result.first_inputs || contributions);
+    const groups = new Map<string, Input>();
+    const ordered = [...inputs].sort((a, b) => {
+      const order = (item: Input) =>
+        result.input_order?.findIndex(
+          (c) => c.dataset === item.dataset && c.column === item.column,
+        ) ?? 0;
+      return order(a) - order(b);
+    });
+    for (const item of ordered) {
+      const key = JSON.stringify([item.dataset, item.column]);
+      if (!groups.has(key)) groups.set(key, item);
     }
+    for (const [index, item] of [...groups.values()].entries()) {
+      const child = cellId(item);
+      const deferred =
+        index > 0 &&
+        !item.source &&
+        depth(item.node || "") > 3 &&
+        !opened.has(child);
+      entry.children.push({ id: child, input: item, deferred });
+      if (!deferred) await visit(item, new Set([...ancestors, id]));
+    }
+    return id;
   };
   const root = await visit(original, new Set());
+  return { root, original, entries: [...entries.values()] };
+}
+
+export function readLineageTarget(
+  params: URLSearchParams,
+): LineageTarget | null {
+  const node = params.get("lineage");
+  if (!node) return null;
+  const dataset = params.get("dataset"),
+    column = params.get("column"),
+    row = Number(params.get("row"));
+  let partition_context: Cell["partition_context"];
+  try {
+    partition_context =
+      JSON.parse(params.get("partition") || "null") || undefined;
+  } catch {
+    /* Ignore malformed optional context. */
+  }
+  const cell =
+    dataset &&
+    column &&
+    params.has("row") &&
+    Number.isSafeInteger(row) &&
+    row >= 0
+      ? {
+          dataset,
+          column,
+          row,
+          node,
+          port: params.get("output") || undefined,
+          partition_context,
+        }
+      : undefined;
   return {
-    original,
-    root,
-    entries: [...entries.values()],
-    edges: [...edges.values()],
+    node,
+    port: params.get("output") || undefined,
+    direction:
+      !cell && params.get("direction") === "impact" ? "impact" : "origin",
+    cell,
   };
 }
 
-/**
- * The height of a Python card. Listed parent tables take 46 pixels each, plus 45
- * per row, and scroll beyond 300 pixels; the card fills this height, so the
- * scrolling area absorbs longer translations of its hint.
- */
-export function pythonCardHeight(result: Explanation, listParents = true) {
-  const parents = (listParents && result.parents) || [];
-  if (!parents.length) return 150;
-  const tables = parents.reduce(
-    (total, parent) => total + 46 + parent.rows.length * 45,
-    30,
-  );
-  const paged = parents.some((parent) => parent.count > result.page_size);
-  return 245 + Math.min(tables, 300) + (paged ? 41 : 0);
-}
-
-/** Lay out sources on the left and their calculations on the right, preserving shared inputs. */
-export function arrangeLineage<T extends Node>(nodes: T[], edges: Edge[]): T[] {
-  const byId = new Map(nodes.map((node) => [node.id, node]));
-  const ranks = new Map<string, number>();
-  const rank = (id: string): number => {
-    if (ranks.has(id)) return ranks.get(id)!;
-    ranks.set(id, 0);
-    const parents = edges.filter((edge) => edge.target === id);
-    const value = parents.length
-      ? Math.max(...parents.map((edge) => rank(edge.source))) + 1
-      : 0;
-    ranks.set(id, value);
-    return value;
-  };
-  for (const node of nodes) rank(node.id);
-  const layers = new Map<number, T[]>();
-  for (const node of nodes)
-    layers.set(ranks.get(node.id)!, [
-      ...(layers.get(ranks.get(node.id)!) || []),
-      node,
-    ]);
-  const height = (node: T) => node.height || 140;
-  const totals = [...layers.values()].map((layer) =>
-    layer.reduce((total, node) => total + height(node) + 24, -24),
-  );
-  const fullHeight = Math.max(...totals, 0);
-  for (const [level, layer] of layers) {
-    const total = layer.reduce((sum, node) => sum + height(node) + 24, -24);
-    let y = (fullHeight - total) / 2;
-    for (const node of layer) {
-      byId.set(node.id, { ...node, position: { x: level * 430, y } });
-      y += height(node) + 24;
+export function writeLineageTarget(
+  params: URLSearchParams,
+  target: LineageTarget | null,
+) {
+  const next = new URLSearchParams(params);
+  for (const key of [
+    "lineage",
+    "output",
+    "direction",
+    "dataset",
+    "column",
+    "row",
+    "partition",
+  ])
+    next.delete(key);
+  if (target) {
+    next.set("lineage", target.node);
+    next.set("node", target.node);
+    if (target.port) next.set("output", target.port);
+    if (target.direction === "impact") next.set("direction", "impact");
+    if (target.cell) {
+      next.set("dataset", target.cell.dataset);
+      next.set("column", target.cell.column);
+      next.set("row", String(target.cell.row));
+      if (target.cell.partition_context)
+        next.set("partition", JSON.stringify(target.cell.partition_context));
     }
   }
-  return nodes.map((node) => byId.get(node.id)!);
+  return next;
 }

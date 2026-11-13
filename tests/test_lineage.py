@@ -42,6 +42,84 @@ def test_aggregate_pagination_is_independent_of_preview_limit(services, tmp_path
     assert len(first["contributions"]) == 5
     assert len(second["contributions"]) == 4
     assert not {c["row"] for c in first["contributions"]} & {c["row"] for c in second["contributions"]}
+    larger = lineage.explain(worktree, "dev", preview["id"], 0, "total", page_size=100)
+    assert len(larger["contributions"]) == 9
+    rows = lineage.explain(
+        worktree,
+        "dev",
+        preview["id"],
+        0,
+        "total",
+        rows_dataset=first["contributions"][0]["dataset"],
+        page_size=100,
+    )
+    assert len(rows["rows"]) == rows["count"] == 9
+    assert [c["name"] for c in rows["columns"]] == ["id", "grp", "value", "category"]
+
+
+def test_mixed_window_keeps_current_row_and_each_full_operand(services, tmp_path):
+    worktree, preview, lineage = pipeline(
+        services,
+        tmp_path,
+        "SELECT id, value / SUM(value) OVER () + AVG(value) OVER () AS share FROM {{ source }} ORDER BY id",
+    )
+    result = lineage.explain(worktree, "dev", preview["id"], 1, "share")
+    assert result["complete"], result
+    scalar, total, average = result["operands"]
+    assert scalar["value"] == 20
+    assert scalar["contributions"][0]["row"] == 1
+    assert total["value"] == 380 and total["total"] == 9
+    assert average["value"] == pytest.approx(380 / 9)
+    assert "SUM" not in result["calculation"]["evaluated"]
+    page = lineage.explain(worktree, "dev", preview["id"], 1, "share", operand=total["id"], offset=5)
+    assert len(page["contributions"]) == 4
+    assert page["value"] == result["value"]
+
+
+def test_mixed_group_aggregates_keep_separate_contributions(services, tmp_path):
+    worktree, preview, lineage = pipeline(
+        services,
+        tmp_path,
+        "SELECT grp, SUM(value) / COUNT(value) AS mean FROM {{ source }} GROUP BY grp ORDER BY grp",
+    )
+    result = lineage.explain(worktree, "dev", preview["id"], 0, "mean")
+    assert result["complete"], result
+    assert [p["value"] for p in result["operands"]] == [50, 3]
+    assert result["calculation"]["evaluated"] == "50 / 3"
+
+
+@pytest.mark.parametrize(
+    ("query", "row"),
+    [
+        # A scalar subquery reads another relation: it is not an operand of the row.
+        ("SELECT id, value / (SELECT SUM(value) FROM {{ source }}) AS d FROM {{ source }} ORDER BY id", 1),
+        ("SELECT grp, SUM(value) * (SELECT COUNT(*) FROM {{ source }}) AS d FROM {{ source }} GROUP BY grp", 0),
+        # A GROUP BY expression stays one operand.
+        ("SELECT upper(grp) || COUNT(*) AS d FROM {{ source }} GROUP BY upper(grp) ORDER BY 1", 0),
+        # Operands that the captured row cannot identify fall back to the whole expression.
+        ("SELECT DISTINCT grp, value * 0 + SUM(value) OVER (PARTITION BY grp) AS d FROM {{ source }}", 0),
+    ],
+)
+def test_operands_never_make_a_covered_expression_incomplete(services, tmp_path, query, row):
+    worktree, preview, lineage = pipeline(services, tmp_path, query)
+    result = lineage.explain(worktree, "dev", preview["id"], row, "d")
+    assert result["complete"], result["warnings"]
+
+
+def test_a_distinct_group_narrows_only_its_own_operand(services, tmp_path):
+    worktree, preview, lineage = pipeline(
+        services,
+        tmp_path,
+        "SELECT COUNT(DISTINCT category) * 100 + SUM(value) AS d FROM {{ source }}",
+    )
+    result = lineage.explain(worktree, "dev", preview["id"], 0, "d")
+    distinct, total = result["operands"]
+    assert distinct["kind"] == "distinct_groups" and distinct["total"] == 7
+    assert total["total"] == 9
+    group = distinct["groups"][0]["key"]
+    page = lineage.explain(worktree, "dev", preview["id"], 0, "d", group=group, operand=distinct["id"])
+    assert page["complete"], page["warnings"]
+    assert page["total"] == distinct["groups"][0]["rows"]
 
 
 def test_unselected_group_keys_distinguish_equal_aggregate_results(services, tmp_path):

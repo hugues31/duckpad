@@ -116,10 +116,7 @@ test("calculate a control value, retain it for a targeted launch and show its pr
   );
   await page.getByRole("link", { name: "Open source cell" }).click();
   await expect(
-    page.getByRole("dialog", {
-      name: "How this value was calculated",
-      exact: true,
-    }),
+    page.getByRole("complementary", { name: "Lineage", exact: true }),
   ).toContainText("paid");
 
   // A protected launch confirms producers, even when that environment retains a value.
@@ -928,17 +925,17 @@ test("filter on a period with a variable, typed or chosen in the guided form (wo
   await page
     .getByRole("button", { name: /Explain this value: amount, rows 1,/ })
     .click();
-  const dialog = page.getByRole("dialog");
-  await expect(page.locator(".lineage-loading")).toHaveCount(0);
-  await dialog
-    .getByRole("button", { name: /Source and selection details/ })
-    .first()
-    .click();
-  await expect(dialog.locator(".lineage-details")).toContainText(
+  const lineage = page.getByRole("complementary", {
+    name: "Lineage",
+    exact: true,
+  });
+  await expect(lineage.locator(".lineage-step.root")).toBeVisible();
+  await expect(lineage.locator(".lineage-loading")).toHaveCount(0);
+  await expect(lineage.locator(".lineage-selection").first()).toContainText(
     "order_date >= CAST('2026-10-15' AS DATE) (report_start)",
   );
-  await page.keyboard.press("Escape");
-  await expect(dialog).toHaveCount(0);
+  await lineage.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(lineage).toHaveCount(0);
 
   // The guided form offers the same variables as a filter value.
   await inspector
