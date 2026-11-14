@@ -1,5 +1,5 @@
 import fr from "../src/locales/fr.json" with { type: "json" };
-import { createFilterProject, signIn } from "./helpers";
+import { createFilterProject, editOverview, signIn } from "./helpers";
 import { test, expect, type Page } from "@playwright/test";
 
 async function choosePreference(page: Page, name: string) {
@@ -721,7 +721,7 @@ test("documentation waits for its refreshed revision and preserves edits during 
   await sample(page);
   await page.getByRole("link", { name: "Documentation", exact: true }).click();
   const panel = page.locator(".documentation-page");
-  const editor = panel.locator(".project-documentation");
+  const editor = await editOverview(page);
   const button = panel.getByRole("button", {
     name: /^(Save changes|Saving…)$/,
   });

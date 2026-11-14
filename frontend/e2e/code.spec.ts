@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { test, expect, type Page } from "@playwright/test";
 import fr from "../src/locales/fr.json" with { type: "json" };
-import { editCode, signIn } from "./helpers";
+import { editCode, editOverview, signIn } from "./helpers";
 
 async function openCode(page: Page) {
   await signIn(page);
@@ -158,21 +158,23 @@ test("project Markdown and Python dependencies round trip between Code, Document
 
   const markdown = "# Revenue\n\nProject **business context**.\n";
   await page.getByRole("link", { name: "Documentation", exact: true }).click();
+  const editor = await editOverview(page);
   await expect(page.locator(".documentation-page")).toContainText("README.md");
-  await page.locator(".project-documentation").fill(markdown);
-  await page
-    .getByRole("button", { name: "Markdown preview", exact: true })
-    .click();
+  await editor.fill(markdown);
+  // The rendered overview shows the draft; saving stays available from it.
+  await page.getByRole("button", { name: "Done", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Revenue", exact: true }),
   ).toBeVisible();
   await expect(page.locator(".documentation-preview strong")).toHaveText(
     "business context",
   );
+  await expect(page.locator(".documentation-actions")).toContainText(
+    "Unsaved changes",
+  );
   await expect(
-    page.getByRole("heading", { name: "Generated project reference" }),
+    page.getByRole("heading", { name: "Pipeline", exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Edit", exact: true }).click();
   const saved = page.waitForResponse(
     (response) =>
       response.url().endsWith(`/worktrees/${worktree.id}`) &&
@@ -180,9 +182,9 @@ test("project Markdown and Python dependencies round trip between Code, Document
   );
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
   expect((await saved).ok()).toBeTruthy();
-  await expect(page.locator(".documentation-page .muted.small")).toHaveText(
-    "All changes saved",
-  );
+  await expect(
+    page.locator(".documentation-actions").getByRole("status"),
+  ).toHaveText("All changes saved");
   await page.getByRole("link", { name: "Code", exact: true }).click();
   await page.getByRole("treeitem", { name: "README.md", exact: true }).click();
   await expect(page.locator(".code-editor-body")).toContainText(
@@ -195,8 +197,12 @@ test("project Markdown and Python dependencies round trip between Code, Document
     page.getByRole("button", { name: "Save changes", exact: true }),
   ).toBeDisabled();
   await page.getByRole("link", { name: "Documentation", exact: true }).click();
-  await expect(page.locator(".project-documentation")).toHaveValue(changed);
-  const editor = page.locator(".project-documentation");
+  // The tab opens on the rendered overview, with the text saved from Code.
+  await expect(page.locator(".documentation-preview")).toContainText(
+    "Edited from Code.",
+  );
+  await editOverview(page);
+  await expect(editor).toHaveValue(changed);
   await editor.evaluate((element: HTMLTextAreaElement) => {
     const start = element.value.indexOf("Edited from Code.");
     element.setSelectionRange(start, start + "Edited from Code.".length);
@@ -213,20 +219,20 @@ test("project Markdown and Python dependencies round trip between Code, Document
   await expect(editor).toHaveValue(changed);
   await page.keyboard.press("ControlOrMeta+Shift+Z");
   await expect(editor).toHaveValue(formatted);
-  await page
-    .getByRole("button", { name: "Markdown preview", exact: true })
-    .click();
-  await expect(page.locator(".documentation-preview strong").last()).toHaveText(
-    "Edited from Code.",
-  );
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Save changes", exact: true }),
   ).toBeDisabled();
+  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(page.locator(".documentation-preview strong").last()).toHaveText(
+    "Edited from Code.",
+  );
   await page.reload();
+  await editOverview(page);
   await expect(editor).toHaveValue(formatted);
   const toolbar = page.getByRole("group", { name: "Markdown formatting" });
-  expect((await editor.boundingBox())!.width).toBeGreaterThan(1000);
+  // The editor takes the width of the document, beside the outline.
+  expect((await editor.boundingBox())!.width).toBeGreaterThan(900);
   await page.setViewportSize({ width: 760, height: 800 });
   await expect(toolbar).toBeVisible();
   expect(
