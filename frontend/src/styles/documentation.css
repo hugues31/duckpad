@@ -1,6 +1,240 @@
-/* Documentation tab. */
-.documentation-page h1 {
-  margin-top: 12px;
+/* Documentation tab: the project's document, with an outline beside it. */
+.documentation-page {
+  /* Secondary text, readable on the page and on cards in both themes. */
+  --doc-muted: color-mix(in srgb, var(--text) 66%, var(--surface));
+  --doc-component: light-dark(#6b589c, #d0bcff);
+  scroll-padding-top: 20px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .documentation-page {
+    scroll-behavior: smooth;
+  }
+}
+.doc-layout {
+  display: grid;
+  grid-template-columns: 208px minmax(0, 1000px);
+  justify-content: center;
+  align-items: start;
+  gap: 52px;
+}
+.doc-article {
+  min-width: 0;
+  padding-bottom: 48px;
+}
+.doc-article :is(section, article) {
+  scroll-margin-top: 20px;
+}
+.doc-article :is(section, article):focus {
+  outline: none;
+}
+.doc-article > section {
+  margin-top: 44px;
+}
+.doc-article h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.doc-count {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-alt);
+  color: var(--doc-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.doc-article > .doc-empty {
+  margin-top: 44px;
+}
+.doc-empty {
+  padding: 22px 24px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  color: var(--doc-muted);
+  line-height: 1.6;
+}
+.doc-footnote {
+  margin-top: 44px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  color: var(--doc-muted);
+  font-size: 11px;
+}
+
+/* Outline: follows the reading position. */
+.doc-outline {
+  position: sticky;
+  top: 0;
+  max-height: calc(100dvh - 170px);
+  overflow-y: auto;
+  padding: 4px 4px 4px 0;
+  font-size: 12px;
+}
+.doc-outline .eyebrow {
+  margin-bottom: 10px;
+  padding-left: 12px;
+}
+.doc-outline ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.doc-outline a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 12px;
+  border-left: 2px solid var(--border);
+  color: var(--doc-muted);
+  text-decoration: none;
+  line-height: 1.35;
+}
+.doc-outline a:hover {
+  color: var(--text);
+}
+.doc-outline a:focus-visible {
+  outline-offset: -2px;
+}
+.doc-outline a[aria-current],
+.doc-outline a.is-open {
+  color: var(--text);
+  font-weight: 600;
+}
+.doc-outline a[aria-current] {
+  border-left-color: var(--accent);
+  color: var(--accent);
+}
+.doc-outline a small {
+  color: var(--doc-muted);
+  font-size: 10px;
+  font-weight: 500;
+}
+.doc-outline ul ul a {
+  padding: 4px 12px 4px 24px;
+  font-size: 11.5px;
+}
+/* A section lists its nodes while it is being read. */
+.doc-outline li > ul {
+  display: none;
+}
+.doc-outline li:has(> a.is-open) > ul {
+  display: block;
+}
+
+/* Cover: what the project is, and how much it holds. */
+.doc-cover-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+.doc-cover h1 {
+  margin: 12px 0 0;
+  overflow-wrap: anywhere;
+}
+.doc-lede {
+  margin: 10px 0 0;
+  color: var(--doc-muted);
+  font-size: 15px;
+  line-height: 1.5;
+}
+.doc-export {
+  flex: none;
+}
+.doc-print-meta {
+  display: none;
+}
+.doc-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 26px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.doc-stats li {
+  flex: 1 1 120px;
+  max-width: 180px;
+}
+.doc-stats a {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--doc-muted);
+  font-size: 11.5px;
+  text-decoration: none;
+}
+.doc-stats a:hover {
+  border-color: var(--accent);
+}
+.doc-stats strong {
+  color: var(--text);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+.doc-coverage {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 22px;
+  margin-top: 16px;
+  color: var(--doc-muted);
+  font-size: 11.5px;
+}
+.doc-coverage-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.doc-meter {
+  display: block;
+  width: 72px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--surface-alt);
+  overflow: hidden;
+}
+.doc-meter > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+/* Overview: the authored README. */
+.doc-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.doc-section-heading h2 {
+  margin-bottom: 0;
+}
+.documentation-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.documentation-actions .button {
+  gap: 6px;
+}
+.doc-editor-hint {
+  margin-bottom: 10px;
+  color: var(--doc-muted);
+  font-size: 11.5px;
 }
 .project-documentation {
   display: block;
@@ -14,16 +248,6 @@
   border-radius: 0;
   resize: vertical;
   font-family: monospace;
-}
-.documentation-actions {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-block: 20px 16px;
-}
-.documentation-actions .segmented {
-  margin: 0;
 }
 .markdown-editor {
   border: 1px solid var(--border);
@@ -46,25 +270,688 @@
   border-bottom: 1px solid var(--border);
   background: var(--surface-alt);
 }
-.documentation-preview,
-.generated-documentation {
+.documentation-preview {
+  padding: 24px 28px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
   overflow-wrap: anywhere;
   overflow-x: auto;
-  margin-block: 16px;
 }
-.documentation-preview pre {
+
+/* Authored Markdown, in the overview and in descriptions. */
+.doc-prose {
+  font-size: 13px;
+  line-height: 1.7;
+}
+.doc-prose > :first-child {
+  margin-top: 0;
+}
+.doc-prose > :last-child {
+  margin-bottom: 0;
+}
+.doc-prose :is(h3, h4, h5, h6) {
+  margin: 1.5em 0 0.5em;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  text-transform: none;
+  line-height: 1.3;
+}
+.doc-prose h3 {
+  font-size: 18px;
+}
+.doc-prose h4 {
+  font-size: 15px;
+}
+.doc-prose :is(h5, h6) {
+  font-size: 13px;
+}
+.doc-prose p {
+  margin: 0 0 0.9em;
+}
+.doc-prose :is(ul, ol) {
+  margin: 0 0 0.9em;
+  padding-left: 22px;
+}
+.doc-prose li + li {
+  margin-top: 4px;
+}
+.doc-prose a {
+  color: var(--accent);
+}
+.doc-prose :not(pre) > code,
+.doc-table code,
+.doc-facts code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--surface-alt);
+  font-size: 0.92em;
+}
+.doc-prose pre {
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--surface-alt);
   overflow-x: auto;
 }
-.documentation-preview table,
-.generated-documentation table {
+.doc-prose blockquote {
+  margin: 0 0 0.9em;
+  padding-left: 14px;
+  border-left: 3px solid var(--border);
+  color: var(--doc-muted);
+}
+.doc-prose table {
   width: 100%;
   border-collapse: collapse;
 }
-.documentation-preview th,
-.documentation-preview td,
-.generated-documentation th,
-.generated-documentation td {
+.doc-prose :is(th, td) {
   padding: 8px;
   text-align: left;
   border-bottom: 1px solid var(--border);
+}
+
+/* Pipeline: the flow as a drawing. */
+.doc-diagram {
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  overflow-x: auto;
+}
+.doc-diagram svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 560px;
+}
+.doc-diagram-edge {
+  fill: none;
+  stroke: var(--edge);
+  stroke-width: 1.8;
+}
+.doc-diagram-node {
+  color: var(--node-color, var(--accent));
+  cursor: pointer;
+  outline: none;
+}
+.doc-diagram-shape {
+  fill: var(--surface);
+  stroke: var(--edge);
+  stroke-width: 1.5;
+}
+.doc-diagram-node:is(.source, .export) {
+  color: light-dark(
+    var(--node-color, #1559df),
+    color-mix(in srgb, var(--node-color, #f2f6ff) 14%, white)
+  );
+}
+.doc-diagram-node:is(.source, .export) .doc-diagram-shape {
+  fill: light-dark(
+    color-mix(in srgb, var(--node-color, #1559df) 24%, white),
+    color-mix(in srgb, var(--node-color, #3d7fe6) 44%, #121214)
+  );
+  stroke: var(--node-color, var(--accent));
+}
+.doc-diagram-node.component {
+  color: var(--doc-component);
+}
+.doc-diagram-node.component .doc-diagram-shape {
+  stroke: #9481c4;
+  stroke-linejoin: round;
+}
+.doc-diagram-node text {
+  fill: var(--text);
+  font-size: 17px;
+  font-weight: 600;
+}
+.doc-diagram-node:is(:hover, :focus-visible) .doc-diagram-shape {
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+.doc-diagram-node.is-muted {
+  opacity: 0.5;
+}
+
+/* A node: what it does, what it reads and what it produces. */
+.doc-node {
+  margin-top: 14px;
+  padding: 18px 20px 6px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.doc-node > header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.doc-node > header > div {
+  flex: 1;
+  min-width: 0;
+}
+.doc-node :is(h3, h4, h5, h6) {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  text-transform: none;
+  overflow-wrap: anywhere;
+}
+.doc-node-kind {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 2px 0 0;
+  color: var(--doc-muted);
+  font-size: 11.5px;
+}
+.doc-node-icon {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1.5px solid var(--edge);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--node-color, var(--accent));
+}
+.doc-node:is(.source, .export) > header > .doc-node-icon {
+  border-radius: 8px;
+  border-color: var(--node-color, var(--accent));
+  background: light-dark(
+    color-mix(in srgb, var(--node-color, #1559df) 24%, white),
+    color-mix(in srgb, var(--node-color, #3d7fe6) 44%, #121214)
+  );
+  color: light-dark(
+    var(--node-color, #1559df),
+    color-mix(in srgb, var(--node-color, #f2f6ff) 14%, white)
+  );
+}
+.doc-node.component > header > .doc-node-icon {
+  border-radius: 10px;
+  border-color: #9481c4;
+  color: var(--doc-component);
+}
+.doc-node-open {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  color: var(--doc-muted);
+}
+.doc-node-open:hover {
+  background: var(--surface-alt);
+  color: var(--accent);
+}
+.doc-node > .doc-prose {
+  margin-bottom: 14px;
+}
+.doc-facts {
+  display: grid;
+  grid-template-columns: minmax(96px, max-content) minmax(0, 1fr);
+  gap: 7px 18px;
+  margin: 0 0 14px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.doc-facts dt {
+  color: var(--doc-muted);
+}
+.doc-facts dt::first-letter {
+  text-transform: uppercase;
+}
+.doc-facts dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.doc-links {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.doc-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 9px;
+  border-radius: 999px;
+  background: var(--surface-alt);
+  color: var(--text);
+  font-size: 11.5px;
+  text-decoration: none;
+}
+.doc-links a:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.doc-links small {
+  color: var(--doc-muted);
+  font-family: var(--mono);
+  font-size: 10px;
+}
+.doc-variable {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border-radius: 5px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+.doc-tests {
+  margin: 0 0 14px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  list-style: none;
+  font-size: 12px;
+}
+.doc-tests li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+}
+.doc-tests li + li {
+  border-top: 1px solid var(--border);
+}
+.doc-tests .doc-test-status {
+  margin-left: auto;
+}
+.doc-test-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--doc-muted);
+  white-space: nowrap;
+}
+.doc-test-status.ok {
+  color: var(--success);
+}
+.doc-test-status.warning {
+  color: var(--warning);
+}
+.doc-test-status.error {
+  color: var(--danger);
+}
+.doc-test-status small {
+  color: var(--doc-muted);
+}
+
+/* An output and its columns; folded inside components. */
+.doc-output {
+  margin: 0 -20px;
+  padding: 0 20px;
+  border-top: 1px solid var(--border);
+}
+.doc-output > summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  padding: 11px 0;
+  cursor: pointer;
+  list-style: none;
+  font-size: 12px;
+}
+.doc-output > summary::-webkit-details-marker {
+  display: none;
+}
+.doc-output > summary::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  margin-right: 2px;
+  border-right: 1.5px solid var(--doc-muted);
+  border-bottom: 1.5px solid var(--doc-muted);
+  rotate: -45deg;
+  transition: rotate 0.12s;
+}
+.doc-output[open] > summary::before {
+  rotate: 45deg;
+}
+.doc-output > summary code {
+  font-weight: 600;
+}
+.doc-output-facts {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-left: auto;
+  color: var(--doc-muted);
+  font-size: 11.5px;
+}
+.doc-output > :not(summary) {
+  margin-bottom: 12px;
+}
+.doc-output > p {
+  margin-top: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.doc-saved {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.doc-saved span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--doc-muted);
+  font-size: 11.5px;
+}
+
+/* The nodes of a component instance, never hidden: they change the data. */
+.doc-steps {
+  margin: 4px 0 14px;
+  padding-left: 16px;
+  border-left: 2px solid color-mix(in srgb, #9481c4 55%, transparent);
+}
+.doc-steps > .eyebrow {
+  margin: 0 0 4px;
+  color: var(--doc-component);
+}
+.doc-node.doc-step {
+  margin-top: 0;
+  padding: 14px 0 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+.doc-step + .doc-step {
+  border-top: 1px solid var(--border);
+}
+.doc-step > header {
+  margin-bottom: 8px;
+}
+.doc-step > header > .doc-node-icon {
+  width: 28px;
+  height: 28px;
+}
+.doc-node.doc-step :is(h4, h5, h6) {
+  font-size: 13.5px;
+}
+.doc-step .doc-output {
+  margin: 0;
+  padding: 0;
+}
+
+/* Reference tables. */
+.doc-table-frame {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  overflow-x: auto;
+}
+.doc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.doc-table th {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--doc-muted);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.doc-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  /* Unlike `anywhere`, long names wrap without narrowing short columns. */
+  overflow-wrap: break-word;
+}
+.doc-table td > :is(code, .badge) {
+  white-space: nowrap;
+}
+.doc-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.doc-table td > p {
+  margin: 0;
+}
+.doc-table td a:not(.doc-links a) {
+  color: var(--accent);
+  text-decoration: none;
+}
+.doc-table td a:not(.doc-links a):hover {
+  text-decoration: underline;
+}
+.doc-strong {
+  font-weight: 650;
+}
+.doc-cell-note {
+  margin-top: 3px;
+  color: var(--doc-muted);
+}
+.doc-columns {
+  border: 1px solid var(--border);
+  border-collapse: separate;
+  border-spacing: 0;
+  border-radius: 8px;
+}
+.doc-columns th {
+  background: color-mix(in srgb, var(--surface-alt) 60%, transparent);
+}
+.doc-columns :is(th, td):nth-child(1) {
+  width: 30%;
+}
+.doc-columns :is(th, td):nth-child(2) {
+  width: 18%;
+}
+/* Long names and types wrap on narrow screens instead of widening the page. */
+.doc-columns td > code {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1100px) {
+  .doc-layout {
+    grid-template-columns: minmax(0, 1000px);
+  }
+  .doc-outline {
+    display: none;
+  }
+}
+@media (max-width: 640px) {
+  .doc-cover-title {
+    flex-direction: column;
+    gap: 14px;
+  }
+  .doc-output-facts {
+    margin-left: 0;
+  }
+  .doc-facts {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+  .doc-facts dd {
+    margin-bottom: 8px;
+  }
+}
+
+/*
+ * Printing the Documentation tab exports the document: only the article, on
+ * white paper, whatever the theme. Other pages keep the browser's defaults.
+ */
+@media print {
+  @page {
+    size: A4;
+    margin: 16mm 15mm 18mm;
+
+    /* The document's own footer replaces the browser's header and footer. */
+    @top-left {
+      content: "";
+    }
+
+    @top-center {
+      content: "";
+    }
+
+    @top-right {
+      content: "";
+    }
+
+    @bottom-center {
+      content: "";
+    }
+
+    @bottom-right {
+      content: counter(page) " / " counter(pages);
+      color: #6b6b76;
+      font-size: 9px;
+    }
+  }
+  :root:has(.documentation-page) {
+    --bg: #fff;
+    --surface: #fff;
+    --surface-alt: #f0f0f3;
+    --border: #d5d5dc;
+    --text: #16161b;
+    --muted: #191b22;
+    --accent: #1559df;
+    --accent-soft: #dbe7ff;
+    --edge: #92929e;
+    --success: #1f7a4d;
+    --danger: #a33e36;
+    --warning: #8a5300;
+    --glass: #fff;
+    --shadow: none;
+    color-scheme: light;
+    background: #fff;
+    font-size: 11px;
+  }
+  body:has(.documentation-page),
+  body:has(.documentation-page) #root,
+  .app-shell:has(.documentation-page),
+  .workspace-shell:has(.documentation-page) {
+    display: block;
+    position: static;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+    background: #fff;
+  }
+  body:has(.documentation-page) > :not(#root),
+  body:has(.documentation-page) #root > :not(.app-shell),
+  .app-shell:has(.documentation-page) > :not(.workspace-shell),
+  .workspace-shell:has(.documentation-page) > :not(.documentation-page) {
+    display: none !important;
+  }
+  .workspace-shell > .documentation-page {
+    padding: 0;
+    overflow: visible;
+    background: #fff;
+  }
+  .doc-layout {
+    display: block;
+  }
+  .doc-outline,
+  .doc-export,
+  .doc-coverage,
+  .doc-node-open,
+  .documentation-actions,
+  .documentation-page [data-tooltip]::after {
+    display: none;
+  }
+  .doc-article {
+    padding-bottom: 0;
+  }
+  .doc-article > section {
+    margin-top: 26px;
+  }
+  .doc-print-meta {
+    display: block;
+    margin: 12px 0 0;
+    color: var(--doc-muted);
+    font-size: 10px;
+  }
+  .doc-cover {
+    padding-bottom: 18px;
+    border-bottom: 2px solid var(--text);
+  }
+  .doc-stats {
+    flex-wrap: nowrap;
+    gap: 8px;
+    margin-top: 18px;
+  }
+  .doc-stats li {
+    flex: 1 1 0;
+    max-width: none;
+  }
+  .doc-stats a {
+    padding: 8px 10px;
+  }
+  /* A card cut by a page break is closed on both pages. */
+  .doc-node {
+    box-decoration-break: clone;
+  }
+  .doc-columns {
+    border-width: 0 0 1px;
+    border-radius: 0;
+  }
+  .doc-table :is(th, td) {
+    padding-block: 5px;
+  }
+  .doc-diagram-node text {
+    font-size: 21px;
+  }
+  .documentation-preview {
+    padding: 0;
+    border: 0;
+    overflow: visible;
+  }
+  .doc-article a {
+    color: inherit;
+  }
+  /* A page never starts with the last line of a heading's section. */
+  .doc-article :is(h2, h3, h4, h5, h6),
+  .doc-node > header,
+  .doc-output > summary,
+  .doc-steps > .eyebrow {
+    break-after: avoid;
+  }
+  .doc-node > header,
+  .doc-table tr,
+  .doc-tests li,
+  .doc-facts,
+  .doc-stats,
+  .doc-diagram {
+    break-inside: avoid;
+  }
+  .doc-output > summary::before {
+    display: none;
+  }
+  .doc-diagram,
+  .doc-table-frame {
+    overflow: visible;
+  }
+  .doc-diagram svg {
+    min-width: 0 !important;
+    max-height: 120mm;
+  }
+  .doc-footnote {
+    margin-top: 26px;
+  }
 }

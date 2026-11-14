@@ -1,6 +1,12 @@
 import { expect, test } from "@playwright/test";
 import fr from "../src/locales/fr.json" with { type: "json" };
-import { editCode, signIn, submitLogin, openUserSettings } from "./helpers";
+import {
+  editCode,
+  editOverview,
+  signIn,
+  submitLogin,
+  openUserSettings,
+} from "./helpers";
 
 test("dedicated pages support direct sign-in, refresh, history, new tabs and translated labels", async ({
   page,
@@ -182,7 +188,7 @@ test("unsaved code and documentation guard links and browser history without los
     .getByRole("button", { name: "Stay on this page", exact: true })
     .click();
   await page.getByRole("link", { name: "Documentation", exact: true }).click();
-  await page.locator(".project-documentation").fill("Unsaved documentation");
+  await (await editOverview(page)).fill("Unsaved documentation");
   await page.getByRole("link", { name: "History", exact: true }).click();
   await expect(guard).toBeVisible();
   await guard
@@ -198,8 +204,11 @@ test("unsaved code and documentation guard links and browser history without los
     .getByRole("button", { name: "Discard and leave", exact: true })
     .click();
   await expect(page).toHaveURL(/\/instance-settings\/users$/);
+  // The settings replace the tab before the browser goes back to it.
+  await expect(page.locator(".documentation-page")).toHaveCount(0);
   await page.goBack();
-  await expect(page.locator(".project-documentation")).not.toHaveValue(
+  // The tab opens on the rendered overview again; its editor lost the draft.
+  await expect(await editOverview(page)).not.toHaveValue(
     "Unsaved documentation",
   );
   await page.getByRole("link", { name: "Code", exact: true }).click();

@@ -94,11 +94,15 @@ test("manage instance accounts, project users and live reader access", async ({
     .click();
   const documentation = readerPage.locator(".documentation-page");
   await expect(
-    documentation.getByRole("region", { name: "Markdown preview" }),
-  ).toHaveCount(1);
+    documentation.getByRole("heading", { name: "Overview", exact: true }),
+  ).toBeVisible();
   await expect(
-    documentation.getByRole("button", { name: "Edit", exact: true }),
+    documentation.getByRole("button", { name: "Edit overview", exact: true }),
   ).toHaveCount(0);
+  // Readers can export the document.
+  await expect(
+    documentation.getByRole("button", { name: "Export PDF", exact: true }),
+  ).toBeVisible();
   await expect(documentation.locator("textarea")).toHaveCount(0);
   await expect(
     documentation.getByRole("button", { name: "Save changes", exact: true }),

@@ -1,5 +1,5 @@
 import { expect, test, type Page, type Request } from "@playwright/test";
-import { signIn } from "./helpers";
+import { editOverview, signIn } from "./helpers";
 
 async function createProject(page: Page, name: string) {
   const response = await page.request.post("/api/projects", {
@@ -196,7 +196,7 @@ test("a failed save is reported once, and a failed reload does not fail a save",
   });
   await page.getByRole("link", { name: "Documentation", exact: true }).click();
   const panel = page.locator(".documentation-page");
-  await panel.locator(".project-documentation").fill("Saved despite reads");
+  await (await editOverview(page)).fill("Saved despite reads");
   await panel
     .getByRole("button", { name: "Save changes", exact: true })
     .click();

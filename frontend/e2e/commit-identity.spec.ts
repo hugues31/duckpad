@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { signIn } from "./helpers";
+import { editOverview, signIn } from "./helpers";
 
 test("local collaborators save under their own identities and see them in Git history", async ({
   page,
@@ -41,9 +41,9 @@ test("local collaborators save under their own identities and see them in Git hi
     ).toBeVisible();
     await member.goto(`/worktrees/${project.id}/documentation`);
     const documentation = member.locator(".documentation-page");
-    await documentation
-      .locator("textarea")
-      .fill("Saved by an individual collaborator.");
+    await (
+      await editOverview(member)
+    ).fill("Saved by an individual collaborator.");
     await documentation
       .getByRole("button", { name: "Save changes", exact: true })
       .click();
