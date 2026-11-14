@@ -108,7 +108,12 @@ def references(text, schema, renamed, *, definition=None, automatic=None):
             for selected in query.selects:
                 alias = selected.args.get("alias") if isinstance(selected, exp.Alias) else None
                 value = selected.this if isinstance(selected, exp.Alias) else selected
-                forced = scope is root and selected.alias_or_name == definition
+                # Qualification lowercases every name; DuckDB compares them without case.
+                forced = (
+                    scope is root
+                    and definition is not None
+                    and selected.alias_or_name.casefold() == definition.casefold()
+                )
                 implicit = alias is None or "start" not in alias.meta
                 if forced or (follows(value) and selected.alias_or_name == value.name):
                     output.add(selected.alias_or_name)
@@ -150,7 +155,7 @@ def local_alias(text, column, name):
     tree = sqlglot.parse_one(text, read="duckdb")
     if not isinstance(tree, exp.Select):
         raise Incomplete("output_alias")
-    selected = next((s for s in tree.selects if s.alias_or_name == column), None)
+    selected = next((s for s in tree.selects if s.alias_or_name.casefold() == column.casefold()), None)
     if isinstance(selected, exp.Alias):
         return None
     if isinstance(selected, exp.Column) and not selected.is_star:

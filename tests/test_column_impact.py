@@ -1,8 +1,12 @@
 """Impact and rename operate on definitions, preserving SQL and independent branches."""
 
+from types import SimpleNamespace
+
+import duckdb
 import pytest
 from helpers import join_run
 
+from duckpad import column_lineage
 from duckpad.bundle import bundle_to_files
 from duckpad.column_impact import inspect, rename
 from duckpad.column_references import references, replace_spans
@@ -438,3 +442,68 @@ def test_impact_follows_a_rename_before_the_next_run(services):
     origin = engine.column_lineage.describe(worktree, "dev", "report", "report", "net_share")
     assert origin["complete"], origin
     assert "net/result/net_value" in {step["id"] for step in origin["steps"]}
+
+
+def test_a_mixed_case_output_is_renamed_where_it_is_defined(services):
+    store, projects, _, engine = services
+    worktree = chain(
+        projects,
+        {
+            "orders": ORDERS,
+            "n": ONE_INPUT + 'SELECT id, amount * 2 AS "Total" FROM {{ source }} WHERE "Total" > 5;',
+            "d": ONE_INPUT + "SELECT TOTAL + 1 AS next FROM {{ source }};",
+        },
+        [("orders", "n", "source"), ("n", "d", "source")],
+    )
+    assert join_run(store, engine.launch(worktree, "dev")["id"])["status"] == "success"
+    plan, _ = inspect(engine, worktree, "dev", "n", "result", "Total", new_name="gross")
+    rename(engine, worktree, "dev", "n", "result", "Total", "gross", plan["revision"], plan["token"])
+    files = projects.snapshot(worktree)["files"]
+    assert (
+        files["nodes/n.sql"]
+        == ONE_INPUT + 'SELECT id, amount * 2 AS "gross" FROM {{ source }} WHERE "gross" > 5;'
+    )
+    assert files["nodes/d.sql"] == ONE_INPUT + "SELECT gross + 1 AS next FROM {{ source }};"
+    assert join_run(store, engine.launch(worktree, "dev")["id"])["status"] == "success"
+
+
+def test_a_rename_is_verified_when_a_downstream_node_cannot_be_described(services, monkeypatch):
+    store, projects, _, engine = services
+    worktree = chain(
+        projects,
+        {
+            "orders": ORDERS,
+            "n": ONE_INPUT + "SELECT id, amount * 2 AS total FROM {{ source }};",
+            "d": ONE_INPUT + "SELECT total, 1 AS from_extension FROM {{ source }};",
+        },
+        [("orders", "n", "source"), ("n", "d", "source")],
+    )
+    assert join_run(store, engine.launch(worktree, "dev")["id"])["status"] == "success"
+    connect = duckdb.connect
+
+    class WithoutExtension:
+        """The isolated database lacks what a project extension gives the node `d`."""
+
+        def __init__(self, *args, **kwargs):
+            self.db = connect(*args, **kwargs)
+
+        def __enter__(self):
+            self.db.__enter__()
+            return self
+
+        def __exit__(self, *details):
+            return self.db.__exit__(*details)
+
+        def execute(self, query, *args):
+            if query.startswith("DESCRIBE") and "from_extension" in query:
+                raise duckdb.CatalogException("from_extension is not loaded")
+            return self.db.execute(query, *args)
+
+    monkeypatch.setattr(
+        column_lineage, "duckdb", SimpleNamespace(connect=WithoutExtension, Error=duckdb.Error)
+    )
+    plan, _ = inspect(engine, worktree, "dev", "n", "result", "total", new_name="gross")
+    assert not plan["manual"], plan["manual"]
+    assert {(e["file"], e["after"].splitlines()[-1]) for e in plan["changes"]} >= {
+        ("nodes/d.sql", "SELECT gross, 1 AS from_extension FROM {{ source }};")
+    }

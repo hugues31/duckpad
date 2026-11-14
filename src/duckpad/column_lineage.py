@@ -104,7 +104,7 @@ class ColumnLineage:
                 for (key, name), value in outputs.items()
                 if key == node and (not port or name == port)
             }
-        written = {}
+        written: dict[str, dict] = {}
         if not chosen:
             # A node without output, an export, writes what it reads: like its results,
             # its columns are those of each input, carried as they are.
@@ -130,7 +130,7 @@ class ColumnLineage:
                         "resource": {},
                     }
                     columns.append({**item, "id": id_, "kind": "carried"})
-                chosen[name] = {**upstream, "columns": columns, "written": True}
+                chosen[name] = {**upstream, "columns": columns}
         if not chosen:
             raise Problem("Node or output not found", 404)
         result = {

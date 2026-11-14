@@ -500,9 +500,14 @@ def verify(engine, worktree, environment, snapshot, updated, outputs, steps, ren
     where announced, each computed and selected from the same inputs.
     """
     target, column, name = plan
-    # A source keeps its code: its file or table is expected to provide the new name.
+    # Retained columns stand for what the isolated database cannot describe: a source,
+    # which keeps its code, or a node using a project extension. They follow the rename,
+    # so a rewrite that missed a name still disagrees with its analysis.
     retained = {
-        key: [{**c, "name": name} if key == target and c["name"] == column else c for c in columns]
+        key: [
+            {**c, "name": name} if c["name"].casefold() in {n.casefold() for n in renamed.get(key, ())} else c
+            for c in columns
+        ]
         for key, columns in retained_schemas(engine, worktree, environment).items()
     }
     edited, edited_steps, _ = engine.column_lineage.simulate(
