@@ -180,6 +180,8 @@ const canonical = Astro.site
       <small>Built with DuckDB. Made for the open-source community.</small>
     </footer>
     <script>
+      // Wrap code blocks before motion picks the elements it reveals.
+      import "../lib/code-blocks";
       import "../lib/motion";
 
       document
@@ -209,26 +211,6 @@ const canonical = Astro.site
               panel.scrollTop += bounds.top - view.top - view.height / 3;
           });
         });
-      document.querySelectorAll<HTMLElement>("pre").forEach((pre) => {
-        const code = pre.querySelector("code");
-        if (!code) return;
-        const button = document.createElement("button");
-        button.className = "copy-code";
-        button.textContent = "Copy";
-        button.setAttribute("aria-label", "Copy code");
-        button.addEventListener("click", async () => {
-          try {
-            await navigator.clipboard.writeText(code.textContent || "");
-            button.textContent = "Copied";
-          } catch {
-            button.textContent = "Select to copy";
-          }
-          setTimeout(() => {
-            button.textContent = "Copy";
-          }, 2000);
-        });
-        pre.append(button);
-      });
     </script>
   </body>
 </html>

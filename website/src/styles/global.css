@@ -629,7 +629,6 @@ kbd {
   border-radius: 4px;
 }
 pre {
-  position: relative;
   padding: 25px 24px;
   margin: 25px 0;
   border-radius: 8px;
@@ -642,6 +641,11 @@ pre {
   padding: 0;
   background: transparent;
   font-size: inherit;
+}
+/* The wrapper keeps the copy button still while long lines scroll. Its child's
+   margins collapse through it, so blocks keep their spacing. */
+.code-block {
+  position: relative;
 }
 .copy-code {
   position: absolute;

@@ -840,3 +840,37 @@ test("release versions follow the reading position and flag breaking changes", a
     ),
   ).toBeTruthy();
 });
+
+test("copy buttons stay in place while code scrolls horizontally", async ({
+  browser,
+  baseURL,
+}) => {
+  const context = await browser.newContext({
+    baseURL,
+    viewport: { width: 390, height: 844 },
+    reducedMotion: "reduce",
+  });
+  const page = await context.newPage();
+  await page.goto("docs/installation/");
+  const blocks = page.locator(".prose .code-block");
+  const index = await blocks.evaluateAll((elements) =>
+    elements.findIndex((element) => {
+      const pre = element.querySelector("pre")!;
+      return pre.scrollWidth > pre.clientWidth + 100;
+    }),
+  );
+  expect(index).toBeGreaterThanOrEqual(0);
+  const block = blocks.nth(index);
+  const button = block.getByRole("button", { name: "Copy code" });
+  await block.scrollIntoViewIfNeeded();
+  const before = (await button.boundingBox())!;
+  await block.locator("pre").evaluate((pre) => {
+    pre.scrollLeft = pre.scrollWidth;
+  });
+  await expect
+    .poll(() => block.locator("pre").evaluate((pre) => pre.scrollLeft))
+    .toBeGreaterThan(0);
+  expect(await button.boundingBox()).toEqual(before);
+  expect(before.x + before.width).toBeLessThanOrEqual(390);
+  await context.close();
+});
