@@ -796,33 +796,6 @@
  * white paper, whatever the theme. Other pages keep the browser's defaults.
  */
 @media print {
-  @page {
-    size: A4;
-    margin: 16mm 15mm 18mm;
-
-    /* The document's own footer replaces the browser's header and footer. */
-    @top-left {
-      content: "";
-    }
-
-    @top-center {
-      content: "";
-    }
-
-    @top-right {
-      content: "";
-    }
-
-    @bottom-center {
-      content: "";
-    }
-
-    @bottom-right {
-      content: counter(page) " / " counter(pages);
-      color: #6b6b76;
-      font-size: 9px;
-    }
-  }
   :root:has(.documentation-page) {
     --bg: #fff;
     --surface: #fff;

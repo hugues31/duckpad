@@ -147,6 +147,19 @@ function useActiveSection(page: RefObject<HTMLElement | null>, ids: string[]) {
 const cssString = (text: string) =>
   `"${text.replace(/[^\p{L}\p{N} .,:;()·–-]/gu, (character) => `\\${character.codePointAt(0)!.toString(16)} `)}"`;
 
+const PAGE_FOOTER = "color: #6b6b76; font-size: 9px;";
+
+/**
+ * The printed pages: A4, with the document's own footer in place of the
+ * browser's header and footer. Rendered with the page, so printing any other
+ * page keeps the browser's defaults.
+ */
+const printedPages = (title: string) =>
+  `@media print { @page { size: A4; margin: 16mm 15mm 18mm; ` +
+  `@top-left { content: ""; } @top-center { content: ""; } @top-right { content: ""; } @bottom-center { content: ""; } ` +
+  `@bottom-left { content: ${cssString(title)}; ${PAGE_FOOTER} } ` +
+  `@bottom-right { content: counter(page) " / " counter(pages); ${PAGE_FOOTER} } } }`;
+
 /** The share of described items, for the project's authors. */
 function Coverage({
   label,
@@ -349,8 +362,7 @@ export default function DocumentationPanel({
       ref={page}
       onClick={followAnchor}
     >
-      {/* Printed pages name the document in their footer. */}
-      <style>{`@media print { @page { @bottom-left { content: ${cssString(title)}; color: #6b6b76; font-size: 9px; } } }`}</style>
+      <style>{printedPages(title)}</style>
       <div className="doc-layout">
         <nav className="doc-outline" aria-label={t("docContents")}>
           <p className="eyebrow">{t("docContents")}</p>

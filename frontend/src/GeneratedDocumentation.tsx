@@ -82,6 +82,7 @@ function Links({ links }: { links: DocumentedLink[] }) {
 
 function TestStatus({ test }: { test: DocumentedTest }) {
   const t = useT();
+  const language = useLanguage();
   const status = test.status && TEST_STATUS[test.status];
   const Icon = status?.Icon || CircleDashed;
   return (
@@ -92,7 +93,7 @@ function TestStatus({ test }: { test: DocumentedTest }) {
         <small>
           {t("testFailingRows").replace(
             "{count}",
-            test.observed.toLocaleString(),
+            test.observed.toLocaleString(language),
           )}
         </small>
       )}

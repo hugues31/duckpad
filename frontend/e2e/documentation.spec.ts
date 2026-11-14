@@ -185,7 +185,7 @@ test("Export PDF prints the whole document, unfolded and without the application
   page,
 }) => {
   await page.emulateMedia({ colorScheme: "dark" });
-  const { documentation } = await documentedExample(page);
+  const { worktree, documentation } = await documentedExample(page);
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   // The browser's dialog cannot be driven: record what it would print.
   await page.evaluate(() => {
@@ -244,6 +244,20 @@ test("Export PDF prints the whole document, unfolded and without the application
   expect(
     pdf.toString("latin1").match(/\/Type\s*\/Page\b/g)!.length,
   ).toBeGreaterThan(8);
+  const paper = (file: Buffer) =>
+    file
+      .toString("latin1")
+      .match(/\/MediaBox\s*\[([^\]]*)\]/)![1]
+      .trim()
+      .split(/\s+/)
+      .map((side) => Math.round(Number(side)));
+  expect(paper(pdf)).toEqual([0, 0, 595, 842]);
+  // Other pages keep the browser's paper, header and footer.
+  await page.goto(`/worktrees/${worktree.id}/flow?environment=dev`);
+  await expect(page.locator(".documentation-page")).toHaveCount(0);
+  expect(paper(await page.pdf({ preferCSSPageSize: true }))).toEqual([
+    0, 0, 612, 792,
+  ]);
   await page.emulateMedia({ media: null });
 });
 
