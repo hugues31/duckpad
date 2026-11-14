@@ -105,7 +105,7 @@ const hasOutline = outline.some((heading) => heading.depth > 1);
 <script>
   import "../../lib/toc";
 
-  // Open the sidebar on the current guide, as the reader left it.
+  // Scroll the sidebar to the current guide when it would start out of view.
   const sidebar = document.querySelector<HTMLElement>(".docs-sidebar nav");
   const current = sidebar?.querySelector<HTMLElement>("[aria-current='page']");
   if (sidebar && current && current.offsetTop > sidebar.clientHeight * 0.8)

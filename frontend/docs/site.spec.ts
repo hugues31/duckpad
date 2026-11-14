@@ -702,6 +702,12 @@ test("the guide outline follows the reading position", async ({ page }) => {
   await previous.click();
   await expect(previous).toHaveAttribute("aria-current", "true");
   await expect(last).not.toHaveAttribute("aria-current");
+  // Scrolling away, even with the scrollbar, releases it.
+  await page.evaluate(() => scrollTo(0, 0));
+  await expect(outline.getByRole("link", { name: "Overview" })).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
 
   const pagination = page.getByRole("navigation", {
     name: "Previous and next guides",

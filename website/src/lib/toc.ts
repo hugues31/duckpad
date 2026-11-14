@@ -20,13 +20,18 @@ const targets = [...new Set(links.map(idOf))]
   );
 
 let active: HTMLElement | undefined;
-let pinned: HTMLElement | undefined;
+// A section chosen in the outline, with the scroll position its link jumps to
+// and how far the page still is from it.
+let pinned: { target: HTMLElement; top: number; distance: number } | undefined;
 let frame = 0;
 
+const root = document.documentElement;
+const scrollOffset = () =>
+  parseFloat(getComputedStyle(root).scrollPaddingTop) || 0;
+
 function locate() {
-  if (pinned) return pinned;
-  const root = document.documentElement;
-  const offset = parseFloat(getComputedStyle(root).scrollPaddingTop) || 0;
+  if (pinned) return pinned.target;
+  const offset = scrollOffset();
   const threshold = offset + Math.min(120, innerHeight * 0.2);
   let found = targets[0];
   for (const target of targets) {
@@ -76,22 +81,35 @@ const schedule = () => {
 if (targets.length) {
   for (const link of links)
     link.addEventListener("click", () => {
-      // Keep the chosen section highlighted even if it cannot scroll to the top.
-      pinned = document.getElementById(idOf(link)) ?? undefined;
+      // Keep the chosen section highlighted even if it cannot scroll to the
+      // top, until the page moves away from where the link takes it.
+      const target = document.getElementById(idOf(link));
       if (mobile) mobile.open = false;
+      if (!target) return;
+      const top = Math.max(
+        0,
+        Math.min(
+          root.scrollHeight - innerHeight,
+          target.getBoundingClientRect().top + scrollY - scrollOffset(),
+        ),
+      );
+      pinned = { target, top, distance: Math.abs(scrollY - top) };
       schedule();
     });
-  for (const type of ["wheel", "touchstart", "keydown"])
-    addEventListener(
-      type,
-      () => {
-        if (!pinned) return;
-        pinned = undefined;
-        schedule();
-      },
-      { passive: true },
-    );
-  addEventListener("scroll", schedule, { passive: true });
+  addEventListener(
+    "scroll",
+    () => {
+      // The smooth jump only brings the page closer; any other scroll, from a
+      // wheel, a key or the scrollbar, releases the chosen section.
+      if (pinned) {
+        const distance = Math.abs(scrollY - pinned.top);
+        if (distance > pinned.distance + 1) pinned = undefined;
+        else pinned.distance = distance;
+      }
+      schedule();
+    },
+    { passive: true },
+  );
   addEventListener("resize", schedule);
   update();
 }
