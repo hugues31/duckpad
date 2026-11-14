@@ -70,13 +70,11 @@ class PartitionLineage:
         return replacements
 
     def selection(self, dataset):
+        if not dataset.partition:
+            return None
         run = self.engine.store.get("run", dataset.run) or {}
         manifest = run.get("partitions", {}).get("manifest")
-        return (
-            {"manifest": manifest, "partition_id": dataset.partition["partition_id"]}
-            if manifest and dataset.partition
-            else None
-        )
+        return {"manifest": manifest, "partition_id": dataset.partition["partition_id"]} if manifest else None
 
     def origin(self, context, dataset, row):
         if dataset.origins:

@@ -469,6 +469,11 @@ function ValueLineage({
       opened,
       (query) => read(query, abort.signal),
       tables,
+      // The first trace shows each step as it arrives; a later change replaces a whole trace.
+      (partial) => {
+        if (!abort.signal.aborted)
+          setGraph((current) => (current?.complete ? current : partial));
+      },
     )
       .then((result) => {
         if (!abort.signal.aborted) setGraph(result);
@@ -551,6 +556,12 @@ function ValueLineage({
         {t("lineageInterrupted")}
       </div>
     );
+  const loading = (
+    <div className="lineage-loading" role="status">
+      <Loader2 className="spin" size={16} />
+      {t("lineageLoading")}
+    </div>
+  );
   return (
     <>
       {error && (
@@ -567,12 +578,7 @@ function ValueLineage({
           </button>
         </div>
       )}
-      {pending && (
-        <div className="lineage-loading" role="status">
-          <Loader2 className="spin" size={16} />
-          {t("lineageLoading")}
-        </div>
-      )}
+      {pending && graph?.complete && loading}
       {graph && !error && (
         <LineageSteps
           graph={graph}
@@ -591,6 +597,8 @@ function ValueLineage({
           }
         />
       )}
+      {/* The steps traced so far stay above the next one being read. */}
+      {pending && !graph?.complete && loading}
       {/* Nothing is upstream of a source value: its row can be followed the other way. */}
       {graph && !error && graph.original.kind === "source" && (
         <p className="lineage-hint">
