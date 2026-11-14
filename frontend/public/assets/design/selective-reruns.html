@@ -1,0 +1,966 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>Duckpad · Selective reruns · Design exploration</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: #f2f2f4;
+        color: #16161b;
+        font:
+          14px/1.5 -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+      }
+      button,
+      select,
+      input {
+        font: inherit;
+      }
+      button,
+      select {
+        border: 1px solid #d0d0d7;
+        border-radius: 7px;
+        padding: 8px 12px;
+        background: #fff;
+        color: inherit;
+      }
+      button {
+        cursor: pointer;
+      }
+      button:hover {
+        border-color: #1559df;
+      }
+      button:focus-visible,
+      select:focus-visible,
+      input:focus-visible,
+      summary:focus-visible {
+        outline: 3px solid #1559df;
+        outline-offset: 3px;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+      h1 {
+        font-size: 30px;
+        letter-spacing: -0.8px;
+      }
+      h2 {
+        font-size: 18px;
+      }
+      h3 {
+        font-size: 14px;
+      }
+      small {
+        font-size: 12px;
+      }
+      .muted,
+      small {
+        color: #5b5b69;
+      }
+      .page {
+        max-width: 1320px;
+        margin: auto;
+        padding: 36px 28px;
+      }
+      .eyebrow {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        color: #1559df;
+        margin-bottom: 8px;
+      }
+      .intro {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 24px;
+        margin-bottom: 24px;
+      }
+      .intro p {
+        margin-top: 8px;
+        max-width: 720px;
+        color: #5b5b69;
+      }
+      .prototype {
+        padding: 7px 11px;
+        border: 1px solid #cbd8f4;
+        border-radius: 6px;
+        color: #1248b1;
+        background: #eaf0fd;
+        white-space: nowrap;
+        font-size: 12px;
+      }
+      .options {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+        margin-bottom: 18px;
+      }
+      .option {
+        text-align: left;
+        padding: 15px 17px;
+        background: #fafafa;
+      }
+      .option strong,
+      .option small {
+        display: block;
+      }
+      .option strong {
+        margin-bottom: 3px;
+      }
+      .option[aria-pressed="true"] {
+        border-color: #1559df;
+        box-shadow: inset 0 0 0 1px #1559df;
+        background: #f4f7ff;
+      }
+      .workspace {
+        border: 1px solid #d5d5dc;
+        border-radius: 12px;
+        background: #fafafa;
+        box-shadow: 0 4px 20px #16161b08;
+        overflow: hidden;
+      }
+      .topbar,
+      .toolbar,
+      .context {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        padding: 14px 20px;
+        border-bottom: 1px solid #dedee4;
+      }
+      .topbar {
+        background: #fff;
+      }
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .mark {
+        color: #fff;
+        background: #1559df;
+        width: 30px;
+        height: 30px;
+        border-radius: 9px;
+        display: grid;
+        place-items: center;
+        font-weight: 800;
+      }
+      .chip {
+        border-radius: 5px;
+        padding: 3px 7px;
+        font-size: 12px;
+        background: #eaeaee;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      .tabs {
+        color: #5b5b69;
+        display: flex;
+        gap: 24px;
+      }
+      .tabs strong {
+        color: #1559df;
+      }
+      .primary {
+        background: #1559df;
+        color: white;
+        border-color: #1559df;
+        font-weight: 600;
+      }
+      .primary:hover {
+        background: #1048ba;
+      }
+      .context {
+        font-size: 12px;
+        background: #f4f7ff;
+      }
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 330px;
+      }
+      .canvas {
+        padding: 26px 22px;
+        background-image: radial-gradient(#c9c9d3 0.7px, transparent 0.7px);
+        background-size: 18px 18px;
+      }
+      .canvas > p {
+        margin-bottom: 26px;
+        font-size: 12px;
+        color: #5b5b69;
+      }
+      .graph {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 24px 16px;
+      }
+      .node {
+        position: relative;
+        text-align: left;
+        padding: 14px;
+        border: 1px solid #c9c9d3;
+        border-radius: 10px;
+        background: #fff;
+        min-height: 144px;
+        box-shadow: 0 2px 7px #16161b06;
+      }
+      .node[aria-pressed="true"] {
+        outline: 2px solid #1559df;
+        outline-offset: 3px;
+      }
+      .node strong,
+      .node small,
+      .node .state {
+        display: block;
+      }
+      .node .symbol {
+        display: inline-grid;
+        place-items: center;
+        height: 30px;
+        width: 30px;
+        margin-bottom: 8px;
+        border-radius: 7px;
+        background: #eaf0fd;
+        color: #1559df;
+        font-weight: bold;
+      }
+      .state {
+        font-size: 11px;
+        margin-top: 10px;
+        color: #6f4c14;
+      }
+      .node[data-plan="reuse"] .state {
+        color: #1f7148;
+      }
+      .node[data-plan="outside"] {
+        background: #f6f6f8;
+      }
+      .node[data-plan="outside"] .state {
+        color: #5b5b69;
+      }
+      .flow-key {
+        margin-top: 24px;
+        color: #5b5b69;
+        font-size: 12px;
+      }
+      .plan {
+        padding: 22px;
+        border-left: 1px solid #dedee4;
+        background: #fff;
+      }
+      .plan h2 {
+        margin-bottom: 14px;
+      }
+      .counts {
+        display: flex;
+        gap: 24px;
+        margin-bottom: 20px;
+      }
+      .count {
+        font-size: 30px;
+        font-weight: 700;
+        line-height: 1.2;
+      }
+      .count-label {
+        display: block;
+        color: #5b5b69;
+        font-size: 12px;
+      }
+      .plan ul {
+        padding-left: 18px;
+        margin: 10px 0 18px;
+      }
+      .plan li {
+        margin-bottom: 6px;
+      }
+      .notice {
+        padding: 11px 12px;
+        background: #f4f7ff;
+        border-radius: 6px;
+        font-size: 12px;
+        margin-top: 14px;
+      }
+      .write {
+        background: #fff5e5;
+        color: #77501a;
+      }
+      .summary {
+        padding: 14px 20px;
+        border-top: 1px solid #dedee4;
+        background: #fff;
+        min-height: 50px;
+      }
+      .summary strong {
+        color: #1559df;
+      }
+      .explore {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-top: 18px;
+      }
+      .explore span {
+        color: #5b5b69;
+        margin-right: 8px;
+        font-size: 12px;
+      }
+      .explore button {
+        font-size: 12px;
+      }
+      .rationale {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 32px;
+        margin-top: 24px;
+      }
+      .rationale h3 {
+        margin-bottom: 5px;
+      }
+      .rationale p {
+        color: #5b5b69;
+      }
+      details {
+        position: relative;
+      }
+      summary {
+        cursor: pointer;
+        padding: 8px 12px;
+        border: 1px solid #d0d0d7;
+        border-radius: 7px;
+        background: white;
+      }
+      .menu {
+        position: absolute;
+        z-index: 2;
+        right: 0;
+        top: 44px;
+        width: 300px;
+        padding: 7px;
+        background: white;
+        border: 1px solid #d0d0d7;
+        border-radius: 9px;
+        box-shadow: 0 8px 24px #16161b20;
+      }
+      .menu button {
+        display: block;
+        text-align: left;
+        width: 100%;
+        border-color: transparent;
+      }
+      .menu small {
+        display: block;
+      }
+      dialog {
+        width: min(480px, calc(100% - 32px));
+        border: 1px solid #d0d0d7;
+        border-radius: 12px;
+        padding: 25px;
+        color: inherit;
+      }
+      dialog::backdrop {
+        background: #16161b55;
+      }
+      dialog h2 {
+        margin-bottom: 8px;
+      }
+      dialog label {
+        display: block;
+        padding: 14px 0;
+      }
+      dialog .row {
+        margin-top: 20px;
+        justify-content: flex-end;
+      }
+      .pins {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 18px;
+        padding: 12px 20px;
+        background: #f4f7ff;
+        border-bottom: 1px solid #dedee4;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      @media (max-width: 900px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+        .plan {
+          border-left: 0;
+          border-top: 1px solid #dedee4;
+        }
+        .intro,
+        .toolbar {
+          align-items: start;
+          flex-direction: column;
+        }
+      }
+      @media (max-width: 600px) {
+        .page {
+          padding: 20px 12px;
+        }
+        h1 {
+          font-size: 25px;
+        }
+        .options,
+        .rationale {
+          grid-template-columns: 1fr;
+        }
+        .graph {
+          grid-template-columns: 1fr 1fr;
+        }
+        .context,
+        .topbar {
+          flex-wrap: wrap;
+        }
+        .tabs {
+          gap: 12px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header class="intro">
+        <div>
+          <div class="eyebrow">Duckpad / Design exploration</div>
+          <h1>Run what changed. Keep what is ready.</h1>
+          <p>
+            Three ways to rerun a flow without reading every remote input again.
+            Compare the controls, select nodes, and try a simulated run.
+          </p>
+        </div>
+        <span class="prototype">Concept only · No real queries</span>
+      </header>
+      <nav class="options" aria-label="Design directions">
+        <button class="option" data-option="a" aria-pressed="true">
+          <strong>A · Run button + menu</strong
+          ><small>Recommended · One click for everyday edits</small>
+        </button>
+        <button class="option" data-option="b" aria-pressed="false">
+          <strong>B · Launch dialog</strong
+          ><small>Review scope and data before each run</small>
+        </button>
+        <button class="option" data-option="c" aria-pressed="false">
+          <strong>C · Keep individual sources</strong
+          ><small>Choose which inputs stay loaded</small>
+        </button>
+      </nav>
+      <section class="workspace" aria-label="Simulated Duckpad workspace">
+        <div class="topbar">
+          <div class="brand">
+            <span class="mark" aria-hidden="true">D</span
+            ><strong>Sales analysis</strong
+            ><span class="chip">experiment/filter</span>
+          </div>
+          <span class="chip">dev · Synthetic data</span>
+        </div>
+        <div class="toolbar">
+          <div class="tabs">
+            <strong>Flow</strong><span>Variables</span><span>History</span>
+          </div>
+          <div class="row">
+            <span class="muted" id="policy-label">Reuse available results</span>
+            <button class="primary" id="run">▶ Run changes</button>
+            <details id="run-menu">
+              <summary aria-label="Run options">Options</summary>
+              <div class="menu">
+                <button data-policy="reuse">
+                  Run changes<small>Reuse compatible results</small>
+                </button>
+                <button data-policy="recompute">
+                  Recompute with loaded sources<small
+                    >Run transformations again</small
+                  >
+                </button>
+                <button data-policy="refresh">
+                  Reload sources and run<small>Read remote data again</small>
+                </button>
+              </div>
+            </details>
+          </div>
+        </div>
+        <div class="context">
+          <div class="row">
+            <label for="scope">Scope</label
+            ><select id="scope">
+              <option value="all">Whole flow</option>
+              <option value="selected">Selected nodes</option>
+              <option value="downstream">Selection + downstream</option></select
+            ><span id="selection-label">0 selected</span
+            ><button id="clear">Clear selection</button>
+          </div>
+          <span>Click nodes to select one or several</span>
+        </div>
+        <div class="pins" id="pins" hidden>
+          <strong>Keep loaded data</strong
+          ><label
+            ><input type="checkbox" data-pin="orders" checked /> Orders ·
+            Oracle</label
+          ><label
+            ><input type="checkbox" data-pin="customers" checked /> Customers ·
+            PostgreSQL</label
+          ><small>Changed or missing data must still be loaded.</small>
+        </div>
+        <div class="layout">
+          <div class="canvas">
+            <p id="scenario">
+              You changed the Filter condition. The source data is already
+              loaded.
+            </p>
+            <div class="graph" id="graph" aria-label="Select nodes"></div>
+            <p class="flow-key">
+              Orders + Customers → Join → Filter → Revenue → Export CSV
+            </p>
+          </div>
+          <div
+            class="plan"
+            role="group"
+            aria-label="Proposed execution plan"
+            aria-live="polite"
+          >
+            <div class="eyebrow">Before you run</div>
+            <h2 id="plan-title">Only the affected steps</h2>
+            <div class="counts">
+              <div>
+                <span class="count" id="execute-count">3</span
+                ><span class="count-label">to run</span>
+              </div>
+              <div>
+                <span class="count" id="reuse-count">3</span
+                ><span class="count-label">reused</span>
+              </div>
+              <div>
+                <span class="count" id="read-count">0</span
+                ><span class="count-label">source reads</span>
+              </div>
+            </div>
+            <h3>Will execute</h3>
+            <ul id="execute-list"></ul>
+            <div class="notice" id="freshness">
+              Sources loaded at 10:42. Remote changes are not checked.
+            </div>
+            <div class="notice write" id="writes">
+              1 export write · Export CSV will run.
+            </div>
+            <div class="notice" id="scope-note" hidden></div>
+          </div>
+        </div>
+        <div class="summary" role="status" id="result">
+          <strong>Ready to simulate.</strong> Actions only update this example.
+        </div>
+      </section>
+      <div class="explore">
+        <span>Try a scenario</span><button id="edit">Edit Filter</button
+        ><button id="reload">Reload Orders only</button
+        ><button id="restart">Clear in-memory results</button
+        ><button id="reset">Reset example</button>
+      </div>
+      <section class="rationale">
+        <div>
+          <h3 id="benefit-title">Why start with A</h3>
+          <p id="benefit">
+            The common action stays one click. Reloading remote data is
+            explicit, and a compact plan explains what will happen.
+          </p>
+        </div>
+        <div>
+          <h3>One rule to keep visible</h3>
+          <p>
+            “Reused” means the snapshot already loaded, not a check that the
+            remote table is unchanged. A missing or changed input must be
+            computed again.
+          </p>
+        </div>
+      </section>
+    </main>
+    <dialog id="launch-dialog" aria-labelledby="dialog-title">
+      <h2 id="dialog-title">Run this scope</h2>
+      <p class="muted" id="dialog-scope"></p>
+      <label
+        ><input type="radio" name="data-policy" value="reuse" checked /> Reuse
+        available results<br /><small
+          >Keep compatible inputs. Compute missing or changed results.</small
+        ></label
+      >
+      <label
+        ><input type="radio" name="data-policy" value="refresh" /> Reload
+        sources<br /><small
+          >Read remote data and recompute the selected scope.</small
+        ></label
+      >
+      <p class="notice" id="dialog-plan"></p>
+      <div class="row">
+        <button id="cancel">Cancel</button
+        ><button class="primary" id="confirm">Simulate run</button>
+      </div>
+    </dialog>
+    <script>
+      // A fixed, synthetic graph for comparing UI ideas. No application API is used.
+      const nodes = [
+        {
+          id: "orders",
+          name: "Orders",
+          detail: "Oracle · 1.2M rows",
+          icon: "DB",
+          parents: [],
+          source: true,
+        },
+        {
+          id: "customers",
+          name: "Customers",
+          detail: "PostgreSQL · 84K rows",
+          icon: "DB",
+          parents: [],
+          source: true,
+        },
+        {
+          id: "join",
+          name: "Join",
+          detail: "Orders + Customers",
+          icon: "⋈",
+          parents: ["orders", "customers"],
+        },
+        {
+          id: "filter",
+          name: "Filter",
+          detail: "amount > 300",
+          icon: "≡",
+          parents: ["join"],
+        },
+        {
+          id: "revenue",
+          name: "Revenue",
+          detail: "SUM(amount) by region",
+          icon: "Σ",
+          parents: ["filter"],
+        },
+        {
+          id: "export",
+          name: "Export CSV",
+          detail: "Writes a report file",
+          icon: "↗",
+          parents: ["revenue"],
+          write: true,
+        },
+      ];
+      const $ = (id) => document.getElementById(id);
+      let option = "a",
+        policy = "reuse",
+        selected = new Set(),
+        stale = new Set(["filter", "revenue", "export"]);
+      let available = new Set(nodes.map((n) => n.id));
+      const sourceTimes = { orders: "10:42", customers: "10:42" };
+      const pinned = new Set(["orders", "customers"]);
+      function descendants(ids) {
+        const result = new Set(ids);
+        for (const node of nodes)
+          if (node.parents.some((id) => result.has(id))) result.add(node.id);
+        return result;
+      }
+      function plan() {
+        const mode = $("scope").value;
+        const targets =
+          mode === "all"
+            ? new Set(nodes.map((n) => n.id))
+            : mode === "downstream"
+              ? descendants(selected)
+              : new Set(selected);
+        const needed = new Set(targets);
+        for (const node of [...nodes].reverse())
+          if (needed.has(node.id)) node.parents.forEach((id) => needed.add(id));
+        const execute = new Set(),
+          reuse = new Set();
+        for (const node of nodes) {
+          if (!needed.has(node.id)) continue;
+          const forced =
+            option === "c"
+              ? !node.source || !pinned.has(node.id)
+              : policy === "refresh" ||
+                (policy === "recompute" && !node.source);
+          if (
+            forced ||
+            !available.has(node.id) ||
+            stale.has(node.id) ||
+            node.write ||
+            (mode !== "all" && targets.has(node.id)) ||
+            node.parents.some((id) => execute.has(id))
+          )
+            execute.add(node.id);
+          else reuse.add(node.id);
+        }
+        return {
+          execute,
+          reuse,
+          reads: nodes.filter((n) => n.source && execute.has(n.id)),
+          writes: nodes.filter((n) => n.write && execute.has(n.id)),
+        };
+      }
+      function render() {
+        const p = plan();
+        document
+          .querySelectorAll("[data-option]")
+          .forEach((button) =>
+            button.setAttribute(
+              "aria-pressed",
+              String(button.dataset.option === option),
+            ),
+          );
+        $("pins").hidden = option !== "c";
+        $("run-menu").hidden = option !== "a";
+        $("selection-label").textContent = `${selected.size} selected`;
+        $("policy-label").textContent =
+          option === "b"
+            ? "Choose data policy at launch"
+            : option === "c"
+              ? "Recompute with kept sources"
+              : {
+                  reuse: "Reuse available results",
+                  recompute: "Keep loaded sources",
+                  refresh: "Reload remote data",
+                }[policy];
+        $("run").textContent =
+          option === "b"
+            ? "▶ Configure run…"
+            : $("scope").value !== "all"
+              ? "▶ Run selection"
+              : option === "c"
+                ? "▶ Run pipeline"
+                : {
+                    reuse: "▶ Run changes",
+                    recompute: "▶ Recompute",
+                    refresh: "▶ Reload and run",
+                  }[policy];
+        $("run").disabled = $("scope").value !== "all" && selected.size === 0;
+        $("execute-count").textContent = p.execute.size;
+        $("reuse-count").textContent = p.reuse.size;
+        $("read-count").textContent = p.reads.length;
+        $("plan-title").textContent = $("run").disabled
+          ? "Select at least one node"
+          : "Your next run";
+        $("execute-list").replaceChildren(
+          ...(p.execute.size
+            ? nodes
+                .filter((n) => p.execute.has(n.id))
+                .map((n) => {
+                  const li = document.createElement("li");
+                  li.textContent =
+                    n.name +
+                    (n.source
+                      ? " · reload source"
+                      : n.write
+                        ? " · write file"
+                        : "");
+                  return li;
+                })
+            : [
+                Object.assign(document.createElement("li"), {
+                  textContent: "Nothing to run",
+                }),
+              ]),
+        );
+        $("freshness").textContent =
+          nodes
+            .filter((n) => n.source && p.reuse.has(n.id))
+            .map((n) => `${n.name} loaded at ${sourceTimes[n.id]}`)
+            .join(" · ") +
+          (nodes.some((n) => n.source && p.reuse.has(n.id))
+            ? ". Remote changes are not checked."
+            : p.reads.length
+              ? "Required sources will be read again."
+              : "No source reads needed for this scope.");
+        $("writes").hidden = !p.writes.length;
+        $("writes").textContent =
+          `${p.writes.length} export write · Export CSV will run.`;
+        const outside = nodes.filter(
+          (n) => !p.execute.has(n.id) && !p.reuse.has(n.id),
+        );
+        $("scope-note").hidden = !outside.length;
+        $("scope-note").textContent =
+          `Outside scope: ${outside.map((n) => n.name).join(", ")}. Affected downstream results stay stale.`;
+        for (const node of nodes) {
+          const button = $(node.id),
+            action = p.execute.has(node.id)
+              ? "execute"
+              : p.reuse.has(node.id)
+                ? "reuse"
+                : "outside";
+          button.dataset.plan = action;
+          button.setAttribute("aria-pressed", String(selected.has(node.id)));
+          button.querySelector(".state").textContent =
+            action === "reuse"
+              ? "✓ Reuse loaded result"
+              : action === "outside"
+                ? "— Outside scope"
+                : !available.has(node.id)
+                  ? "↻ No result · compute"
+                  : node.source
+                    ? "↻ Reload source"
+                    : stale.has(node.id)
+                      ? "↻ Changed · run"
+                      : "↻ Run again";
+        }
+        $("benefit-title").textContent = {
+          a: "Why start with A",
+          b: "When B helps",
+          c: "The tradeoff with C",
+        }[option];
+        $("benefit").textContent = {
+          a: "The common action stays one click. Reloading remote data is explicit, and a compact plan explains what will happen.",
+          b: "A short dialog makes scope and data policy explicit, especially before exports. It adds a step to every run; this could be an optional review instead.",
+          c: "Keep a slow Oracle input while refreshing a smaller source. The extra switches are easy to forget, so their load times must stay visible. Changed or missing inputs still reload.",
+        }[option];
+        $("dialog-plan").textContent =
+          `${p.execute.size} to run · ${p.reuse.size} reused · ${p.reads.length} source reads · ${p.writes.length} export writes`;
+      }
+      function simulate() {
+        const p = plan();
+        descendants(p.execute).forEach((id) => stale.add(id));
+        p.execute.forEach((id) => {
+          available.add(id);
+          stale.delete(id);
+        });
+        p.reads.forEach((n) => {
+          sourceTimes[n.id] = "just now (simulated)";
+        });
+        $("result").textContent =
+          `Simulated completion: ${p.execute.size} executed, ${p.reuse.size} reused, ${p.reads.length} source reads, ${p.writes.length} export writes. No real data was read or written.`;
+        render();
+      }
+      for (const node of nodes) {
+        const button = document.createElement("button");
+        button.id = node.id;
+        button.className = "node";
+        button.innerHTML = `<span class="symbol" aria-hidden="true">${node.icon}</span><strong>${node.name}</strong><small>${node.detail}</small><span class="state"></span>`;
+        button.addEventListener("click", () => {
+          selected.has(node.id)
+            ? selected.delete(node.id)
+            : selected.add(node.id);
+          render();
+        });
+        $("graph").append(button);
+      }
+      document.querySelectorAll("[data-option]").forEach((button) =>
+        button.addEventListener("click", () => {
+          option = button.dataset.option;
+          policy = "reuse";
+          $("run-menu").open = false;
+          document.querySelector(
+            '[name="data-policy"][value="reuse"]',
+          ).checked = true;
+          render();
+        }),
+      );
+      document.querySelectorAll("[data-policy]").forEach((button) =>
+        button.addEventListener("click", () => {
+          policy = button.dataset.policy;
+          $("run-menu").open = false;
+          render();
+        }),
+      );
+      document.querySelectorAll("[data-pin]").forEach((input) =>
+        input.addEventListener("change", () => {
+          input.checked
+            ? pinned.add(input.dataset.pin)
+            : pinned.delete(input.dataset.pin);
+          render();
+        }),
+      );
+      document.querySelectorAll('[name="data-policy"]').forEach((input) =>
+        input.addEventListener("change", () => {
+          policy = input.value;
+          render();
+        }),
+      );
+      $("scope").addEventListener("change", render);
+      $("clear").addEventListener("click", () => {
+        selected.clear();
+        render();
+      });
+      $("run").addEventListener("click", () => {
+        if (option !== "b") return simulate();
+        $("dialog-scope").textContent =
+          $("scope").selectedOptions[0].textContent +
+          (selected.size ? ` · ${selected.size} selected` : "");
+        $("launch-dialog").showModal();
+      });
+      $("cancel").addEventListener("click", () => $("launch-dialog").close());
+      $("confirm").addEventListener("click", () => {
+        $("launch-dialog").close();
+        simulate();
+      });
+      $("edit").addEventListener("click", () => {
+        descendants(["filter"]).forEach((id) => stale.add(id));
+        $("scenario").textContent =
+          "You changed the Filter condition. Its downstream results need a rerun.";
+        $("result").textContent =
+          "Filter edited (simulated). Saving does not start a run.";
+        render();
+      });
+      $("reload").addEventListener("click", () => {
+        descendants(["orders"]).forEach((id) => stale.add(id));
+        available.add("orders");
+        stale.delete("orders");
+        sourceTimes.orders = "just now (simulated)";
+        $("scenario").textContent =
+          "Orders was reloaded. Join and its descendants need a rerun; Customers can be reused.";
+        $("result").textContent =
+          "Simulated source reload: Orders only. No real query was sent.";
+        render();
+      });
+      $("restart").addEventListener("click", () => {
+        available.clear();
+        stale = new Set(nodes.map((n) => n.id));
+        $("scenario").textContent =
+          "In-memory results were cleared. Required sources must be loaded again, even if kept.";
+        $("result").textContent =
+          "Simulated restart. No application data was changed.";
+        render();
+      });
+      $("reset").addEventListener("click", () => {
+        available = new Set(nodes.map((n) => n.id));
+        stale = new Set(["filter", "revenue", "export"]);
+        selected.clear();
+        policy = "reuse";
+        pinned.add("orders");
+        pinned.add("customers");
+        sourceTimes.orders = sourceTimes.customers = "10:42";
+        $("scope").value = "all";
+        document.querySelectorAll("[data-pin]").forEach((input) => {
+          input.checked = true;
+        });
+        document.querySelector('[name="data-policy"][value="reuse"]').checked =
+          true;
+        $("scenario").textContent =
+          "You changed the Filter condition. The source data is already loaded.";
+        $("result").textContent = "Example reset. All actions are simulated.";
+        render();
+      });
+      render();
+    </script>
+  </body>
+</html>
