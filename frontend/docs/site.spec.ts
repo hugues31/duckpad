@@ -472,9 +472,20 @@ for (const width of [1440, 1024, 768, 390, 320]) {
     }, id);
     const header = page.locator(".site-header");
     await expect.poll(async () => (await header.boundingBox())!.y).toBe(0);
+    // Below 1100 px, the outline bar sticks under the header: clear both.
     await expect
-      .poll(async () => (await heading.boundingBox())!.y)
-      .toBeGreaterThanOrEqual((await header.boundingBox())!.height);
+      .poll(async () => {
+        const covered = await page.evaluate(() =>
+          Math.max(
+            ...[".site-header", ".mobile-toc"]
+              .map((selector) => document.querySelector(selector))
+              .filter((element) => element?.getClientRects().length)
+              .map((element) => element!.getBoundingClientRect().bottom),
+          ),
+        );
+        return (await heading.boundingBox())!.y - covered;
+      })
+      .toBeGreaterThanOrEqual(0);
 
     await page.goto("./#features");
     await expect.poll(async () => (await header.boundingBox())!.y).toBe(0);
@@ -558,7 +569,7 @@ test("mobile navigation, theme persistence and reduced motion", async ({
     .getByRole("navigation", { name: "Mobile navigation", exact: true })
     .getByRole("link", { name: "Documentation" })
     .click();
-  await page.getByText("Browse documentation", { exact: true }).click();
+  await page.getByLabel("Navigation menu").click();
   await page
     .getByRole("navigation", { name: "Documentation on mobile" })
     .getByRole("link", { name: "Version control" })
@@ -590,7 +601,7 @@ test("content and documentation navigation remain usable without JavaScript", as
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Duckpad in 15 minutes",
   );
-  await page.getByText("Browse documentation", { exact: true }).click();
+  await page.getByLabel("Navigation menu").click();
   await page
     .getByRole("navigation", { name: "Documentation on mobile" })
     .getByRole("link", { name: "Connections", exact: true })
@@ -647,4 +658,131 @@ test("release notes match the feed and remain readable on mobile", async ({
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBeTruthy();
+});
+
+test("the guide outline follows the reading position", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("docs/installation/");
+  const outline = page.getByRole("navigation", {
+    name: "On this page",
+    exact: true,
+  });
+  await expect(outline.getByRole("link", { name: "Overview" })).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
+  // Third-level sections are nested under the section they belong to.
+  await expect(
+    outline.locator("ul ul").getByRole("link", {
+      name: "Platform requirements",
+    }),
+  ).toBeVisible();
+
+  const heading = page.locator(".prose > h3").nth(2);
+  const id = await heading.getAttribute("id");
+  await page.evaluate((id) => {
+    location.hash = id!;
+  }, id);
+  await expect(outline.locator(`a[href="#${id}"]`)).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
+  await expect(outline.locator("[aria-current]")).toHaveCount(1);
+
+  await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
+  const last = outline.getByRole("link").last();
+  await expect(last).toHaveAttribute("aria-current", "true");
+  // A chosen section stays highlighted even when it cannot reach the top.
+  const previous = outline.getByRole("link").nth(-2);
+  await previous.click();
+  await expect(previous).toHaveAttribute("aria-current", "true");
+  await expect(last).not.toHaveAttribute("aria-current");
+
+  const pagination = page.getByRole("navigation", {
+    name: "Previous and next guides",
+  });
+  await expect(pagination.getByRole("link")).toHaveCount(1);
+  await pagination.getByRole("link", { name: /Next.*Duckpad in 15/ }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Duckpad in 15 minutes",
+  );
+  await expect(
+    pagination.getByRole("link", { name: /Previous.*Installation/ }),
+  ).toBeVisible();
+  await expect(
+    pagination.getByRole("link", { name: /Next.*Use your own data/ }),
+  ).toBeVisible();
+});
+
+test("the mobile outline shows and changes the current section", async ({
+  browser,
+  baseURL,
+}) => {
+  const context = await browser.newContext({
+    baseURL,
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+    reducedMotion: "reduce",
+  });
+  const page = await context.newPage();
+  await page.goto("docs/installation/");
+  const bar = page.locator(".mobile-toc");
+  await expect(bar.locator("summary")).toContainText("Overview");
+  await bar.locator("summary").tap();
+  const sections = page.getByRole("navigation", {
+    name: "Sections of this page",
+  });
+  await sections.getByRole("link", { name: "Upgrades and backups" }).tap();
+  await expect(sections).not.toBeVisible();
+  await expect(bar.locator("summary")).toContainText("Upgrades and backups");
+  const heading = page.getByRole("heading", {
+    name: "Upgrades and backups",
+    level: 2,
+  });
+  await expect
+    .poll(async () => {
+      const box = (await bar.boundingBox())!;
+      return (await heading.boundingBox())!.y - (box.y + box.height);
+    })
+    .toBeGreaterThanOrEqual(0);
+  // A tap outside the open outline closes it.
+  await bar.locator("summary").tap();
+  await expect(sections).toBeVisible();
+  await page.touchscreen.tap(195, 800);
+  await expect(sections).not.toBeVisible();
+  await context.close();
+});
+
+test("the mobile menu opens on the current guide and covers the page", async ({
+  browser,
+  baseURL,
+}) => {
+  const context = await browser.newContext({
+    baseURL,
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+    reducedMotion: "reduce",
+  });
+  const page = await context.newPage();
+  await page.goto("docs/sso/");
+  await page.getByLabel("Navigation menu").tap();
+  const guides = page.getByRole("navigation", {
+    name: "Documentation on mobile",
+  });
+  const current = guides.getByRole("link", { name: "Single sign-on" });
+  await expect(current).toHaveAttribute("aria-current", "page");
+  await expect(current).toBeInViewport();
+  const overflow = () =>
+    page.evaluate(() => getComputedStyle(document.documentElement).overflow);
+  expect(await overflow()).toBe("hidden");
+  await guides.getByRole("link", { name: "Data tests", exact: true }).tap();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Data tests",
+  );
+  await expect(guides).not.toBeVisible();
+  expect(await overflow()).not.toBe("hidden");
+  await context.close();
 });

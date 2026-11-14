@@ -1,0 +1,43 @@
+---
+import type { MarkdownHeading } from "astro";
+interface Props {
+  headings: MarkdownHeading[];
+  label: string;
+  title?: string;
+}
+const { headings, label, title } = Astro.props;
+const top = headings.find((heading) => heading.depth === 1);
+// Nest third-level headings under the section that precedes them.
+const sections: { heading: MarkdownHeading; children: MarkdownHeading[] }[] =
+  [];
+for (const heading of headings) {
+  if (heading.depth === 2 || (heading.depth === 3 && !sections.length))
+    sections.push({ heading, children: [] });
+  else if (heading.depth === 3) sections.at(-1)!.children.push(heading);
+}
+---
+
+<nav class="toc" aria-label={label} data-toc>
+  {title && <strong>{title}</strong>}
+  <ul>
+    {top && (
+      <li>
+        <a href={`#${top.slug}`}>Overview</a>
+      </li>
+    )}
+    {sections.map(({ heading, children }) => (
+      <li>
+        <a href={`#${heading.slug}`}>{heading.text}</a>
+        {children.length > 0 && (
+          <ul>
+            {children.map((child) => (
+              <li>
+                <a href={`#${child.slug}`}>{child.text}</a>
+              </li>
+            ))}
+          </ul>
+        )}
+      </li>
+    ))}
+  </ul>
+</nav>
