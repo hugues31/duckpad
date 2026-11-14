@@ -246,7 +246,7 @@ function NodeSection({
     ),
   ];
   return (
-    <section
+    <article
       id={nodeAnchor(node.id)}
       className={`doc-node ${node.kind} ${depth ? "doc-step" : ""}`}
       aria-labelledby={nodeAnchor(node.id) + "-title"}
@@ -340,7 +340,7 @@ function NodeSection({
           ))}
         </div>
       )}
-    </section>
+    </article>
   );
 }
 

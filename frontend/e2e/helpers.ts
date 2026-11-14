@@ -5,6 +5,18 @@ import type { Bundle, Snapshot } from "../src/types";
 /** Administrator password of the disposable instance started by scripts/e2e_server.py. */
 export const PASSWORD = "duckpad-browser-test";
 
+/**
+ * Open the project overview of the Documentation tab for editing and return
+ * its editor: the tab shows the rendered document until asked.
+ */
+export async function editOverview(page: Page) {
+  await page
+    .locator(".documentation-page")
+    .getByRole("button", { name: "Edit overview", exact: true })
+    .click();
+  return page.locator(".project-documentation");
+}
+
 /** Drop a palette definition into the uncovered canvas, including narrow layouts. */
 export async function dragPaletteNode(page: Page, label: string) {
   const pane = page.locator(".react-flow__pane");

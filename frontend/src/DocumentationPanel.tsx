@@ -220,7 +220,6 @@ function Overview({
             )}
             <button
               className="button secondary small"
-              aria-pressed={writing}
               onClick={() => setEditing(!writing)}
             >
               {writing ? (
@@ -237,9 +236,7 @@ function Overview({
       </div>
       {writing ? (
         <>
-          <p className="muted small doc-editor-hint">
-            {t("emptyDocumentation")}
-          </p>
+          <p className="doc-editor-hint">{t("emptyDocumentation")}</p>
           <MarkdownEditor
             value={draft}
             onChange={(text) => {
@@ -394,7 +391,7 @@ export default function DocumentationPanel({
             })}
           </ul>
         </nav>
-        <article className="doc-article">
+        <div className="doc-article">
           <header className="doc-cover">
             <div className="doc-cover-title">
               <div>
@@ -407,7 +404,7 @@ export default function DocumentationPanel({
               <button
                 className="button secondary doc-export"
                 onClick={() => window.print()}
-                data-tooltip={t("docExportHint")}
+                title={t("docExportHint")}
               >
                 <FileDown size={15} aria-hidden="true" />
                 {t("docExport")}
@@ -489,7 +486,7 @@ export default function DocumentationPanel({
           <footer className="doc-footnote">
             {t("generatedDocumentationHint")}
           </footer>
-        </article>
+        </div>
       </div>
     </section>
   );
