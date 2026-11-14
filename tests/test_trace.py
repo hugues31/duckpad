@@ -8,6 +8,7 @@ import sqlglot
 from sqlglot import exp
 
 from duckpad.datasets import Context, Dataset
+from duckpad.lineage import Lineage
 from duckpad.materialize import plan_materialization, publish_view
 from duckpad.trace import Coverage, TraceQuery
 from duckpad.trace import builders as b
@@ -63,6 +64,7 @@ def context():
 class Explanation:
     def __init__(self, tracer, contributions, selection, distinct):
         self.tracer = tracer
+        self.records = contributions
         self.contributions = cells(tracer, contributions)
         self.selection = cells(tracer, selection)
         self.distinct = distinct
@@ -374,3 +376,133 @@ def test_tracing_leaves_the_normalized_step_unchanged(context, query):
         tracer.trace(tree, len(tree.selects) - 1, distinct_value="X")
     assert tree.sql(dialect="duckdb") == normalized
     assert tracer.trace(tree, len(tree.selects) - 1) == first
+
+
+class Statements:
+    """A cursor recording the statements lineage pages execute."""
+
+    def __init__(self, cursor):
+        self.cursor, self.executed = cursor, []
+
+    def execute(self, query, parameters=None):
+        self.executed.append(query)
+        return self.cursor.execute(query, parameters or [])
+
+
+def page(result, offset=0, size=5):
+    """A page as lineage reads it: (row, column) of each record, its total and its statements."""
+    cursor = Statements(result.tracer.cursor)
+    found = Lineage.page(cursor, result.records, offset, size)
+    return [(c["row"], c["column"]) for c in found["contributions"]], found["total"], cursor.executed
+
+
+@pytest.mark.parametrize(
+    ("query", "column", "exact"),
+    [
+        ("SELECT grp, SUM(value) FROM src GROUP BY grp ORDER BY grp", 1, True),
+        ("SELECT grp, SUM(value + id) FROM src WHERE id > 0 GROUP BY grp ORDER BY grp", 1, True),
+        ("SELECT id, value * 2 FROM src WHERE value > 5 ORDER BY id", 1, True),
+        ("SELECT a.id, a.value + b.id FROM src a JOIN src b ON a.id = b.id ORDER BY a.id", 1, True),
+        ("SELECT id, SUM(value) OVER (PARTITION BY grp) FROM src ORDER BY id", 1, True),
+        ("SELECT grp FROM src UNION SELECT category FROM src ORDER BY 1", 0, True),
+        # A join repeats the rows of one side for each match on the other.
+        (
+            "SELECT a.grp, SUM(a.value) FROM src a JOIN src b ON a.grp = b.grp GROUP BY a.grp ORDER BY 1",
+            1,
+            False,
+        ),
+        # Both sides of a self-join read the same cells.
+        ("SELECT a.id, a.value + b.value FROM src a JOIN src b ON a.id = b.id ORDER BY a.id", 1, False),
+        ("SELECT SUM(value) - MIN(value) FROM src", 0, False),
+    ],
+)
+def test_records_are_deduplicated_only_when_a_cell_can_repeat(explain, query, column, exact):
+    result = explain(query, column=column)
+    assert result.records.exact is exact
+    records, total, statements = page(result, size=100)
+    # Whatever the proof, a page never shows or counts a cell twice.
+    assert len(records) == len(set(records)) == total == len(result.contributions)
+    assert any("SELECT DISTINCT" in statement for statement in statements) is not exact
+
+
+def test_joined_rows_and_shared_cells_are_counted_once(explain):
+    joined = explain(
+        "SELECT a.grp, SUM(a.value) FROM src a JOIN src b ON a.grp = b.grp GROUP BY a.grp ORDER BY 1",
+        column=1,
+    )
+    assert page(joined)[:2] == ([(0, "value"), (1, "value"), (2, "value")], 3)
+    assert page(joined, size=2)[:2] == ([(0, "value"), (1, "value")], 3)
+    shared = explain("SELECT a.id, a.value + b.value FROM src a JOIN src b ON a.id = b.id ORDER BY a.id")
+    assert page(shared)[:2] == ([(0, "id")], 1)
+    shared = explain(
+        "SELECT a.id, a.value + b.value FROM src a JOIN src b ON a.id = b.id ORDER BY a.id", column=1
+    )
+    assert page(shared)[:2] == ([(0, "value")], 1)
+
+
+def test_page_counts_records_only_beyond_the_page(explain):
+    result = explain("SELECT SUM(value + id) FROM src")
+    everything = [(row, column) for row in range(5) for column in ("id", "value")]
+    records, total, statements = page(result, size=10)
+    assert (records, total) == (everything, 10)
+    assert len(statements) == 1
+    for offset, size in [(0, 4), (4, 4), (8, 4), (9, 1), (3, 100)]:
+        records, total, statements = page(result, offset, size)
+        assert (records, total) == (everything[offset : offset + size], 10)
+        # A page reaching the last record proves the total: reading one more row finds none.
+        assert len(statements) == (1 if offset + size >= 10 else 2)
+    assert page(result, 10)[:2] == ([], 10)
+    assert page(result, 50, 2)[:2] == ([], 10)
+
+
+def test_deep_pages_read_the_same_records_as_branch_pages(explain, monkeypatch):
+    result = explain("SELECT SUM(value + id) FROM src")
+    expected = [page(result, offset, 3)[:2] for offset in range(0, 12, 3)]
+    monkeypatch.setattr("duckpad.lineage.BRANCH_ROWS", 0)
+    assert [page(result, offset, 3)[:2] for offset in range(0, 12, 3)] == expected
+
+
+def test_first_inputs_hold_the_first_record_of_each_column(explain):
+    result = explain(
+        "SELECT a.grp, SUM(a.value * b.id) FROM src a JOIN src b ON a.grp = b.grp GROUP BY a.grp ORDER BY 1",
+        row=1,
+        column=1,
+    )
+    first = Lineage.first_inputs(result.tracer.cursor, result.records, 8)
+    assert [(c["row"], c["column"], c["value"]) for c in first] == [(3, "id", 4), (3, "value", 30)]
+    whole = Lineage.page(result.tracer.cursor, result.records, 0, 100)["contributions"]
+    assert first == [next(c for c in whole if c["column"] == column) for column in ("id", "value")]
+
+
+def test_contributing_rows_are_whole_rows_listed_once(context, explain):
+    def rows(result, offset=0, size=100, search=""):
+        found = Lineage.rows(
+            result.tracer.cursor, context.datasets["src"], result.records, offset, size, search
+        )
+        return [row["id"] for row in found["rows"]], found["count"], found["filtered_count"]
+
+    single = explain("SELECT grp, SUM(value) FROM src GROUP BY grp ORDER BY grp", row=1, column=1)
+    assert rows(single) == ([3, 4], 2, 2)
+    # Two columns of one row, and rows repeated by a join, are one contributing row.
+    several = explain("SELECT SUM(value + id) FROM src")
+    assert rows(several) == ([0, 1, 2, 3, 4], 5, 5)
+    assert rows(several, offset=3, size=1) == ([3], 5, 5)
+    assert rows(several, offset=9) == ([], 5, 5)
+    assert rows(several, search="Z") == ([3, 4], 5, 2)
+    assert rows(several, offset=1, search="Z") == ([4], 5, 2)
+    joined = explain(
+        "SELECT a.grp, SUM(a.value) FROM src a JOIN src b ON a.grp = b.grp GROUP BY a.grp ORDER BY 1",
+        column=1,
+    )
+    assert rows(joined) == ([0, 1, 2], 3, 3)
+    assert rows(joined, offset=1, size=1, search="X") == ([1], 3, 2)
+
+
+def test_witnessed_rows_are_matched_through_one_joined_row(explain):
+    witnessed = explain("SELECT id, value * 2 FROM src WHERE value > 5 ORDER BY id", row=2, column=1)
+    assert witnessed.contributions == [("src", 2, "value")]
+    assert str(witnessed.records).count("CROSS JOIN") == 1
+    assert "(SELECT" not in str(witnessed.records).split("CROSS JOIN")[1].split("WHERE", 1)[1]
+    # Without witnesses every candidate row is compared with scalar values.
+    scanned = explain("SELECT DISTINCT grp FROM src ORDER BY grp")
+    assert "CROSS JOIN" not in str(scanned.records)

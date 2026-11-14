@@ -17,15 +17,14 @@ from .normalize import normalize
 from .operands import trace_parts, values
 from .rows import DistinctVisitor, FilterVisitor, JoinVisitor, ProjectionVisitor
 from .set_operation import SetOperationVisitor
-from .step import Step
+from .step import Branch, Cells, Step, Trace
 from .window import WindowVisitor
 
 # The first visitor accepting a SELECT traces it.
 VISITORS = (WindowVisitor, AggregateVisitor, DistinctVisitor, JoinVisitor, FilterVisitor, ProjectionVisitor)
 
-
-def render(query):
-    return sql(query) if query is not None else ""
+# The explained row, joined as a relation to the candidate rows its witnesses identify.
+RECORDED = "_dp_recorded"
 
 
 class TraceQuery:
@@ -37,41 +36,31 @@ class TraceQuery:
         self.step = None
         self.operands = []
         self.operand_values = {}
+        # Stored values read so far: results are immutable while they are explained.
+        self.values = {}
+        # The explained row's witnesses and group values, read together.
+        self.captured = [w["column"] for w in dataset.witnesses.values()] + list(dataset.groups.values())
 
     def normalize(self, dataset):
         return normalize(self, dataset)
 
     def trace(self, tree, column_index, all_context=False, distinct_value=..., operand=None):
-        """Contribution and selection queries for one output column, and distinct value groups."""
+        """Contribution and selection cells of one output column, and its distinct value groups."""
         if isinstance(tree, exp.SetOperation):
-            result = SetOperationVisitor(self).visit(tree, column_index)
-        else:
-            self.step = Step.analyze(self, tree, column_index, all_context, distinct_value)
-            self.expression = explained(self.step.target)
-            self.operands, self.operand_values = self.split(operand)
-            if self.operands:
-                self.kind = "expression"
-                return (
-                    render(
-                        b.union_all(
-                            [
-                                part.contributions
-                                for _, _, part in self.operands
-                                if part.contributions is not None
-                            ]
-                        )
-                    ),
-                    render(
-                        b.union_all(
-                            [part.context for _, _, part in self.operands if part.context is not None]
-                        )
-                    ),
-                    None,
-                )
-            visitor = next(visitor for visitor in VISITORS if visitor.accepts(self.step))
-            self.kind = visitor.kind
-            result = visitor(self).visit(self.step)
-        return render(result.contributions), render(result.context), result.distinct
+            return SetOperationVisitor(self).visit(tree, column_index)
+        self.step = Step.analyze(self, tree, column_index, all_context, distinct_value)
+        self.expression = explained(self.step.target)
+        self.operands, self.operand_values = self.split(operand)
+        if self.operands:
+            self.kind = "expression"
+            parts = [part for _, _, part in self.operands]
+            return Trace(
+                Cells(tuple(branch for part in parts for branch in part.contributions.branches)),
+                Cells(tuple(branch for part in parts for branch in part.context.branches)),
+            )
+        visitor = next(visitor for visitor in VISITORS if visitor.accepts(self.step))
+        self.kind = visitor.kind
+        return visitor(self).visit(self.step)
 
     def split(self, operand):
         """Operands and their captured values, or none: the whole expression is then traced as on a plain step."""
@@ -136,13 +125,17 @@ class TraceQuery:
         return tree
 
     def lookup(self, relation, name, row):
-        """One stored value of a materialized relation."""
-        query = (
-            exp.select(b.column(name))
-            .from_(b.table(relation), copy=False)
-            .where(exp.EQ(this=b.rowid(), expression=exp.Placeholder()), copy=False)
-        )
-        return self.cursor.execute(sql(query), [row]).fetchone()[0]
+        """One stored value of a materialized relation, read once."""
+        key = (relation, name, row)
+        if key not in self.values:
+            explained_row = relation == self.dataset.relation and row == self.row
+            names = self.captured if explained_row and name in self.captured else [name]
+            columns = ", ".join(qi(n) for n in names)
+            record = self.cursor.execute(
+                f"SELECT {columns} FROM {qi(relation)} WHERE rowid = ?", [row]
+            ).fetchone()
+            self.values.update({(relation, n, row): value for n, value in zip(names, record, strict=True)})
+        return self.values[key]
 
     def count(self, query):
         counted = b.select_from(query.copy(), "occurrences", exp.Count(this=exp.Star()))
@@ -176,8 +169,31 @@ class TraceQuery:
     def matched(self, step, additions, row_names):
         """Candidate rows of the step whose output values and witnesses match the explained row."""
         candidates = b.project(step.base, [*(p.copy() for p in step.projections), *additions])
-        matching = b.every([step.matching.copy(), *self.witnesses(row_names)])
-        return b.select_from(candidates, "candidates").where(matching, copy=False)
+        witnesses = self.witnesses(row_names)
+        if not witnesses:
+            # Every candidate row is compared, which scalar values do fastest.
+            return b.select_from(candidates, "candidates").where(self.matches(step.names), copy=False)
+        # Witnesses leave few candidates, and DuckDB plans one joined row far faster
+        # than a scalar subquery per column.
+        stored = [self.dataset.stored(c["name"]) for c in self.dataset.columns]
+        position = exp.EQ(this=b.rowid(), expression=exp.Literal.number(int(self.row)))
+        recorded = exp.select(
+            *(
+                b.column(column).as_(name, quoted=True)
+                for column, name in zip(stored, step.names, strict=True)
+            )
+        ).from_(b.table(self.dataset.relation), copy=False)
+        equal = [b.same(b.column(name, "candidates"), b.column(name, RECORDED)) for name in step.names]
+        return (
+            exp.select(exp.Column(this=exp.Star(), table=b.identifier("candidates")))
+            .from_(candidates.subquery("candidates", copy=False), copy=False)
+            .join(
+                recorded.where(position, copy=False).subquery(RECORDED, copy=False),
+                join_type="cross",
+                copy=False,
+            )
+            .where(b.every([*equal, *witnesses]), copy=False)
+        )
 
     def first_columns(self):
         """One column per source, standing for whole rows when no column is referenced."""
@@ -217,17 +233,26 @@ class TraceQuery:
 
     def contributions(self, columns, query):
         """Contributions of columns over the rows a step query selects."""
-        queries = []
+        # A query reading one relation selects each of its rows once; a join can repeat them.
+        source = query.args.get("from_")
+        once = (
+            source is not None
+            and isinstance(source.this, exp.Table)
+            and not any(source.this.args.get(k) for k in ("pivots", "joins", "laterals", "sample"))
+            and not any(query.args.get(k) for k in ("joins", "laterals"))
+        )
+        branches = []
         for column in self.referenced(columns):
             data = self.sources[column.table]
             name = self.original_column(data, column.name)
             records = self.contribution(data, b.rowid(column.table), name, column.copy(), data.source)
-            queries.append(b.project(query, records).where(b.not_null(b.rowid(column.table)), copy=False))
-        return b.union_all(queries)
+            rows = b.project(query, records).where(b.not_null(b.rowid(column.table)), copy=False)
+            branches.append(Branch(rows, data.id, name, once))
+        return Cells(tuple(branches))
 
     def from_matched(self, columns, matched, row_names, lists=False, predicate=None):
         """Contributions of columns from the stored rows whose identities matched rows captured."""
-        queries = []
+        branches = []
         for column in self.referenced(columns):
             alias, name = column.table, column.name
             data = self.sources[alias]
@@ -238,9 +263,9 @@ class TraceQuery:
             conditions = [b.rowid("d").isin(query=identities, copy=False)]
             if predicate:
                 conditions.append(predicate(alias))
-            records = self.contribution(
-                data, b.rowid("d"), self.original_column(data, name), b.column(name, "d"), data.source
-            )
+            original = self.original_column(data, name)
+            records = self.contribution(data, b.rowid("d"), original, b.column(name, "d"), data.source)
             rows = exp.select(*records).from_(b.table(data.relation, "d"), copy=False)
-            queries.append(rows.where(*conditions, copy=False))
-        return b.union_all(queries)
+            # Stored rows are selected by identity: each yields one record.
+            branches.append(Branch(rows.where(*conditions, copy=False), data.id, original, True))
+        return Cells(tuple(branches))
