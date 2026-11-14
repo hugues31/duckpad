@@ -315,6 +315,15 @@ export default function LineagePanel({
               }
               onImpact={() => onChange({ ...target, direction: "impact" })}
             />
+          ) : target.column &&
+            target.direction === "impact" &&
+            tables.nodes[target.node]?.export ? (
+            // An export is the end of a column: there is no use to list after it.
+            <p className="lineage-column-summary">
+              {t("lineageWrittenColumn")
+                .replace("{node}", name)
+                .replace("{column}", target.column)}
+            </p>
           ) : target.column && target.direction === "impact" ? (
             <ColumnImpact
               key={JSON.stringify([

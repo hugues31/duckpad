@@ -7,6 +7,7 @@ from helpers import join_run, pipeline
 
 from duckpad.column_analysis import Incomplete, analyze
 from duckpad.example import create_example
+from duckpad.util import Problem
 
 SCHEMA = {"a": {"id": "INT", "amount": "DOUBLE", "region": "VARCHAR"}, "b": {"id": "INT", "rate": "DOUBLE"}}
 
@@ -114,6 +115,32 @@ def test_northstar_origins_cache_and_limits(services, monkeypatch):
     assert any(s["kind"] == "join" for step in region["steps"] for s in step["selection"])
     monkeypatch.setattr(engine.column_lineage, "_build", lambda *args: pytest.fail("Analysis was recomputed"))
     assert engine.column_lineage.describe(worktree, "dev", "report", "report", "net_share") == result
+
+
+def test_an_export_lists_the_columns_of_its_input(services):
+    store, projects, catalog, engine = services
+    worktree = create_example(projects, catalog)["id"]
+    assert join_run(store, engine.launch(worktree, "dev")["id"])["status"] == "success"
+    read = engine.column_lineage.describe(worktree, "dev", "report", "report")["outputs"][0]
+    written = engine.column_lineage.describe(worktree, "dev", "export")["outputs"]
+    # Like its results, an export shows what it reads, under the name of its input.
+    assert [o["port"] for o in written] == ["source"]
+    assert [c["name"] for c in written[0]["columns"]] == [c["name"] for c in read["columns"]]
+    assert {c["kind"] for c in written[0]["columns"]} == {"carried"}
+    share = next(c for c in written[0]["columns"] if c["name"] == "net_share")
+    assert share["origin"]["node"] == "report::rank" and share["origin"]["kind"] == "computed"
+    result = engine.column_lineage.describe(worktree, "dev", "export", "source", "net_share")
+    assert result["complete"], result
+    first, second = result["steps"][:2]
+    assert (first["node"], first["kind"], first["inputs"][0]["node"]) == ("export", "carried", "report::rank")
+    assert (second["node"], second["kind"]) == ("report::rank", "computed")
+    assert {s["node"] for s in result["steps"] if s["kind"] == "source"} == {"orders", "fees"}
+    # The shared analysis keeps describing outputs only: impact counts are unchanged.
+    assert not any(key[0] == "export" for key in engine.column_lineage.analysis(worktree, "dev")[0])
+    with pytest.raises(Problem, match="Node or output not found"):
+        engine.column_lineage.describe(worktree, "dev", "missing")
+    with pytest.raises(Problem, match="Node or output not found"):
+        engine.column_lineage.describe(worktree, "dev", "export", "other")
 
 
 def test_never_run_literal_source_and_earlier_output(services):

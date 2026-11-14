@@ -114,6 +114,10 @@ export function ComponentHeading({
   );
 }
 
+/** Nested forks of a table path shown open, and the nodes an open branch may hold. */
+const OPEN_FORKS = 2;
+const OPEN_NODES = 6;
+
 export function TableSteps({
   tables,
   direction,
@@ -154,15 +158,19 @@ export function TableSteps({
       {name(id)} ↗
     </a>
   );
-  // The first input continues the path; each other one opens a branch beside it. A node
-  // reached twice is shown on the path and referenced from the branch.
-  const tree = (id: string, previous: string[] = []): React.ReactNode => {
+  // The first input continues the path; each other one forks beside it, like a branch of a
+  // Git graph. A node reached twice is shown on the path and referenced from the branch.
+  const tree = (
+    id: string,
+    previous: string[] = [],
+    depth = 0,
+  ): React.ReactNode => {
     if (seen.has(id)) return reference(id);
     seen.add(id);
     const components = componentPaths(id);
     const item = tables.nodes[id];
     const [trunk, ...branches] = next(id);
-    const rest = trunk === undefined ? null : tree(trunk, components);
+    const rest = trunk === undefined ? null : tree(trunk, components, depth);
     return (
       <Fragment key={id}>
         {components
@@ -201,29 +209,37 @@ export function TableSteps({
             if (seen.has(child)) return reference(child);
             const added = [...reach(child)];
             const ends = added.filter((node) => !next(node).length);
-            if (added.length === 1)
+            // A large project stays readable: forks open on two levels, and a long
+            // branch waits folded, naming how much it holds and where it ends.
+            if (
+              added.length === 1 ||
+              (depth < OPEN_FORKS && added.length <= OPEN_NODES)
+            )
               return (
                 <div key={child} className="lineage-branch">
-                  {tree(child, components)}
+                  {tree(child, components, depth + 1)}
                 </div>
               );
-            // A short branch is open; a longer one still names where it ends.
             return (
-              <details
-                key={child}
-                className="lineage-branch"
-                open={added.length <= 3}
-              >
+              <details key={child} className="lineage-branch">
                 <summary>
-                  <span>{name(componentPaths(child)[0] || child)}</span>
-                  {added.length > 3 && (
+                  <span>
+                    {countLabel(
+                      t,
+                      added.length,
+                      "impactNodeOne",
+                      "impactNodeMany",
+                    )}
+                  </span>
+                  {!!ends.length && (
                     <span className="muted">
                       {direction === "origin" ? "←" : "→"}{" "}
-                      {ends.map(name).join(", ")}
+                      {ends.slice(0, 3).map(name).join(", ")}
+                      {ends.length > 3 && "…"}
                     </span>
                   )}
                 </summary>
-                {tree(child, components)}
+                {tree(child, components, depth + 1)}
               </details>
             );
           })}

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useId, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Link } from "react-router";
 import { codeFileUrl } from "./navigation";
@@ -127,6 +127,8 @@ export function ColumnImpact({
     refresh: JSON.stringify([snapshot.revision, statuses.nodes]),
   });
   const [renaming, setRenaming] = useState(false);
+  const [simulating, setSimulating] = useState(false);
+  const field = useId();
   const [name, setName] = useState("");
   const [plan, setPlan] = useState<Impact | null>(null);
   const [failure, setFailure] = useState("");
@@ -253,66 +255,77 @@ export function ColumnImpact({
                 ),
               )}
           </p>
+          {/* One action at a time: its form opens under the two buttons. */}
           <div className="impact-toolbar">
-            {canEdit && !renaming && (
+            {canEdit && (
               <button
                 className="button secondary small"
-                onClick={() => setRenaming(true)}
+                aria-expanded={renaming}
+                disabled={busy}
+                onClick={() => {
+                  setRenaming(!renaming);
+                  setSimulating(false);
+                  setPlan(null);
+                }}
               >
                 {t("impactRename")}
               </button>
             )}
+            <button
+              className="button secondary small"
+              aria-expanded={simulating}
+              disabled={busy}
+              onClick={() => {
+                setSimulating(!simulating);
+                setRenaming(false);
+                setPlan(null);
+              }}
+            >
+              {t("schemaSimulate")}
+            </button>
+          </div>
+          {simulating && (
             <TypeSimulation
               key={JSON.stringify([id, environment, target])}
               target={target}
             />
-          </div>
+          )}
           {renaming && (
             <form
-              className="impact-rename"
+              className="impact-form"
               onSubmit={(e) => {
                 e.preventDefault();
                 void preview();
               }}
             >
-              <label>
-                {t("impactNewName")}
+              <label htmlFor={field}>{t("impactNewName")}</label>
+              <div className="impact-field">
                 <input
+                  id={field}
                   value={name}
                   onChange={(e) => {
                     setName(e.target.value);
                     setPlan(null);
                   }}
                   autoComplete="off"
+                  // The button which opened the form asked for this field.
+                  autoFocus
                   disabled={busy}
                 />
-              </label>
+                <button
+                  type="submit"
+                  className={`button small ${plan ? "secondary" : "primary"}`}
+                  disabled={busy || !name.trim()}
+                >
+                  {t("impactPreview")}
+                </button>
+              </div>
               {data.source && (
                 <p className="notice warning">{t("impactSourceWarning")}</p>
               )}
               {!!data.manual.length && (
                 <p className="notice warning">{t("impactManualWarning")}</p>
               )}
-              <div className="impact-actions">
-                <button
-                  type="submit"
-                  className={`button ${plan ? "secondary" : "primary"}`}
-                  disabled={busy || !name.trim()}
-                >
-                  {t("impactPreview")}
-                </button>
-                <button
-                  type="button"
-                  className="button secondary"
-                  disabled={busy}
-                  onClick={() => {
-                    setRenaming(false);
-                    setPlan(null);
-                  }}
-                >
-                  {t("cancel")}
-                </button>
-              </div>
               {plan && (
                 <>
                   <p>{t("impactSaveOnce")}</p>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Link } from "react-router";
 import { api, send } from "./api";
 import { TabStatus } from "./gitTabs";
@@ -197,6 +197,7 @@ export function TypeSimulation({ target }: { target: LineageTarget }) {
   const { id, environment, snapshot } = useLoadedWorktree();
   const [type, setType] = useState("");
   const [submitted, setSubmitted] = useState<string | null>(null);
+  const field = useId();
   const body = {
     environment,
     node: target.node,
@@ -210,9 +211,7 @@ export function TypeSimulation({ target }: { target: LineageTarget }) {
       api(`/worktrees/${id}/lineage/simulate-type`, { ...send(body), signal }),
   );
   return (
-    <details className="impact-rename">
-      <summary>{t("schemaSimulate")}</summary>
-      <p className="small muted">{t("schemaSimulationHint")}</p>
+    <div className="impact-form">
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -220,25 +219,29 @@ export function TypeSimulation({ target }: { target: LineageTarget }) {
           else setSubmitted(type.trim());
         }}
       >
-        <label>
-          {t("schemaNewType")}
+        <label htmlFor={field}>{t("schemaNewType")}</label>
+        <div className="impact-field">
           <input
+            id={field}
             value={type}
             placeholder="VARCHAR, DOUBLE, DECIMAL(18, 2)…"
             maxLength={256}
             autoComplete="off"
+            // The button which opened the form asked for this field.
+            autoFocus
             onChange={(event) => {
               setType(event.target.value);
               setSubmitted(null);
             }}
           />
-        </label>
-        <button
-          className="button secondary small"
-          disabled={!type.trim() || result.pending}
-        >
-          {t("schemaRunSimulation")}
-        </button>
+          <button
+            className="button primary small"
+            disabled={!type.trim() || result.pending}
+          >
+            {t("schemaRunSimulation")}
+          </button>
+        </div>
+        <p className="small muted">{t("schemaSimulationHint")}</p>
       </form>
       <TabStatus
         pending={result.pending}
@@ -252,7 +255,7 @@ export function TypeSimulation({ target }: { target: LineageTarget }) {
           environment={environment}
         />
       )}
-    </details>
+    </div>
   );
 }
 

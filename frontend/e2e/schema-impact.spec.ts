@@ -50,10 +50,16 @@ test("simulate a type without a run or a save, and clear old results when editin
     name: "Lineage",
     exact: true,
   });
-  await panel.getByText("Simulate a type change…", { exact: true }).click();
-  const form = panel
-    .locator("details")
-    .filter({ hasText: "Simulate a type change…" });
+  const actions = panel.locator(".impact-toolbar > button");
+  await expect(actions).toHaveText(["Rename…", "Simulate a type change…"]);
+  await actions.last().click();
+  // The form opens under the two actions, which stay on one line.
+  const tops = await actions.evaluateAll((buttons) =>
+    buttons.map((button) => button.getBoundingClientRect().top),
+  );
+  expect(tops[0]).toBe(tops[1]);
+  const form = panel.locator(".impact-form");
+  await expect(form.getByLabel("New type")).toBeFocused();
   await form.getByLabel("New type").fill("VARCHAR");
   await form.getByRole("button", { name: "Simulate", exact: true }).click();
   await expect(

@@ -300,6 +300,131 @@ test("the panel follows the node chosen on the canvas and Escape closes it from 
   await expect(selection).toHaveCount(0);
 });
 
+test("an export lists the columns of its input, like its results", async ({
+  page,
+}) => {
+  await example(page);
+  await page.getByRole("button", { name: "Fit view", exact: true }).click();
+  await page
+    .locator(".react-flow__node")
+    .filter({ has: page.getByText("Export revenue", { exact: true }) })
+    .click();
+  await page.getByRole("button", { name: "Lineage", exact: true }).click();
+  const panel = page.getByRole("complementary", {
+    name: "Lineage",
+    exact: true,
+  });
+  await expect(
+    panel
+      .locator(".lineage-columns .lineage-column-link")
+      .filter({ hasText: "net_share" }),
+  ).toContainText("Computed in Rank regions");
+  await expect(panel).not.toContainText("Node or output not found");
+  await panel.locator(".lineage-crumb.chooser").click();
+  await panel.getByRole("menuitemradio", { name: /net_share/ }).click();
+  await expect(panel.locator(".lineage-breadcrumb button").first()).toHaveText(
+    "Export revenue · source",
+  );
+  // The export carries the column as it is; its origin continues upstream.
+  await expect(panel.locator(".lineage-step header button").first()).toHaveText(
+    "Export revenue",
+  );
+  await expect(panel.locator(".lineage-column-summary")).toContainText(
+    "3 calculations",
+  );
+  await panel.getByRole("button", { name: "Impact", exact: true }).click();
+  await expect(panel.locator(".lineage-column-summary")).toHaveText(
+    "Export revenue writes net_share outside the project: nothing reads it downstream.",
+  );
+});
+
+test("forks of the table path read like branches and deep ones wait folded", async ({
+  page,
+}) => {
+  await signIn(page);
+  const tree = await (
+    await page.request.post("/api/projects", { data: { name: "Forks" } })
+  ).json();
+  const snapshot = await (
+    await page.request.get(`/api/worktrees/${tree.id}`)
+  ).json();
+  const source = (id: string) =>
+    `-- @label ${id}\n-- @output result\nSELECT 1 AS id, 2 AS ${id}_value;`;
+  const join = (id: string) =>
+    `-- @label ${id}\n-- @input left\n-- @input right\n-- @output result\nSELECT l.*, r.* EXCLUDE (id) FROM {{ left }} l JOIN {{ right }} r ON l.id = r.id;`;
+  // Each join reads the path on the left and forks on the right, three forks deep;
+  // the last fork holds two nodes.
+  const joins = [
+    ["report", "orders", "profiles"],
+    ["profiles", "customers", "geography"],
+    ["geography", "segments", "regions"],
+  ];
+  const sources = ["orders", "customers", "segments", "countries"];
+  const edge = (source: string, target: string, input: string) => ({
+    id: `${source}_${target}`,
+    source,
+    sourceHandle: "result",
+    target,
+    targetHandle: input,
+  });
+  const saved = await page.request.put(`/api/worktrees/${tree.id}`, {
+    data: {
+      revision: snapshot.revision,
+      files: {
+        ...snapshot.files,
+        "flow.json": JSON.stringify({
+          name: "Forks",
+          nodes: [...sources, "regions", ...joins.map(([id]) => id)].map(
+            (id) => ({ id, params: {} }),
+          ),
+          edges: [
+            edge("countries", "regions", "source"),
+            ...joins.flatMap(([id, left, right]) => [
+              edge(left, id, "left"),
+              edge(right, id, "right"),
+            ]),
+          ],
+        }),
+        ...Object.fromEntries([
+          ...sources.map((id) => [`nodes/${id}.sql`, source(id)]),
+          ...joins.map(([id]) => [`nodes/${id}.sql`, join(id)]),
+        ]),
+        "nodes/regions.sql":
+          "-- @label regions\n-- @input source\n-- @output result\nSELECT * FROM {{ source }};",
+      },
+    },
+  });
+  expect(saved.ok(), await saved.text()).toBeTruthy();
+  await page.goto(`/worktrees/${tree.id}/flow?node=report&lineage=report`);
+  const panel = page.getByRole("complementary", {
+    name: "Lineage",
+    exact: true,
+  });
+  const path = panel.locator(".lineage-table-path");
+  const step = (name: string) =>
+    path.locator(".lineage-table-step > .text-button", {
+      hasText: new RegExp(`^${name}$`),
+    });
+  // The path keeps its column; each fork shifts its branch by one lane.
+  const left = async (name: string) => (await step(name).boundingBox())!.x;
+  await expect(step("geography")).toBeVisible();
+  expect(await left("orders")).toBe(await left("report"));
+  expect(await left("profiles")).toBeGreaterThan(await left("report"));
+  expect(await left("geography")).toBeGreaterThan(await left("profiles"));
+  expect(await left("customers")).toBe(await left("profiles"));
+  // The third fork waits folded, naming what it holds and where it ends.
+  const folded = path.locator("details.lineage-branch > summary");
+  await expect(folded).toHaveText("2 nodes← countries");
+  await expect(step("regions")).toBeHidden();
+  await folded.click();
+  await expect(step("regions")).toBeVisible();
+  await expect(step("countries")).toBeVisible();
+  const accessibility = await new AxeBuilder({ page })
+    .include(".lineage-panel")
+    .analyze();
+  expect(accessibility.violations).toEqual([]);
+});
+
 test("table Origin and Impact work before a run and include computed variables", async ({
   page,
 }) => {
@@ -319,6 +444,8 @@ test("table Origin and Impact work before a run and include computed variables",
   });
   await expect(panel).toContainText("report_month");
   await expect(panel).toContainText("Reporting period");
+  // Its columns are those of its input: before a run, the panel says which node to run.
+  await expect(panel).not.toContainText("Node or output not found");
   await expect(panel.locator(".lineage-sources")).toContainText("Orders");
   // The path keeps one column however long it is; a second input opens a branch beside it.
   const steps = await panel

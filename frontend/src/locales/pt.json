@@ -1671,6 +1671,7 @@
   "lineageLevels": "Níveis de linhagem",
   "lineagePickValue": "Clique num valor em Dados",
   "lineageChooseColumn": "Escolher uma coluna",
+  "lineageWrittenColumn": "{node} escreve {column} fora do projeto: nada a lê a jusante.",
   "lineageSources": "Fontes",
   "lineageExports": "Escrito fora do projeto",
   "lineageNoEndpoints": "Nenhum recurso externo neste caminho",

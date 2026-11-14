@@ -672,18 +672,67 @@ button.lineage-crumb:not(:disabled):hover {
 .lineage-table-step > p {
   margin: 2px 0 0;
 }
+/* A fork of the table path is drawn like a branch of a Git graph: a curve leaves the
+   rail of the path and enters the first node of the branch, which has its own rail. */
 .lineage-table-step > .lineage-branch {
-  margin: 8px 0 2px;
+  margin: 7px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+.lineage-table-step > .lineage-branch::before {
+  content: "";
+  position: absolute;
+  top: -7px;
+  left: -15px;
+  box-sizing: border-box;
+  width: 19px;
+  height: 16px;
+  border-bottom: 2px solid var(--lineage-rail);
+  border-left: 2px solid var(--lineage-rail);
+  border-bottom-left-radius: 10px;
+}
+/* A folded branch: the curve ends on a button naming what it holds. */
+.lineage-table-step > details.lineage-branch::before {
+  height: 18px;
+}
+.lineage-table-step > details.lineage-branch > summary {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0 0 4px;
+  padding: 2px 9px 2px 6px;
+  border: 1px solid var(--lineage-rail);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--lineage-muted);
+  font-weight: 600;
+}
+.lineage-table-step > details.lineage-branch > summary:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.lineage-table-step > details.lineage-branch[open] > summary {
+  margin-bottom: 9px;
+}
+.lineage-table-step > details.lineage-branch[open]::after {
+  content: "";
+  position: absolute;
+  top: 21px;
+  left: 7px;
+  width: 2px;
+  height: 12px;
+  background: var(--lineage-rail);
 }
 .lineage-table-step > .lineage-reference {
   display: block;
   margin: 4px 0 0;
 }
-.lineage-table-path > .lineage-component {
+.lineage-table-path .lineage-component {
   position: relative;
   margin-left: 22px;
 }
-.lineage-table-path > .lineage-component:not(:first-child)::before {
+.lineage-table-path .lineage-component:not(:first-child)::before {
   content: "";
   position: absolute;
   top: -6px;
@@ -838,20 +887,53 @@ button.lineage-crumb:not(:disabled):hover {
   background: light-dark(#fde9b8, #6b5312);
   color: inherit;
 }
+/* Two actions on one line; the form of the chosen one opens under them. */
 .impact-toolbar {
   display: flex;
-  align-items: flex-start;
   flex-wrap: wrap;
   gap: 8px;
 }
-.impact-toolbar > .impact-rename {
-  margin: 0;
+.impact-toolbar > button {
+  white-space: nowrap;
 }
-.impact-toolbar > .impact-rename[open] {
-  flex-basis: 100%;
+.impact-toolbar > button[aria-expanded="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: color-mix(in srgb, var(--accent) 78%, var(--text));
 }
-.impact-toolbar > .impact-rename[open] > summary {
-  margin-bottom: 8px;
+.impact-form {
+  margin-block: 10px 4px;
+  padding: 11px 12px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-alt) 40%, var(--surface));
+}
+.impact-form label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.impact-field {
+  display: flex;
+  gap: 8px;
+}
+.impact-field > input {
+  flex: 1;
+  min-width: 0;
+}
+.impact-field > button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.impact-form p {
+  margin: 9px 0 0;
+}
+.impact-form .small {
+  color: var(--lineage-muted);
+}
+.impact-form > .button {
+  margin-top: 10px;
 }
 .impact-group {
   margin-block: 0;
@@ -884,14 +966,11 @@ button.lineage-crumb:not(:disabled):hover {
   font-family: var(--mono);
   font-size: 11px;
 }
-.impact-actions,
 .impact-code {
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
   gap: 8px;
-}
-.impact-code {
   margin-top: 5px;
 }
 .impact-code a {
@@ -901,35 +980,6 @@ button.lineage-crumb:not(:disabled):hover {
 }
 .impact-code a:hover {
   text-decoration: underline;
-}
-.impact-actions {
-  margin-block: 10px;
-}
-.impact-rename {
-  margin-block: 12px 0;
-}
-.impact-rename label {
-  display: grid;
-  gap: 6px;
-  font-size: 11.5px;
-  font-weight: 600;
-}
-.impact-rename > summary {
-  display: inline-flex;
-  padding: 5px 10px;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: var(--surface);
-  font-size: 11.5px;
-  font-weight: 600;
-  list-style: none;
-  cursor: pointer;
-}
-.impact-rename > summary::-webkit-details-marker {
-  display: none;
-}
-.impact-rename > summary:hover {
-  border-color: var(--accent);
 }
 .impact-file {
   margin-block: 8px;
@@ -980,6 +1030,14 @@ button.lineage-crumb:not(:disabled):hover {
 .impact-derived .impact-entry > .small {
   color: color-mix(in srgb, var(--accent) 70%, var(--text));
   font-family: var(--mono);
+}
+.schema-impact-results .impact-entry a {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+.schema-impact-results .impact-entry a:hover {
+  text-decoration: underline;
 }
 .schema-impact-results h4 {
   margin: 14px 0 6px;

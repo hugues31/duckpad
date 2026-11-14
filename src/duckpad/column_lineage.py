@@ -104,6 +104,33 @@ class ColumnLineage:
                 for (key, name), value in outputs.items()
                 if key == node and (not port or name == port)
             }
+        written = {}
+        if not chosen:
+            # A node without output, an export, writes what it reads: like its results,
+            # its columns are those of each input, carried as they are.
+            for name, target in self._inputs(worktree, environment, node, snapshot).items():
+                upstream = outputs.get(target)
+                if upstream is None or (port and name != port):
+                    continue
+                columns = []
+                for item in upstream["columns"]:
+                    read = steps[item["id"]]
+                    id_ = identity(node, name, item["name"])
+                    written[id_] = {
+                        **read,
+                        "id": id_,
+                        "node": node,
+                        "port": name,
+                        "kind": "carried",
+                        "expression": None,
+                        "inputs": [{k: read[k] for k in ("id", "node", "port", "column")}],
+                        "selection": [],
+                        "tables": [{"node": target[0], "port": target[1]}],
+                        "description": "",
+                        "resource": {},
+                    }
+                    columns.append({**item, "id": id_, "kind": "carried"})
+                chosen[name] = {**upstream, "columns": columns, "written": True}
         if not chosen:
             raise Problem("Node or output not found", 404)
         result = {
@@ -123,10 +150,11 @@ class ColumnLineage:
         selected = {}
 
         def visit(key):
-            if key in selected or key not in steps:
+            step = written.get(key) or steps.get(key)
+            if key in selected or step is None:
                 return
-            selected[key] = steps[key]
-            for ref in steps[key]["inputs"]:
+            selected[key] = step
+            for ref in step["inputs"]:
                 visit(ref["id"])
 
         visit(root)
@@ -138,6 +166,15 @@ class ColumnLineage:
                 "complete": all(s["status"] == "complete" for s in selected.values()),
             }
         )
+
+    def _inputs(self, worktree, environment, node, snapshot=None):
+        """The upstream output read by each input of a node which has no output of its own."""
+        bundle = (snapshot or self.engine.projects.snapshot(worktree))["bundle"]
+        computed = self.engine.pool.computed(worktree, environment, bundle)
+        nodes, edges, _ = static_nodes(bundle, environment, computed)
+        if node not in nodes or nodes[node]["parsed"]["outputs"]:
+            return {}
+        return {e["targetHandle"]: (e["source"], e["sourceHandle"]) for e in edges if e["target"] == node}
 
     def _build(self, worktree, environment, snapshot, schemas, computed, stale=frozenset()):
         engine = self.engine

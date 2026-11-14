@@ -1671,6 +1671,7 @@
   "lineageLevels": "Lineage levels",
   "lineagePickValue": "Click a value in Data",
   "lineageChooseColumn": "Choose a column",
+  "lineageWrittenColumn": "{node} writes {column} outside the project: nothing reads it downstream.",
   "lineageSources": "Sources",
   "lineageExports": "Written outside the project",
   "lineageNoEndpoints": "No external resources on this path",
