@@ -1,0 +1,728 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { renderReleaseNotes, type ReleaseGroup } from "../lib/release-markdown";
+import { getReleases, releasesURL, releaseURL } from "../lib/releases";
+
+const releases = await Promise.all(
+  (await getReleases()).map(async (release) => {
+    const id = `release-${encodeURIComponent(release.tag)}`;
+    const notes = await renderReleaseNotes(release, id);
+    return {
+      ...release,
+      id,
+      notes,
+      breaking: notes.groups.some((group) => group.kind === "breaking-changes"),
+    };
+  }),
+);
+const long = new Intl.DateTimeFormat("en", {
+  dateStyle: "long",
+  timeZone: "UTC",
+});
+const short = new Intl.DateTimeFormat("en", {
+  month: "short",
+  day: "numeric",
+  timeZone: "UTC",
+});
+const latest = releases.find((release) => !release.prerelease);
+const total = (kind: string) =>
+  releases
+    .flatMap((release) => release.notes.groups)
+    .filter((group) => group.kind === kind)
+    .reduce((sum, group) => sum + group.count, 0);
+const first = releases.at(-1);
+
+// Name the counts shown on each release; minor groups stay in the notes.
+const nouns: Record<string, [string, string]> = {
+  "breaking-changes": ["breaking change", "breaking changes"],
+  features: ["feature", "features"],
+  fixes: ["fix", "fixes"],
+  performance: ["performance improvement", "performance improvements"],
+};
+const chips = (groups: ReleaseGroup[]) =>
+  groups
+    .filter((group) => nouns[group.kind] && group.count)
+    .map((group) => ({
+      kind: group.kind,
+      text: `${group.count} ${nouns[group.kind][group.count === 1 ? 0 : 1]}`,
+    }));
+---
+
+<Layout
+  title="Release notes — Duckpad"
+  description="New features, fixes and improvements in every Duckpad release."
+  releases
+>
+  <main id="main" class="releases-page">
+    <header class="releases-hero wrap">
+      <div class="releases-intro">
+        <p class="eyebrow">
+          <span class="live-dot" aria-hidden="true"></span> RELEASE NOTES
+        </p>
+        <h1>What’s new in Duckpad.</h1>
+        <p>
+          Duckpad is young and ships often. Every release lists its features and
+          fixes. Breaking changes are flagged in red: read them before you
+          upgrade, as some require a fresh instance.
+        </p>
+        <a class="text-link" href={releasesURL}>
+          All releases on GitHub ↗
+        </a>
+      </div>
+      {latest && (
+        <aside class="latest-card" aria-labelledby="latest-title">
+          <p class="latest-label">Latest release</p>
+          <p class="latest-version" id="latest-title">
+            <a href={`#${latest.id}`}>{latest.tag}</a>
+          </p>
+          <p class="latest-date">
+            Published{" "}
+            <time datetime={latest.publishedAt}>
+              {long.format(new Date(latest.publishedAt))}
+            </time>
+          </p>
+          <ul class="release-chips" aria-label="Changes">
+            {chips(latest.notes.groups).map((chip) => (
+              <li data-kind={chip.kind}>{chip.text}</li>
+            ))}
+          </ul>
+          <div class="install-terminal">
+            <div class="terminal-bar">
+              <span class="terminal-lights" aria-hidden="true">
+                <i></i>
+                <i></i>
+                <i></i>
+              </span>
+              <span>Upgrade</span>
+            </div>
+            <pre aria-label="Upgrade Duckpad"><code>pip install --upgrade duckpad</code></pre>
+          </div>
+        </aside>
+      )}
+      {releases.length > 0 && (
+        <dl class="release-stats">
+          <div>
+            <dt>Releases</dt>
+            <dd>{releases.length}</dd>
+          </div>
+          <div>
+            <dt>Features</dt>
+            <dd>{total("features")}</dd>
+          </div>
+          <div>
+            <dt>Fixes</dt>
+            <dd>{total("fixes")}</dd>
+          </div>
+          <div>
+            <dt>First release</dt>
+            <dd>{long.format(new Date(first!.publishedAt))}</dd>
+          </div>
+        </dl>
+      )}
+    </header>
+    <div class="releases-layout wrap">
+      {releases.length > 0 && (
+        <aside class="release-index">
+          <nav class="toc" aria-label="Versions" data-toc>
+            <strong>Versions</strong>
+            <ul>
+              {releases.map((release) => (
+                <li>
+                  <a href={`#${release.id}`} data-label={release.tag}>
+                    <span class="release-index-tag">{release.tag}</span>
+                    {release.breaking && (
+                      <span class="breaking-mark" title="Breaking changes">
+                        <span class="sr-only">, breaking changes</span>
+                      </span>
+                    )}
+                    <small>{short.format(new Date(release.publishedAt))}</small>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        </aside>
+      )}
+      <div class="release-list">
+        {releases.length > 0 && (
+          <details class="mobile-toc">
+            <summary>
+              <span class="mobile-toc-label">Version</span>
+              <span class="mobile-toc-current" data-toc-current />
+              <svg
+                class="mobile-toc-chevron"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </summary>
+            <nav class="toc" aria-label="Versions on mobile" data-toc>
+              <ul>
+                {releases.map((release) => (
+                  <li>
+                    <a href={`#${release.id}`} data-label={release.tag}>
+                      {release.tag}
+                      {release.breaking && " · breaking changes"}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          </details>
+        )}
+        {releases.map((release) => (
+          <article
+            class="release-entry"
+            id={release.id}
+            aria-labelledby={`${release.id}-title`}
+            data-latest={release === latest ? "" : undefined}
+          >
+            <header class="release-head">
+              <div class="release-title">
+                <h2 id={`${release.id}-title`}>
+                  <a href={`#${release.id}`}>{release.tag}</a>
+                </h2>
+                {release.prerelease ? (
+                  <span class="release-badge">Pre-release</span>
+                ) : (
+                  release === latest && (
+                    <span class="release-badge">Latest release</span>
+                  )
+                )}
+              </div>
+              <time datetime={release.publishedAt}>
+                {long.format(new Date(release.publishedAt))}
+              </time>
+              <ul class="release-chips" aria-label="Changes">
+                {chips(release.notes.groups).map((chip) => (
+                  <li data-kind={chip.kind}>{chip.text}</li>
+                ))}
+              </ul>
+            </header>
+            {release.body ? (
+              <div class="prose release-body" set:html={release.notes.html} />
+            ) : (
+              <p class="release-empty">
+                No notes were included with this release.
+              </p>
+            )}
+            <footer class="release-foot">
+              {release.notes
+                .install && <pre class="release-install"><code>{release.notes.install}</code></pre>}
+              <div class="release-links">
+                {release.notes.compare && (
+                  <a href={release.notes.compare.href}>
+                    Compare {release.notes.compare.label} ↗
+                  </a>
+                )}
+                <a href={releaseURL(release)}>
+                  Release and downloads on GitHub ↗
+                </a>
+              </div>
+            </footer>
+          </article>
+        ))}
+        {!releases.length && (
+          <p>No releases have been published yet. Check back soon.</p>
+        )}
+      </div>
+    </div>
+  </main>
+</Layout>
+
+<script>
+  import "../lib/toc";
+</script>
+
+<style>
+  .releases-page {
+    --breaking: #c4320a;
+    --breaking-soft: #fff1ec;
+    --fix: #0f7a55;
+    --fix-soft: #e7f7f0;
+    --performance: #6c3fd1;
+    --performance-soft: #f1ecff;
+    padding-bottom: 90px;
+  }
+  :global(:root[data-theme="dark"]) .releases-page {
+    --breaking: #ff9b7a;
+    --breaking-soft: #3a1f1a;
+    --fix: #63d6a8;
+    --fix-soft: #15322a;
+    --performance: #bea6ff;
+    --performance-soft: #2a2347;
+  }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  /* Introduction, latest release and totals. */
+  .releases-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+    gap: 40px 70px;
+    align-items: center;
+    padding-top: 70px;
+    padding-bottom: 50px;
+  }
+  .releases-intro h1 {
+    font-size: clamp(36px, 5vw, 64px);
+    line-height: 1.05;
+    letter-spacing: -0.06em;
+    margin-bottom: 22px;
+  }
+  .releases-intro > p:not(.eyebrow) {
+    max-width: 520px;
+    color: var(--muted);
+    line-height: 1.8;
+    margin-bottom: 24px;
+  }
+  .text-link {
+    color: var(--blue);
+    font-size: 13px;
+  }
+  .latest-card {
+    position: relative;
+    padding: 28px;
+    border: 1px solid color-mix(in srgb, var(--blue) 35%, var(--line));
+    border-radius: 16px;
+    background:
+      radial-gradient(
+        circle at 100% 0%,
+        color-mix(in srgb, var(--blue) 14%, transparent),
+        transparent 55%
+      ),
+      var(--surface);
+    box-shadow: 0 24px 60px #152c5d14;
+  }
+  .latest-label {
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 10px;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--blue);
+  }
+  .latest-version {
+    margin-top: 10px;
+    font-size: clamp(40px, 4.6vw, 56px);
+    font-weight: 700;
+    letter-spacing: -0.06em;
+    line-height: 1;
+  }
+  .latest-version a:hover {
+    color: var(--blue);
+  }
+  .latest-date {
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .latest-card .release-chips {
+    margin-top: 18px;
+  }
+  .latest-card .install-terminal {
+    max-width: none;
+    margin-top: 22px;
+  }
+  .release-stats {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin: 0;
+    border-block: 1px solid var(--line);
+  }
+  .release-stats div {
+    padding: 20px 24px;
+    border-left: 1px solid var(--line);
+  }
+  .release-stats div:first-child {
+    border-left: 0;
+    padding-left: 0;
+  }
+  .release-stats dt {
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 10px;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .release-stats dd {
+    margin: 6px 0 0;
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    font-variant-numeric: tabular-nums;
+  }
+  .release-stats div:last-child dd {
+    font-size: 17px;
+    padding-top: 7px;
+  }
+
+  /* Version index and entries. */
+  .releases-layout {
+    display: grid;
+    grid-template-columns: 170px minmax(0, 1fr);
+    gap: 56px;
+    padding-top: 30px;
+  }
+  .release-index {
+    font-size: 12px;
+  }
+  .release-index .toc {
+    position: sticky;
+    top: calc(var(--header-height) + 24px);
+    max-height: calc(100dvh - var(--header-height) - 48px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .release-index a {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .release-index-tag {
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+  }
+  .release-index a[aria-current] .release-index-tag {
+    color: var(--blue);
+  }
+  .release-index small {
+    margin-left: auto;
+    font-size: 11px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .breaking-mark {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--breaking);
+  }
+  .release-list {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+    align-content: start;
+  }
+  .release-entry {
+    padding: 30px 34px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--surface);
+  }
+  .release-entry[data-latest] {
+    border-color: color-mix(in srgb, var(--blue) 45%, var(--line));
+    box-shadow: 0 18px 48px #152c5d10;
+  }
+  .release-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px 20px;
+    align-items: center;
+    padding-bottom: 22px;
+    border-bottom: 1px solid var(--line);
+  }
+  .release-title {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+  .release-head h2 {
+    font-size: 32px;
+    letter-spacing: -0.05em;
+  }
+  .release-head h2 a:hover {
+    color: var(--blue);
+  }
+  .release-head time {
+    color: var(--muted);
+    font-size: 13px;
+    text-align: right;
+  }
+  .release-head .release-chips {
+    grid-column: 1 / -1;
+  }
+  .release-badge {
+    display: inline-block;
+    padding: 5px 9px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--blue);
+    background: var(--soft);
+    border-radius: 999px;
+  }
+  .release-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .release-chips li {
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 650;
+    color: var(--blue);
+    background: var(--soft);
+  }
+  .release-chips li[data-kind="breaking-changes"] {
+    color: var(--breaking);
+    background: var(--breaking-soft);
+  }
+  .release-chips li[data-kind="fixes"] {
+    color: var(--fix);
+    background: var(--fix-soft);
+  }
+  .release-chips li[data-kind="performance"] {
+    color: var(--performance);
+    background: var(--performance-soft);
+  }
+
+  /* Structured notes: a group per change type, a row per change. */
+  .release-body {
+    font-size: 14px;
+    line-height: 1.7;
+  }
+  .release-body :global(.release-group) {
+    margin-top: 26px;
+  }
+  .release-body :global(.release-group h3) {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin: 0 0 12px;
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    line-height: 1.4;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .release-body :global(.release-group h3::before) {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--line);
+  }
+  .release-body :global([data-kind="features"] h3::before) {
+    background: var(--blue);
+  }
+  .release-body :global([data-kind="fixes"] h3::before) {
+    background: var(--fix);
+  }
+  .release-body :global([data-kind="performance"] h3::before) {
+    background: var(--performance);
+  }
+  .release-body :global([data-kind="breaking-changes"]) {
+    padding: 18px 20px;
+    border: 1px solid color-mix(in srgb, var(--breaking) 35%, transparent);
+    border-radius: 12px;
+    background: var(--breaking-soft);
+  }
+  .release-body :global([data-kind="breaking-changes"] h3) {
+    color: var(--breaking);
+  }
+  .release-body :global([data-kind="breaking-changes"] h3::before) {
+    background: var(--breaking);
+  }
+  .release-body :global(.release-count) {
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: var(--bg);
+    letter-spacing: 0;
+    font-weight: 600;
+  }
+  .release-body :global(.release-group ul) {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .release-body :global(.release-item) {
+    margin: 0;
+    padding: 9px 0;
+    border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+  }
+  .release-body :global(.release-item:first-child) {
+    border-top: 0;
+    padding-top: 0;
+  }
+  .release-body :global(.release-item p) {
+    margin: 0;
+  }
+  .release-body :global(.release-scope) {
+    display: inline-block;
+    margin-right: 8px;
+    padding: 0 7px;
+    border-radius: 5px;
+    background: var(--soft);
+    color: var(--blue);
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 11px;
+    line-height: 20px;
+    vertical-align: 1px;
+  }
+  .release-body :global(.release-pr),
+  .release-body :global(.release-commit) {
+    color: var(--muted);
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 11px;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .release-body :global(.release-pr) {
+    margin-right: 8px;
+  }
+  .release-body :global(.release-pr:hover),
+  .release-body :global(.release-commit:hover) {
+    color: var(--blue);
+    text-decoration: underline;
+  }
+  .release-body :global(.release-note) {
+    margin: 10px 0 2px;
+    padding: 12px 16px;
+    border-left: 3px solid var(--breaking);
+    border-radius: 0 8px 8px 0;
+    background: var(--surface);
+    font-size: 13px;
+  }
+  .release-body :global(details.release-group) {
+    padding-top: 16px;
+    border-top: 1px dashed var(--line);
+  }
+  .release-body :global(.release-group-summary) {
+    list-style: none;
+  }
+  .release-body :global(.release-group-summary::-webkit-details-marker) {
+    display: none;
+  }
+  .release-body :global(.release-group-summary h3) {
+    margin: 0;
+  }
+  .release-body :global(.release-group-summary h3::after) {
+    content: "Show" / "";
+    margin-left: auto;
+    font-family: "Manrope Variable", sans-serif;
+    font-size: 12px;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--blue);
+  }
+  .release-body :global(details[open] > .release-group-summary h3) {
+    margin-bottom: 12px;
+  }
+  .release-body :global(details[open] > .release-group-summary h3::after) {
+    content: "Hide" / "";
+  }
+  .release-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px 24px;
+    margin-top: 26px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+  }
+  .release-install {
+    margin: 0;
+    padding: 9px 64px 9px 14px;
+    font-size: 12px;
+  }
+  .release-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 22px;
+    font-size: 13px;
+    font-weight: 650;
+    color: var(--blue);
+  }
+  .release-links a:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .release-empty {
+    padding-top: 20px;
+    color: var(--muted);
+  }
+  .releases-page .mobile-toc {
+    display: none;
+  }
+
+  @media (max-width: 900px) {
+    .releases-hero {
+      grid-template-columns: minmax(0, 1fr);
+      padding-top: 45px;
+      gap: 32px;
+    }
+    .releases-layout {
+      display: block;
+    }
+    .release-index {
+      display: none;
+    }
+    .releases-page .mobile-toc {
+      display: block;
+      margin-bottom: 0;
+    }
+    :global(html:has(.releases-page)) {
+      scroll-padding-top: calc(var(--header-height) + 84px);
+    }
+    .release-stats {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .release-stats div:nth-child(3) {
+      border-left: 0;
+      padding-left: 0;
+    }
+    .release-stats div:nth-child(n + 3) {
+      border-top: 1px solid var(--line);
+    }
+  }
+  @media (max-width: 600px) {
+    .latest-card {
+      padding: 22px;
+    }
+    .release-entry {
+      padding: 22px 18px;
+      border-radius: 12px;
+    }
+    .release-head {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .release-head time {
+      text-align: left;
+    }
+    .release-head h2 {
+      font-size: 27px;
+    }
+    .release-stats div {
+      padding: 16px;
+    }
+    .release-stats dd {
+      font-size: 22px;
+    }
+    .release-foot {
+      flex-direction: column;
+      align-items: stretch;
+    }
+  }
+</style>

@@ -1,0 +1,397 @@
+---
+import Layout from "../layouts/Layout.astro";
+import ProductVideo from "../components/ProductVideo.astro";
+import FlowIllustration from "../components/FlowIllustration.astro";
+import TechnologyLogos from "../components/TechnologyLogos.astro";
+import FeatureGrid from "../components/FeatureGrid.astro";
+import { Code } from "astro:components";
+import "../styles/home.css";
+import { url } from "../lib/docs";
+
+const audiences = [
+  {
+    origin: "Alteryx · Dataiku · KNIME",
+    title: "You build flows in a visual tool",
+    familiar:
+      "A canvas of connected steps, with a result to inspect at each one.",
+    different:
+      "Every step, guided ones included, is SQL or Python you can read, edit and diff. There is no license to buy.",
+    href: "docs/comparison/",
+    link: "Vocabulary map",
+  },
+  {
+    origin: "dbt · SQLMesh",
+    title: "You write SQL models in Git",
+    familiar: "SQL files under version control, data tests and environments.",
+    different:
+      "A canvas of the dependencies, a result at each step and lineage down to the cell. Duckpad computes in DuckDB, not in your warehouse.",
+    href: "docs/sql/",
+    link: "How SQL nodes work",
+  },
+  {
+    origin: "Notebooks · scripts",
+    title: "You prepare data in code",
+    familiar: "SQL and Python, quick iterations on real data.",
+    different:
+      "A dependency graph instead of cell order, a form for each step’s parameters, and runs your team can review and repeat.",
+    href: "docs/python/",
+    link: "Python nodes",
+  },
+];
+
+const limits = [
+  {
+    title: "Data that needs a cluster.",
+    text: "DuckDB computes on one machine.",
+  },
+  { title: "Streaming.", text: "Pipelines run as batches." },
+  {
+    title: "Dashboards.",
+    text: "Charts illustrate a result; Duckpad is not a BI tool.",
+  },
+  {
+    title: "Scheduling.",
+    text: "Cron, Airflow or another orchestrator starts the Jobs.",
+  },
+];
+
+const directives = [
+  { code: "@input orders", result: "An input port" },
+  {
+    code: "@param dimension: column(orders)",
+    result: "A field listing the input’s columns",
+  },
+  {
+    code: "@param minimum: number",
+    result: "A number field, checked before the run",
+  },
+  { code: "@output result", result: "An output port with its own result" },
+  { code: "@test", result: "A data test: failing rows block the result" },
+];
+
+const sample = `-- @label Revenue breakdown
+-- @description Total revenue for each value of the column you choose.
+-- @input orders
+-- @param dimension: column(orders) = "region"
+-- @param minimum: number = 100
+-- @output result
+SELECT {{ dimension }}, SUM(amount) AS revenue
+FROM {{ orders }}
+WHERE amount >= {{ minimum }}
+GROUP BY ALL
+ORDER BY revenue DESC;
+-- @test revenue_is_positive
+SELECT * FROM {{ result }} WHERE revenue <= 0;`;
+
+// Lucide-style outline glyphs, drawn on a 24-unit grid.
+const values = [
+  {
+    title: "Everything is in the package",
+    text: "Single sign-on, project roles, Jobs and the API come with pip install duckpad. No paid edition, no hosted plan.",
+    icon: "M21 8 12 3 3 8v8l9 5 9-5V8ZM3 8l9 5 9-5M12 13v8",
+  },
+  {
+    title: "It runs where you decide",
+    text: "On a laptop or a server your team shares. No license key and no telemetry: data leaves only through what you connect.",
+    icon: "M4 4h16v6H4zM4 14h16v6H4zM8 7h.01M8 17h.01",
+  },
+  {
+    title: "Your work stays readable",
+    text: "A project is a Git repository of plain SQL, Python and JSON files. Read it, diff it and move it, even without Duckpad.",
+    icon: "M14 3H6v18h12V7l-4-4Zm0 0v4h4M9 13h6M9 17h6",
+  },
+  {
+    title: "Clear about its limits",
+    text: "Lineage marks what it cannot explain, tests stop bad rows, and the documentation says what Duckpad does not do.",
+    icon: "M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6l-8-3Zm-3 9 2 2 4-4",
+  },
+];
+---
+
+<Layout
+  title="Duckpad — See the flow. Trust the result."
+  description="An open-source SQL workspace powered by DuckDB. Build visual pipelines, inspect results and trace individual values back to their source."
+>
+  <main id="main">
+    <section class="hero wrap">
+      <div class="hero-copy">
+        <p class="eyebrow">
+          <span class="live-dot" aria-hidden="true"></span> OPEN SOURCE. OPEN
+          POSSIBILITIES.
+        </p>
+        <h1>
+          See the flow.
+          <br />
+          <span>Trust the result.</span>
+        </h1>
+        <p class="hero-description">
+          Build SQL pipelines visually. Explore and test the results. Trace a
+          number back to its source, then run a reviewed version with
+          confidence.
+        </p>
+        <div class="install-terminal">
+          <div class="terminal-bar">
+            <span class="terminal-lights" aria-hidden="true">
+              <i></i>
+              <i></i>
+              <i></i>
+            </span>
+            <span>Terminal</span>
+          </div>
+          <pre aria-label="Install and start Duckpad"><code>pip install duckpad
+duckpad start</code></pre>
+        </div>
+        <div class="hero-actions">
+          <a class="button" href={url("docs/quickstart/")}>
+            Build your first pipeline <span aria-hidden="true">↗</span>
+          </a>
+          <a class="text-link" href="#demo">
+            Watch it work <span aria-hidden="true">↓</span>
+          </a>
+        </div>
+        <p class="hero-note">
+          Powered by DuckDB 2.0 <span>·</span> Local execution <span>·</span>{" "}
+          MIT licensed
+        </p>
+      </div>
+      <FlowIllustration />
+    </section>
+    <TechnologyLogos />
+    <section
+      id="demo"
+      class="product-section wrap"
+      aria-labelledby="demo-heading"
+      data-reveal="media"
+    >
+      <div class="section-kicker">
+        <span id="demo-heading">MEET YOUR NEW DATA WORKSPACE</span>
+        <span>REAL APP. REAL WORKFLOW. ↙</span>
+      </div>
+      <ProductVideo />
+      <div class="principles">
+        <span>
+          <b>SQL</b> you can see
+        </span>
+        <span>
+          <b>Git</b> you can review
+        </span>
+        <span>
+          <b>Lineage</b> you can follow
+        </span>
+        <span>
+          <b>Data</b> you control
+        </span>
+      </div>
+    </section>
+    <FeatureGrid />
+    <section
+      id="audience"
+      class="audience wrap"
+      aria-labelledby="audience-heading"
+    >
+      <div class="section-heading" data-reveal>
+        <p class="eyebrow">WHO IT’S FOR</p>
+        <h2 id="audience-heading">
+          For the people who
+          <br />
+          prepare the data.
+        </h2>
+        <p>
+          Analysts, analytics engineers and data teams who want to see their
+          pipeline without losing the code behind it. Here is what changes,
+          depending on where you come from.
+        </p>
+      </div>
+      <div class="audience-grid">
+        {audiences.map((audience) => (
+          <article class="audience-card" data-reveal>
+            <p class="audience-origin">{audience.origin}</p>
+            <h3>{audience.title}</h3>
+            <dl>
+              <dt>You’ll recognize</dt>
+              <dd>{audience.familiar}</dd>
+              <dt>What changes</dt>
+              <dd>{audience.different}</dd>
+            </dl>
+            <a class="text-link" href={url(audience.href)}>
+              {audience.link} <span aria-hidden="true">↗</span>
+            </a>
+          </article>
+        ))}
+      </div>
+      <div class="not-for" data-reveal>
+        <h3>Probably not the right tool for</h3>
+        <ul>
+          {limits.map((limit) => (
+            <li>
+              <b>{limit.title}</b> {limit.text}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+    <section class="node-section wrap" aria-labelledby="node-heading">
+      <div class="node-copy" data-reveal>
+        <p class="eyebrow">BUILD YOUR OWN STEPS</p>
+        <h2 id="node-heading">A node is a SQL file.</h2>
+        <p>
+          Write a query and a few comment directives. Duckpad reads them and
+          builds the node: its ports, its parameter form and its palette entry.
+          There is nothing to compile or register.
+        </p>
+        <ul class="directive-list">
+          {directives.map((directive) => (
+            <li>
+              <code>{directive.code}</code>
+              <span>{directive.result}</span>
+            </li>
+          ))}
+        </ul>
+        <p>
+          Python nodes work the same way: a typed class that receives and
+          returns DuckDB relations, with the packages your project declares.
+        </p>
+        <div class="node-links">
+          <a class="text-link" href={url("docs/sql/")}>
+            SQL syntax <span aria-hidden="true">↗</span>
+          </a>
+          <a class="text-link" href={url("docs/python/")}>
+            Python nodes <span aria-hidden="true">↗</span>
+          </a>
+        </div>
+      </div>
+      <figure class="code-window" data-reveal="media">
+        <div class="terminal-bar">
+          <span class="terminal-lights" aria-hidden="true">
+            <i></i>
+            <i></i>
+            <i></i>
+          </span>
+          <span>templates/revenue_breakdown.sql</span>
+        </div>
+        <Code code={sample} lang="sql" theme="github-dark-high-contrast" />
+        <figcaption>
+          This file is a complete node: one input, two parameters, one output
+          and a data test.
+        </figcaption>
+      </figure>
+    </section>
+    <section class="detail-section wrap" aria-labelledby="lineage-heading">
+      <div class="detail-copy" data-reveal>
+        <p class="eyebrow">CELL-LEVEL LINEAGE</p>
+        <h2 id="lineage-heading">
+          Click a number.
+          <br />
+          <span>See where it came from.</span>
+        </h2>
+        <p>
+          Select a cell in any result. Duckpad lists the rows and source values
+          behind it, through joins, aggregates and nested components, using the
+          data of the run that produced it.
+        </p>
+        <p class="muted">
+          When a SQL construct cannot be fully explained, the panel says so
+          instead of guessing.
+        </p>
+        <a class="text-link" href={url("docs/lineage/")}>
+          Lineage coverage and limits ↗
+        </a>
+      </div>
+      <figure class="lineage-image" data-reveal="media">
+        <img
+          src={url("demos/lineage.png")}
+          alt="Duckpad lineage panel showing the original amount cells contributing to regional revenue"
+          width="1440"
+          height="900"
+          loading="lazy"
+        />
+        <figcaption>
+          A revenue share, traced through the regional total to the order
+          amounts behind it.
+        </figcaption>
+      </figure>
+    </section>
+    <section
+      id="open-source"
+      class="values wrap"
+      aria-labelledby="values-heading"
+    >
+      <div class="values-heading" data-reveal>
+        <div>
+          <p class="eyebrow">FREE AND OPEN SOURCE</p>
+          <h2 id="values-heading">
+            Nothing to sell.
+            <br />
+            Nothing held back.
+          </h2>
+        </div>
+        <p>
+          Duckpad is MIT-licensed and developed in the open. There is no paid
+          edition waiting behind the free one.
+        </p>
+      </div>
+      <ul class="values-grid">
+        {values.map((value) => (
+          <li class="value-card" data-reveal>
+            <svg
+              width="28"
+              height="28"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d={value.icon} />
+            </svg>
+            <h3>{value.title}</h3>
+            <p>{value.text}</p>
+          </li>
+        ))}
+      </ul>
+    </section>
+    <section
+      class="start-section wrap"
+      aria-labelledby="start-heading"
+      data-reveal
+    >
+      <div class="start-copy">
+        <p class="eyebrow">GET STARTED</p>
+        <h2 id="start-heading">Running in two commands.</h2>
+        <p>
+          You need Python 3.11+ and Git. Duckpad opens in your browser: choose
+          the administrator password, then start from the example project or an
+          empty one.
+        </p>
+        <p class="start-note">
+          On macOS or Windows, run <code>duckpad start --trusted-local</code>
+          for your own projects on your own machine. The default mode isolates
+          pipelines with Linux Landlock.
+        </p>
+      </div>
+      <div class="start-actions">
+        <div class="install-terminal">
+          <div class="terminal-bar">
+            <span class="terminal-lights" aria-hidden="true">
+              <i></i>
+              <i></i>
+              <i></i>
+            </span>
+            <span>Terminal</span>
+          </div>
+          <pre aria-label="Install and start Duckpad"><code>pip install duckpad
+duckpad start</code></pre>
+        </div>
+        <a class="button light" href={url("docs/quickstart/")}>
+          Duckpad in 15 minutes ↗
+        </a>
+        <div class="start-links">
+          <a href={url("docs/installation/")}>Installation guide ↗</a>
+          <a href="https://github.com/hugues31/duckpad">Source on GitHub ↗</a>
+        </div>
+      </div>
+    </section>
+  </main>
+</Layout>

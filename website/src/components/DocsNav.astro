@@ -1,0 +1,28 @@
+---
+import { sections, url } from "../lib/docs";
+interface Props {
+  current?: string;
+  label: string;
+}
+const { current, label } = Astro.props;
+---
+
+<nav class="docs-nav" aria-label={label}>
+  {sections.map((section) => (
+    <section>
+      <strong>{section.label}</strong>
+      <ul>
+        {section.pages.map((page) => (
+          <li>
+            <a
+              href={url(`docs/${page.slug}/`)}
+              aria-current={current === page.slug ? "page" : undefined}
+            >
+              {page.title}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
+  ))}
+</nav>
