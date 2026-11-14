@@ -1,0 +1,127 @@
+[
+  {
+    "name": "valid template with outputs and checks",
+    "sql": "-- @label Paid orders\n-- @input source\n-- @param status: text = \"paid\"\n-- @output orders\nSELECT * FROM {{ source }} WHERE status = {{ status }};\n-- @output summary\nSELECT COUNT(*) AS orders FROM {{ orders }};\n-- @test amount_present: warning\nSELECT * FROM {{ orders }} WHERE amount IS NULL;\n-- @message\nSELECT 'info' AS level, 'done' AS message FROM {{ summary }};",
+    "errors": []
+  },
+  {
+    "name": "valid bound parameters",
+    "sql": "-- @input source\n-- @param connection: connection = \"\"\n-- @param path: file(connection)\n-- @param secret: secret(connection)\n-- @param schema: schema_name(connection) = \"public\"\n-- @param table: table_name(schema)\n-- @param columns: column_selection(source)\n-- @param amount: column(source)\n-- @param items: list<text>\n-- @param mode: choice(a|b) = \"a\"\n-- @output result\nSELECT * FROM {{ connection }}.{{ schema }}.{{ table }};",
+    "errors": []
+  },
+  {
+    "name": "valid export without outputs",
+    "sql": "-- @input source\n-- @param connection: connection = \"\"\n-- @param destination: destination(connection) = \"report.csv\"\nCOPY (SELECT * FROM {{ source }}) TO {{ destination }} (FORMAT CSV);\n-- @test present\nSELECT * FROM {{ source }} WHERE id IS NULL;",
+    "errors": []
+  },
+  {
+    "name": "icon and color among the descriptive directives",
+    "sql": "-- @label Paid orders\n-- @description Keep paid orders.\n-- @icon filter\n-- @color green\n-- @input source\n-- @output result\nSELECT * FROM {{ source }};",
+    "errors": []
+  },
+  {
+    "name": "unknown icon and color only warn",
+    "sql": "-- @icon fitler\n-- @color #ff0000\n-- @icon\n-- @output a\nSELECT 1;",
+    "errors": []
+  },
+  {
+    "name": "quoted reference only warns",
+    "sql": "-- @input source\n-- @param status: text\n-- @output result\nSELECT * FROM {{ source }} WHERE status = '{{ status }}';",
+    "errors": []
+  },
+  {
+    "name": "forward reference",
+    "sql": "-- @input source\n-- @output a\nSELECT * FROM {{ b }};\n-- @output b\nSELECT * FROM {{ source }};",
+    "errors": ["undeclaredReference"]
+  },
+  {
+    "name": "self reference",
+    "sql": "-- @output a\nSELECT * FROM {{ a }};",
+    "errors": ["undeclaredReference"]
+  },
+  {
+    "name": "undeclared reference in a check",
+    "sql": "-- @input source\n-- @output a\nSELECT * FROM {{ source }};\n-- @test t\nSELECT * FROM {{ missing }};",
+    "errors": ["undeclaredReference"]
+  },
+  {
+    "name": "unknown directive",
+    "sql": "-- @inputs source\n-- @output a\nSELECT 1;",
+    "errors": ["unknownDirective"]
+  },
+  {
+    "name": "parameter without a type",
+    "sql": "-- @param limit number\n-- @output a\nSELECT 1;",
+    "errors": ["invalidParameter"]
+  },
+  {
+    "name": "unknown parameter type",
+    "sql": "-- @param amount: money = 3\n-- @output a\nSELECT 1;",
+    "errors": ["unknownParameterType"]
+  },
+  {
+    "name": "duplicate names",
+    "sql": "-- @input source\n-- @param source: text\n-- @output a\nSELECT 1;",
+    "errors": ["duplicateName", "duplicateName"]
+  },
+  {
+    "name": "file bound to an undeclared connection",
+    "sql": "-- @param path: file(location)\n-- @output a\nSELECT 1;",
+    "errors": ["parameterArgument"]
+  },
+  {
+    "name": "secret without connection",
+    "sql": "-- @param token: secret\n-- @output a\nSELECT 1;",
+    "errors": ["parameterArgument"]
+  },
+  {
+    "name": "schema name without connection",
+    "sql": "-- @param schema: schema_name\n-- @output a\nSELECT 1;",
+    "errors": ["parameterArgument"]
+  },
+  {
+    "name": "table name bound to an input",
+    "sql": "-- @input source\n-- @param table: table_name(source)\n-- @output a\nSELECT 1;",
+    "errors": ["parameterArgument"]
+  },
+  {
+    "name": "column selection bound to an undeclared input",
+    "sql": "-- @param columns: column_selection(source)\n-- @output a\nSELECT 1;",
+    "errors": ["parameterArgument"]
+  },
+  {
+    "name": "output name starting with a digit",
+    "sql": "-- @output 2nd\nSELECT 1;",
+    "errors": ["invalidName"]
+  },
+  {
+    "name": "test name with a space",
+    "sql": "-- @output a\nSELECT 1;\n-- @test bad name\nSELECT 1;",
+    "errors": ["invalidTestName"]
+  },
+  {
+    "name": "duplicate test name",
+    "sql": "-- @output a\nSELECT 1;\n-- @test t\nSELECT 1;\n-- @test t: warning\nSELECT 1;",
+    "errors": ["duplicateTestName"]
+  },
+  {
+    "name": "unknown test severity",
+    "sql": "-- @output a\nSELECT 1;\n-- @test t: fatal\nSELECT 1;",
+    "errors": ["invalidTestSeverity"]
+  },
+  {
+    "name": "message with an argument",
+    "sql": "-- @output a\nSELECT 1;\n-- @message now\nSELECT 'info' AS level, 'x' AS message;",
+    "errors": ["messageArguments"]
+  },
+  {
+    "name": "test without a query",
+    "sql": "-- @output a\nSELECT 1;\n-- @test t",
+    "errors": ["emptyCheck"]
+  },
+  {
+    "name": "message without a query before an output",
+    "sql": "-- @message\n-- @output a\nSELECT 1;",
+    "errors": ["emptyCheck"]
+  }
+]
