@@ -8,7 +8,7 @@ from sqlglot import exp
 
 from . import builders as b
 from .coverage import Coverage
-from .step import Trace, Visitor
+from .step import Branch, Cells, Trace, Visitor
 
 
 class SetOperationVisitor(Visitor):
@@ -30,7 +30,8 @@ class SetOperationVisitor(Visitor):
             )
             rows = exp.select(*records).from_(b.table(data.relation, "d"), copy=False)
             if isinstance(tree, exp.Except) and side == "right":
-                contexts.append(rows)
+                contexts.append(Branch(rows, data.id, data.columns[index]["name"], True))
             else:
-                queries.append(rows.where(tracer.matches(columns, "d"), copy=False))
-        return Trace(b.union_all(queries), b.union_all(contexts))
+                rows.where(tracer.matches(columns, "d"), copy=False)
+                queries.append(Branch(rows, data.id, data.columns[index]["name"], True))
+        return Trace(Cells(tuple(queries)), Cells(tuple(contexts)))

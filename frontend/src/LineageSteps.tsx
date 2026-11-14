@@ -403,7 +403,11 @@ export function LineageSteps({
       ...new Map(
         sameNode
           .flatMap((other) => other.children)
-          .filter((child) => entries.get(child.id)?.result.node !== node)
+          // An input still being read is already known by the node it comes from.
+          .filter(
+            (child) =>
+              (entries.get(child.id)?.result.node ?? child.input.node) !== node,
+          )
           .map((child) => [child.id, child]),
       ).values(),
     ];

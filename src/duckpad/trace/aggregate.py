@@ -71,7 +71,7 @@ class AggregateVisitor(Visitor):
         aliased = [key.as_(name, quoted=True) for key, name in zip(keys, names, strict=True)]
         projections = [*(p.copy() for p in step.projections), *aliased]
         groups = b.select_from(grouped(step.tree, projections), "matched_groups")
-        groups.where(step.matching.copy(), copy=False)
+        groups.where(self.tracer.matches(step.names), copy=False)
         equal = b.every(
             b.same(key.copy(), b.column(name, "g")) for key, name in zip(keys, names, strict=True)
         )
