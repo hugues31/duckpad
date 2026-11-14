@@ -84,7 +84,7 @@ function SchemaResults({
           <p className="muted">{t("schemaNoFailures")}</p>
         )}
         {report.failures.map((entry, i) => (
-          <article className="lineage-step" key={i}>
+          <article className="lineage-step impact-entry" key={i}>
             <header>{title(entry)}</header>
             {(entry.existing || entry.direct === false) && (
               <p className="small">
@@ -105,7 +105,7 @@ function SchemaResults({
           {t("schemaOutputChanges")} ({report.changes.length})
         </h4>
         {report.changes.map((entry, i) => (
-          <article className="lineage-step" key={i}>
+          <article className="lineage-step impact-entry" key={i}>
             <header>{title(entry)}</header>
             {!!entry.added.length && (
               <p>
@@ -140,7 +140,7 @@ function SchemaResults({
           {t("impactExports")} ({report.exports.length})
         </h4>
         {report.exports.map((entry, i) => (
-          <article className="lineage-step" key={i}>
+          <article className="lineage-step impact-entry" key={i}>
             <header>{title(entry)}</header>
             {entry.resource && (
               <code>
@@ -156,7 +156,7 @@ function SchemaResults({
             {t("schemaUnknown")} ({report.unknown.length})
           </h4>
           {report.unknown.map((entry, i) => (
-            <article className="lineage-step" key={i}>
+            <article className="lineage-step impact-entry" key={i}>
               <header>{title(entry)}</header>
               <p>
                 {t(

@@ -1681,6 +1681,7 @@
   "lineageShowValues": "Mostrar os {count} valores",
   "lineageHideValues": "Ocultar valores",
   "lineageChooseValue": "Clique num valor para o seguir",
+  "lineageContinues": "continua abaixo",
   "lineageOpenRow": "Abrir a linha em Dados",
   "lineageOpenRows": "Abrir as {count} linhas em Dados",
   "lineageStepInside": "1 passo interno",

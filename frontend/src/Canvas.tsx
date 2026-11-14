@@ -117,7 +117,44 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
     setHandledRequest(props.focusRequest);
     if (props.focusRequest) setFocus(props.focusRequest);
   }
-  const { frame, fitGraph } = useCanvasFrame(safeArea, focus, viewportTouched);
+  const { frame, fitGraph, revealNodes } = useCanvasFrame(
+    safeArea,
+    focus,
+    viewportTouched,
+  );
+  // The path of a lineage is the map of its panel: it comes into view once, when
+  // a part of it lies outside the unobscured canvas.
+  const { lineage, prefix } = props;
+  const lineagePath = useMemo(
+    () =>
+      lineage
+        ? props.nodes
+            .filter((node) =>
+              Object.keys(lineage).some(
+                (key) =>
+                  key === prefix + node.id ||
+                  key.startsWith(prefix + node.id + "::"),
+              ),
+            )
+            .map((node) => node.id)
+            .join("\n")
+        : "",
+    [lineage, prefix, props.nodes],
+  );
+  const revealed = useRef("");
+  useEffect(() => {
+    if (!lineagePath) revealed.current = "";
+    if (
+      !lineagePath ||
+      revealed.current === lineagePath ||
+      !initialized ||
+      !frame.width ||
+      !frame.height
+    )
+      return;
+    revealed.current = lineagePath;
+    if (revealNodes(lineagePath.split("\n"))) viewportTouched.current = true;
+  }, [lineagePath, initialized, frame, revealNodes]);
   const [pendingConnection, setPendingConnection] = useState<{
     endpoint: Omit<NodeConnection, "port">;
     position: { x: number; y: number };

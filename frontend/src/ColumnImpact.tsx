@@ -56,6 +56,17 @@ const CodeDiff = lazy(() =>
   import("./Editor").then((module) => ({ default: module.CodeDiff })),
 );
 
+/** An excerpt with every use of the column marked, whatever its case. */
+function Marked({ text, name }: { text: string; name: string }) {
+  const pattern = new RegExp(
+    `(?<![\\w$])(${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})(?![\\w$])`,
+    "gi",
+  );
+  return text
+    .split(pattern)
+    .map((part, index) => (index % 2 ? <mark key={index}>{part}</mark> : part));
+}
+
 /** One file of a rename preview; its diff editor exists only while open. */
 function ChangedFile({
   file,
@@ -238,18 +249,20 @@ export function ColumnImpact({
                 ),
               )}
           </p>
-          {canEdit && !renaming && (
-            <button
-              className="button secondary small"
-              onClick={() => setRenaming(true)}
-            >
-              {t("impactRename")}
-            </button>
-          )}
-          <TypeSimulation
-            key={JSON.stringify([id, environment, target])}
-            target={target}
-          />
+          <div className="impact-toolbar">
+            {canEdit && !renaming && (
+              <button
+                className="button secondary small"
+                onClick={() => setRenaming(true)}
+              >
+                {t("impactRename")}
+              </button>
+            )}
+            <TypeSimulation
+              key={JSON.stringify([id, environment, target])}
+              target={target}
+            />
+          </div>
           {renaming && (
             <form
               className="impact-rename"
@@ -318,81 +331,97 @@ export function ColumnImpact({
               )}
             </form>
           )}
-          {(Object.keys(groups) as Group[]).map((group) => (
-            <section key={group} className={`impact-group impact-${group}`}>
-              <h3>
-                {t(groups[group])} <small>({data[group].length})</small>
-              </h3>
-              {!data[group].length && (
-                <p className="muted">{t("impactGroupEmpty")}</p>
-              )}
-              {data[group].map((entry, index) => (
-                <article
-                  className="lineage-step"
-                  key={index}
-                  onMouseEnter={() => onHover(entry.node)}
-                  onMouseLeave={() => onHover(null)}
-                >
-                  <header>
-                    <button
-                      className="text-button"
-                      onClick={() => onOpen(entry.node)}
-                      onFocus={() => onHover(entry.node)}
-                      onBlur={() => onHover(null)}
-                    >
-                      {nodeName(entry.node)}
-                    </button>
-                  </header>
-                  <div className="small muted">
-                    {[
-                      ...new Set(
-                        [entry.port, entry.label, entry.column].filter(Boolean),
-                      ),
-                    ].join(" · ")}
-                  </div>
-                  {entry.excerpt && <pre>{entry.excerpt}</pre>}
-                  {entry.expression &&
-                    group !== "follows" &&
-                    group !== "derived" && <code>{entry.expression}</code>}
-                  {entry.parameters?.map((param) => (
-                    <div key={param}>
-                      <code>{param}</code>
+          {(Object.keys(groups) as Group[])
+            // Only what there is to read: the references to edit are always stated.
+            .filter((group) => group === "edit" || data[group].length)
+            .map((group) => (
+              <section key={group} className={`impact-group impact-${group}`}>
+                <h3>
+                  {t(groups[group])} <small>{data[group].length}</small>
+                </h3>
+                {!data[group].length && (
+                  <p className="muted">{t("impactGroupEmpty")}</p>
+                )}
+                {data[group].map((entry, index) => (
+                  <article
+                    className="lineage-step impact-entry"
+                    key={index}
+                    onMouseEnter={() => onHover(entry.node)}
+                    onMouseLeave={() => onHover(null)}
+                  >
+                    <header>
+                      <button
+                        className="text-button"
+                        onClick={() => onOpen(entry.node)}
+                        onFocus={() => onHover(entry.node)}
+                        onBlur={() => onHover(null)}
+                      >
+                        {nodeName(entry.node)}
+                      </button>
+                    </header>
+                    <div className="small muted">
+                      {[
+                        ...new Set(
+                          [entry.port, entry.label, entry.column].filter(
+                            Boolean,
+                          ),
+                        ),
+                      ].join(" · ")}
                     </div>
-                  ))}
-                  {entry.resource && (
-                    <code>
-                      {Object.values(entry.resource).map(String).join(" · ")}
-                    </code>
-                  )}
-                  {(entry.instances || 0) > 1 && (
-                    <p className="small">
-                      {t("impactShared").replace(
-                        "{count}",
-                        String(entry.instances),
-                      )}
-                    </p>
-                  )}
-                  {group === "manual" && (
-                    <p>
-                      {t(
-                        entry.reason === "python"
-                          ? "lineageColumnPython"
-                          : "lineageColumnIncomplete",
-                      )}
-                    </p>
-                  )}
-                  {entry.file && (
-                    <div className="small impact-code">
-                      {entry.file}
-                      <Link to={codeFileUrl(id, entry.file, environment)}>
-                        {t("impactOpenCode")}
-                      </Link>
-                    </div>
-                  )}
-                </article>
-              ))}
-            </section>
-          ))}
+                    {entry.excerpt && (
+                      <pre>
+                        {group === "edit" ? (
+                          <Marked
+                            text={entry.excerpt}
+                            name={target.column || ""}
+                          />
+                        ) : (
+                          entry.excerpt
+                        )}
+                      </pre>
+                    )}
+                    {entry.expression &&
+                      group !== "follows" &&
+                      group !== "derived" && <code>{entry.expression}</code>}
+                    {entry.parameters?.map((param) => (
+                      <div key={param}>
+                        <code>{param}</code>
+                      </div>
+                    ))}
+                    {entry.resource && (
+                      <code>
+                        {Object.values(entry.resource).map(String).join(" · ")}
+                      </code>
+                    )}
+                    {(entry.instances || 0) > 1 && (
+                      <p className="small">
+                        {t("impactShared").replace(
+                          "{count}",
+                          String(entry.instances),
+                        )}
+                      </p>
+                    )}
+                    {group === "manual" && (
+                      <p>
+                        {t(
+                          entry.reason === "python"
+                            ? "lineageColumnPython"
+                            : "lineageColumnIncomplete",
+                        )}
+                      </p>
+                    )}
+                    {entry.file && (
+                      <div className="small impact-code">
+                        {entry.file}
+                        <Link to={codeFileUrl(id, entry.file, environment)}>
+                          {t("impactOpenCode")}
+                        </Link>
+                      </div>
+                    )}
+                  </article>
+                ))}
+              </section>
+            ))}
         </>
       )}
     </div>

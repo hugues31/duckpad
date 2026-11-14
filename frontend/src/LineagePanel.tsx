@@ -1,5 +1,22 @@
-import { ArrowLeft, Copy, GitBranch, Loader2, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ArrowLeft,
+  ChevronRight,
+  Columns3,
+  Copy,
+  GitBranch,
+  Hash,
+  Loader2,
+  Table2,
+  X,
+} from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { api, send, withQuery } from "./api";
 import { formatValue } from "./graph";
 import { useT } from "./i18n";
@@ -19,7 +36,12 @@ import { displayNodeName } from "./nodeNames";
 import { useApiResource } from "./useApiResource";
 import { isFinal, usePolling } from "./usePolling";
 import { useLoadedWorktree } from "./worktree";
-import { LineageSteps, TableSteps, type LineageMap } from "./LineageSteps";
+import {
+  LineageSteps,
+  TableSteps,
+  roundedValue,
+  type LineageMap,
+} from "./LineageSteps";
 import { ColumnLineage, ColumnList } from "./ColumnLineage";
 import { ColumnImpact } from "./ColumnImpact";
 import { RowImpact } from "./RowImpact";
@@ -68,6 +90,15 @@ export default function LineagePanel({
     target.cell &&
     cellId(parent.to.cell) === cellId(target.cell)
       ? parent.from
+      : undefined;
+  // The explained value, once its trace is read: the last level names it.
+  const [explained, setExplained] = useState<{
+    cell: string;
+    value: unknown;
+  } | null>(null);
+  const value =
+    target.cell && explained?.cell === cellId(target.cell)
+      ? explained.value
       : undefined;
   const [copied, setCopied] = useState(false);
   useEffect(() => {
@@ -118,7 +149,9 @@ export default function LineagePanel({
           </button>
         )}
         <h2 tabIndex={-1}>
-          <GitBranch size={18} />
+          <span className="kind-icon">
+            <GitBranch size={16} />
+          </span>
           {t("lineage")}
         </h2>
         <div
@@ -158,15 +191,19 @@ export default function LineagePanel({
       </header>
       <nav className="lineage-breadcrumb" aria-label={t("lineageLevels")}>
         <button
+          className="lineage-crumb"
+          aria-current={!target.cell && !target.column ? "page" : undefined}
           onClick={() =>
             onChange({ ...target, cell: undefined, column: undefined })
           }
         >
+          <Table2 size={13} />
           {name}
           {target.port ? ` · ${target.port}` : ""}
         </button>
-        <span>›</span>
+        <ChevronRight size={13} aria-hidden="true" />
         <button
+          className={`lineage-crumb ${target.cell || target.column ? "" : "placeholder"}`}
           disabled={!target.cell && !target.column}
           aria-current={target.column && !target.cell ? "page" : undefined}
           onClick={() =>
@@ -178,12 +215,18 @@ export default function LineagePanel({
             })
           }
         >
+          <Columns3 size={13} />
           {target.cell?.column || target.column || t("columns")}
         </button>
-        <span>›</span>
-        <span aria-current={target.cell ? "page" : undefined}>
+        <ChevronRight size={13} aria-hidden="true" />
+        <span
+          className={`lineage-crumb ${target.cell ? "" : "placeholder"}`}
+          aria-current={target.cell ? "page" : undefined}
+          title={value === undefined ? undefined : formatValue(value)}
+        >
+          <Hash size={12} />
           {target.cell
-            ? `${t("lineageRow")} ${target.cell.row + 1}`
+            ? `${t("lineageRow")} ${target.cell.row + 1}${value === undefined ? "" : ` = ${roundedValue(value)}`}`
             : t("lineagePickValue")}
         </span>
       </nav>
@@ -230,6 +273,9 @@ export default function LineagePanel({
               onText={(text) => {
                 explanation.current = text;
               }}
+              onValue={(value) =>
+                setExplained({ cell: cellId(target.cell!), value })
+              }
             />
           ) : target.column && target.direction === "impact" ? (
             <ColumnImpact
@@ -280,6 +326,7 @@ function ValueLineage({
   onRows,
   onChange,
   onText,
+  onValue,
 }: {
   target: LineageTarget;
   tables: TableLineage;
@@ -289,6 +336,7 @@ function ValueLineage({
   onRows: (rows: ContributingRows) => void;
   onChange: (target: LineageTarget) => void;
   onText: (text: string) => void;
+  onValue: (value: unknown) => void;
 }) {
   const t = useT();
   const {
@@ -443,6 +491,11 @@ function ValueLineage({
   useEffect(() => {
     onText(text);
   }, [text, onText]);
+  const original = graph?.original;
+  const announce = useEffectEvent(onValue);
+  useEffect(() => {
+    if (original) announce(original.value);
+  }, [original]);
   if (interrupted)
     return (
       <div className="notice warning" role="alert">

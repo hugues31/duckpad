@@ -38,7 +38,7 @@ export function useCanvasFrame(
     return () => observer.disconnect();
   }, [safeAreaRef]);
   const fitGraph = useCallback(
-    (graphNodes = getNodes()) => {
+    (graphNodes = getNodes(), duration?: number) => {
       if (!initialized || !frame.width || !frame.height) return;
       // Frame the unobscured area while keeping the graph surface behind every panel.
       const viewport = getViewportForBounds(
@@ -49,13 +49,37 @@ export function useCanvasFrame(
         1,
         0.12,
       );
-      void setViewport({
-        ...viewport,
-        x: viewport.x + frame.x,
-        y: viewport.y + frame.y,
-      });
+      void setViewport(
+        {
+          ...viewport,
+          x: viewport.x + frame.x,
+          y: viewport.y + frame.y,
+        },
+        { duration },
+      );
     },
     [initialized, frame, getNodes, setViewport],
+  );
+  /** Frame these nodes when one of them is outside the unobscured area. */
+  const revealNodes = useCallback(
+    (ids: string[]) => {
+      const target = getNodes().filter((node) => ids.includes(node.id));
+      if (!target.length) return false;
+      const bounds = getNodesBounds(target);
+      const { x, y, zoom } = getViewport();
+      const left = x + bounds.x * zoom;
+      const top = y + bounds.y * zoom;
+      if (
+        left >= frame.x &&
+        top >= frame.y &&
+        left + bounds.width * zoom <= frame.x + frame.width &&
+        top + bounds.height * zoom <= frame.y + frame.height
+      )
+        return false;
+      fitGraph(target, 200);
+      return true;
+    },
+    [frame, getNodes, getViewport, fitGraph],
   );
   useEffect(() => {
     if (!focus || !initialized || !frame.width || !frame.height) return;
@@ -96,5 +120,5 @@ export function useCanvasFrame(
     viewportTouchedRef,
   ]);
 
-  return { frame, fitGraph };
+  return { frame, fitGraph, revealNodes };
 }

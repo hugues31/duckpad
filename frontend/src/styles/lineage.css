@@ -1,246 +1,1052 @@
-.lineage-panel {
+/* Lineage panel: header, levels, traces of steps, impact lists and canvas marks. */
+.inspector.lineage-panel {
+  --lineage-rail: color-mix(in srgb, var(--accent) 35%, var(--surface));
+  --lineage-component: light-dark(#6b589c, #d0bcff);
+  /* Secondary text keeps a 4.5:1 contrast on the surface, its alternate and the tints. */
+  --lineage-muted: color-mix(in srgb, var(--text) 68%, var(--surface));
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* Dense text stays legible over the canvas nodes it covers. */
   background: var(--surface);
   color: var(--text);
+  font-size: 12px;
 }
 .lineage-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 14px 16px;
+  height: 52px;
+  padding: 0 10px 0 16px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 .lineage-header h2 {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex: 1;
   margin: 0;
-  font-size: 15px;
+  font-size: 14px;
+  font-weight: 700;
+}
+/* The title takes the focus when the panel opens: it is not a control. */
+.lineage-header h2:focus {
+  outline: none;
+}
+.lineage-header h2 .kind-icon {
+  width: 30px;
+  height: 30px;
 }
 .lineage-direction {
-  display: flex;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  display: inline-flex;
+  gap: 2px;
   padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-alt);
 }
 .lineage-direction button {
-  padding: 4px 8px;
+  padding: 4px 12px;
   border: 0;
-  border-radius: 4px;
+  border-radius: 6px;
   background: transparent;
-  color: var(--muted);
+  color: var(--text);
+  font-size: 11.5px;
+  font-weight: 600;
+  opacity: 0.7;
+}
+.lineage-direction button:hover {
+  opacity: 1;
 }
 .lineage-direction .active {
+  background: var(--surface);
   color: var(--accent);
-  background: var(--accent-soft);
+  opacity: 1;
+  box-shadow: 0 1px 2px #18181b1f;
 }
+/* The three levels: the reached ones are chips, the next ones are dashed invitations. */
 .lineage-breadcrumb {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 12px 16px;
+  padding: 10px 16px;
   border-bottom: 1px solid var(--border);
-  font-size: 12px;
+  background: color-mix(in srgb, var(--surface-alt) 45%, var(--surface));
+  flex-shrink: 0;
 }
-.lineage-breadcrumb button {
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  padding: 3px 6px;
-  background: var(--surface);
-  color: var(--text);
+.lineage-breadcrumb > svg {
+  flex-shrink: 0;
+  opacity: 0.45;
+}
+.lineage-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   max-width: 100%;
-  overflow-wrap: anywhere;
-}
-.lineage-body {
-  padding: 16px;
-  overflow: auto;
-  min-height: 0;
-  flex: 1;
-}
-.lineage-body h3 {
-  font-size: 11px;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin: 16px 0 8px;
-}
-.lineage-step {
-  margin: 8px 0;
-  padding: 0 0 8px 12px;
-  border-left: 2px solid var(--border);
-  overflow-wrap: anywhere;
-}
-.lineage-step header {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 7px;
-}
-.lineage-step header .text-button {
-  font-weight: 650;
-  color: var(--text);
-}
-.lineage-step.root,
-.lineage-step:hover {
-  border-left-color: var(--accent);
-}
-.lineage-formula,
-.lineage-equation {
-  font-size: 12px;
-  line-height: 1.7;
-  overflow-wrap: anywhere;
-}
-.lineage-equation {
-  padding: 5px 8px;
-  margin: 5px 0;
-  border-radius: 5px;
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-.lineage-selection,
-.lineage-source-location {
-  color: var(--muted);
-  font-size: 11px;
-  margin: 4px 0;
-}
-.lineage-step.unchanged .lineage-equation {
-  background: transparent;
-  padding: 0;
-  color: var(--muted);
-}
-.lineage-component {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  flex-wrap: wrap;
-  padding: 6px 8px;
-  background: var(--accent-soft);
-  border-radius: 4px;
-  font-size: 12px;
-  margin: 12px 0 6px;
-}
-.lineage-component .text-button {
-  margin-left: auto;
-  font-size: 11px;
-}
-.lineage-branch {
-  margin: 6px 0 12px 16px;
-  padding: 8px;
+  padding: 4px 9px;
   border: 1px solid var(--border);
-  border-radius: 6px;
-}
-.lineage-branch summary {
-  cursor: pointer;
-  font-size: 12px;
-}
-.lineage-contributions {
-  margin: 8px 0;
-  font-size: 12px;
-}
-.lineage-contributions .text-button {
-  font-size: 11px;
-}
-.lineage-values {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 5px;
-  margin: 6px 0;
-}
-.lineage-value {
-  border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: 7px;
   background: var(--surface);
-  color: var(--accent);
-  padding: 2px 5px;
-  font-family: monospace;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  text-align: left;
 }
-.lineage-value:hover,
-.lineage-value:focus-visible {
+.lineage-crumb svg {
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+button.lineage-crumb:not(:disabled):hover {
+  border-color: var(--accent);
+}
+.lineage-crumb[aria-current="page"] {
   border-color: var(--accent);
   background: var(--accent-soft);
+  color: color-mix(in srgb, var(--accent) 78%, var(--text));
 }
-.lineage-sources {
-  border: 1px solid var(--border);
-  border-radius: 6px;
+.lineage-crumb.placeholder {
+  border-style: dashed;
+  background: transparent;
+  color: var(--lineage-muted);
+  font-weight: 500;
 }
-.lineage-sources > div {
+.lineage-body {
+  flex: 1;
+  min-height: 0;
+  padding: 14px 16px 20px;
+  overflow: auto;
+}
+.lineage-body h3 {
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 7px;
-  padding: 9px;
-  font-size: 12px;
+  align-items: baseline;
+  gap: 8px;
+  margin: 20px 0 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--lineage-muted);
 }
-.lineage-sources small {
+.lineage-body > h3:first-child,
+.lineage-body > :first-child > h3:first-child {
+  margin-top: 2px;
+}
+.lineage-body h3 small {
   margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
 }
-.lineage-table-step {
-  border-left: 1px solid var(--border);
-  padding: 5px 0 5px 12px;
-}
-.lineage-table-step .text-button {
-  font-size: 12px;
-}
-.lineage-reference {
-  display: block;
-  font-size: 12px;
-  margin: 6px 12px;
+.lineage-body .notice {
+  margin: 0 0 12px;
 }
 .lineage-loading {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px;
-  color: var(--muted);
+  padding: 4px 0 12px;
+  color: var(--lineage-muted);
+}
+
+/* A step: its mark on the rail, the node name, then what the node does. */
+.lineage-step {
+  position: relative;
+  margin: 0;
+  padding: 0 0 14px 26px;
+  overflow-wrap: anywhere;
+}
+.lineage-step > header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 7px;
+  min-height: 18px;
+  margin-bottom: 4px;
+}
+.lineage-step > header .text-button {
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 650;
+  text-align: left;
+}
+.lineage-step > header .text-button:hover {
+  color: var(--accent);
+}
+.lineage-dot {
+  position: absolute;
+  top: 1px;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: light-dark(#fff, #16161b);
+}
+.lineage-dot svg {
+  width: 10px;
+  height: 10px;
+  stroke-width: 2.6;
+}
+.lineage-step.unchanged > .lineage-dot {
+  top: 3px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  background: var(--surface);
+}
+.lineage-step.is-source > .lineage-dot {
+  border: 1.5px solid var(--accent);
+  background: var(--surface);
+  color: var(--accent);
+}
+.lineage-step.in-component > .lineage-dot {
+  background: var(--lineage-component);
+}
+.lineage-step.in-component.unchanged > .lineage-dot {
+  border-color: color-mix(in srgb, var(--lineage-component) 60%, transparent);
+  background: var(--surface);
+}
+/* The rail joins a step to the next one of its path, across headings and branches. */
+.lineage-chain:has(> .lineage-chain) > .lineage-step::before,
+.lineage-chain:has(> .lineage-chain) > .lineage-branch::before,
+.lineage-chain > .lineage-chain > .lineage-component::before {
+  content: "";
+  position: absolute;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--lineage-rail);
+}
+.lineage-chain:has(> .lineage-chain) > .lineage-step::before {
+  top: 19px;
+  bottom: 0;
+  left: 7px;
+}
+.lineage-chain:has(> .lineage-chain) > .lineage-step.unchanged::before {
+  top: 17px;
+}
+.lineage-chain:has(> .lineage-chain) > .lineage-branch::before {
+  top: -4px;
+  bottom: -16px;
+  left: -20px;
+}
+.lineage-chain > .lineage-chain > .lineage-component::before {
+  top: -4px;
+  bottom: -12px;
+  left: -19px;
+}
+.lineage-chain > .lineage-chain > .lineage-component {
+  position: relative;
+  margin-left: 26px;
+}
+.lineage-formula,
+.lineage-column-expression {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+.lineage-formula code,
+.lineage-column-expression code,
+.lineage-equation code {
+  font: inherit;
+}
+.lineage-formula .equals,
+.lineage-column-expression .equals {
+  color: var(--lineage-muted);
+}
+.lineage-equation {
+  margin: 5px 0 0;
+  padding: 6px 9px;
+  border-radius: 7px;
+  background: var(--accent-soft);
+  color: color-mix(in srgb, var(--accent) 70%, var(--text));
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.lineage-equation strong {
+  color: var(--text);
+  font-weight: 700;
+}
+/* What decides the rows: a filter, a join key, the group of the value. */
+.lineage-selection {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 6px;
+  max-width: 100%;
+  margin: 6px 0 0;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--surface-alt);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+.lineage-selection svg {
+  align-self: center;
+  flex-shrink: 0;
+  opacity: 0.65;
+}
+.lineage-selection .evaluated,
+.row-impact-detail .evaluated {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--lineage-muted);
+}
+.lineage-source-location {
+  margin: 3px 0 0;
+  color: var(--lineage-muted);
+  font-size: 11px;
+}
+/* A node that only carries the value fits on one line. */
+.lineage-step.unchanged {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 9px;
+}
+.lineage-step.unchanged > header {
+  margin-bottom: 0;
+}
+.lineage-step.unchanged > header .text-button {
+  font-size: 12px;
+  font-weight: 600;
+}
+.lineage-step.unchanged .lineage-formula,
+.lineage-step.unchanged .lineage-column-expression {
+  color: var(--lineage-muted);
+  font-size: 11px;
+}
+.lineage-step.unchanged .lineage-selection,
+.lineage-step.unchanged .lineage-column-condition {
+  margin-top: 0;
+}
+.lineage-step.unchanged > .notice,
+.lineage-step.unchanged > .lineage-contributions {
+  flex-basis: 100%;
+}
+.lineage-step.unchanged > .lineage-column-item {
+  display: contents;
+}
+.lineage-unchanged-label {
+  color: var(--lineage-muted);
+  font-size: 11px;
+}
+/* The inner nodes of a component are steps under its name. */
+.lineage-component {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 7px;
+  margin: 0 0 12px;
+  padding: 5px 9px 5px 8px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--lineage-component) 12%, var(--surface));
+  color: color-mix(in srgb, var(--lineage-component) 78%, var(--text));
+  font-size: 11.5px;
+}
+.lineage-component strong {
+  font-weight: 650;
+}
+.lineage-component small {
+  font-size: 10.5px;
+}
+.lineage-component .text-button {
+  margin-left: auto;
+  color: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+/* Another input of a step, traced beside the path. */
+.lineage-branch {
+  position: relative;
+  margin: 0 0 14px 26px;
+  padding: 7px 10px 8px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--surface-alt) 40%, var(--surface));
+}
+.lineage-branch > summary {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 7px;
+  font-size: 11px;
+  list-style: none;
+  cursor: pointer;
+}
+.lineage-branch > summary::-webkit-details-marker {
+  display: none;
+}
+.lineage-branch > summary::before {
+  content: "";
+  align-self: center;
+  width: 5px;
+  height: 5px;
+  margin: 0 2px 0 1px;
+  border-right: 1.5px solid currentcolor;
+  border-bottom: 1.5px solid currentcolor;
+  opacity: 0.6;
+  transform: rotate(-45deg);
+  transition: transform 120ms ease;
+}
+.lineage-branch[open] > summary::before {
+  transform: rotate(45deg);
+}
+.lineage-branch[open] > summary {
+  margin-bottom: 10px;
+}
+.lineage-branch > summary strong {
+  font-family: var(--mono);
+  font-weight: 700;
+}
+.lineage-branch > summary .muted {
+  color: var(--lineage-muted);
+}
+.lineage-branch .lineage-chain:not(:has(> .lineage-chain)) > .lineage-step,
+.lineage-branch > .lineage-step:last-child,
+.lineage-branch > .lineage-table-step:last-child {
+  padding-bottom: 0;
+}
+.lineage-reference {
+  display: inline-block;
+  margin: 0 0 12px 26px;
+  color: var(--accent);
+  font-size: 11.5px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.lineage-reference:hover {
+  text-decoration: underline;
+}
+.lineage-continues {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  margin: -6px 0 12px 26px;
+  color: var(--lineage-muted);
+  font-size: 11px;
+}
+.lineage-continues strong {
+  color: var(--text);
+  font-family: var(--mono);
+  font-weight: 700;
+}
+
+/* The values of an aggregate: the first ones, the followed one marked. */
+.lineage-contributions {
+  margin: 6px 0 0;
+}
+.lineage-contributions.operand {
+  margin-top: 8px;
+  padding-left: 10px;
+  border-left: 2px solid var(--border);
+}
+.lineage-operand {
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.lineage-operand code {
+  font: inherit;
+}
+.lineage-values {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 3px 4px;
+  max-height: 232px;
+  overflow: auto;
+}
+.lineage-contributions.operand .lineage-values {
+  margin-top: 4px;
+}
+.lineage-values .muted {
+  color: var(--lineage-muted);
+}
+.lineage-value {
+  padding: 0 4px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.lineage-contributions.operand .lineage-value {
+  border-color: var(--border);
+  background: var(--surface);
+  color: color-mix(in srgb, var(--accent) 70%, var(--text));
+}
+.lineage-value:hover:not(:disabled),
+.lineage-value:focus-visible {
+  border-color: var(--accent);
+  background: var(--surface);
+}
+.lineage-value[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--surface);
+  color: var(--accent);
+  font-weight: 700;
+}
+.lineage-actions {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin-top: 5px;
+  font-size: 11px;
+}
+.lineage-actions .text-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.lineage-actions .muted {
+  color: var(--lineage-muted);
 }
 .lineage-parents {
+  margin-top: 8px;
   overflow: auto;
   font-size: 12px;
 }
-.lineage-dimmed {
-  opacity: 0.22;
+
+/* Table level: the sources first, then the path of nodes. */
+.lineage-sources {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
 }
-.row-impact-step {
-  border-left: 3px solid var(--success);
-  margin: 8px 0;
+.lineage-sources > div {
+  display: flex;
+  align-items: center;
+  gap: 4px 9px;
+  min-height: 34px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--border);
 }
-.row-impact-discarded {
-  border-left-color: var(--danger);
+.lineage-sources > div:first-child {
+  border-top: 0;
 }
-.row-impact-unreached {
+.lineage-sources > div > svg {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+.lineage-sources strong {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.lineage-sources .muted {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--lineage-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lineage-sources small {
+  margin-left: auto;
+  color: var(--lineage-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.lineage-sources > p {
+  margin: 0;
+  padding: 9px 10px;
+}
+.lineage-table-step {
+  position: relative;
+  padding: 0 0 10px 22px;
+}
+.lineage-table-step::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.lineage-table-step.is-source::before {
+  box-sizing: border-box;
+  border: 2px solid var(--accent);
+  background: var(--surface);
+}
+.lineage-table-step.in-component::before {
+  background: var(--lineage-component);
+}
+.lineage-table-step:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 15px;
+  bottom: -1px;
+  left: 7px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--lineage-rail);
+}
+.lineage-table-step > .text-button {
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: left;
+}
+.lineage-table-step > .text-button:hover {
+  color: var(--accent);
+}
+.lineage-table-step > p {
+  margin: 2px 0 0;
+}
+.lineage-table-step > .lineage-branch {
+  margin: 8px 0 2px;
+}
+.lineage-table-step > .lineage-reference {
+  display: block;
+  margin: 4px 0 0;
+}
+.lineage-table-path > .lineage-component {
+  position: relative;
+  margin-left: 22px;
+}
+.lineage-table-path > .lineage-component:not(:first-child)::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  bottom: -13px;
+  left: -15px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--lineage-rail);
+}
+.lineage-columns h4 {
+  margin: 12px 0 6px;
+  color: var(--lineage-muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+}
+.lineage-column-list {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+}
+.lineage-column-link {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.lineage-column-link:first-child {
+  border-top: 0;
+}
+.lineage-column-link:hover {
+  background: color-mix(in srgb, var(--surface-alt) 60%, transparent);
+}
+.lineage-column-link > strong {
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.lineage-column-link > .muted {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--lineage-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lineage-column-link > svg {
+  flex-shrink: 0;
+  margin-left: auto;
   opacity: 0.5;
-  border-left: 2px dashed var(--muted);
 }
-.row-impact-unknown {
-  border-left-color: var(--muted);
+
+/* Column level: the same path, with the expression of each node. */
+.lineage-column-summary,
+.column-impact > p:first-of-type,
+.row-impact-verdict {
+  margin: 0 0 14px;
+  font-size: 12.5px;
+  line-height: 1.45;
 }
-.row-impact-state {
+.lineage-column-expression {
+  margin: 0;
+}
+.lineage-column-expression .type {
+  color: var(--lineage-muted);
+  font-size: 10px;
+}
+.lineage-column-inputs {
+  margin: 3px 0 0;
+  color: var(--lineage-muted);
+  font-size: 11px;
+}
+.lineage-column-description {
+  margin: 3px 0 0;
+  color: var(--lineage-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.lineage-column-condition {
+  margin: 6px 0 0;
+  font-size: 11px;
+}
+.lineage-column-condition summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--surface-alt);
+  font-size: 10.5px;
+  list-style: none;
+  cursor: pointer;
+}
+.lineage-column-condition summary::-webkit-details-marker {
+  display: none;
+}
+.lineage-column-condition summary svg {
+  flex-shrink: 0;
+  opacity: 0.65;
+}
+.lineage-column-condition summary code {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  overflow-wrap: anywhere;
+}
+.lineage-column-condition > span {
+  display: block;
+  margin: 4px 0 0 2px;
+}
+.lineage-hint {
+  margin: 14px 0 0;
+  color: var(--lineage-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.column-lineage-button {
+  margin-left: 8px;
+}
+
+/* Column impact: what a rename or a new type touches, by consequence. */
+.column-impact pre {
+  max-height: 240px;
+  margin: 5px 0 0;
+  padding: 6px 8px;
+  overflow: auto;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--surface-alt) 55%, transparent);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.column-impact mark {
+  padding: 0 2px;
+  border-radius: 3px;
+  background: light-dark(#fde9b8, #6b5312);
+  color: inherit;
+}
+.impact-toolbar {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.impact-toolbar > .impact-rename {
+  margin: 0;
+}
+.impact-toolbar > .impact-rename[open] {
+  flex-basis: 100%;
+}
+.impact-toolbar > .impact-rename[open] > summary {
+  margin-bottom: 8px;
+}
+.impact-group {
+  margin-block: 0;
+}
+.impact-entry.lineage-step {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-bottom-width: 0;
+  background: var(--surface);
+}
+.impact-entry.lineage-step:first-of-type {
+  border-radius: 9px 9px 0 0;
+}
+.impact-entry.lineage-step:last-of-type {
+  border-bottom-width: 1px;
+  border-radius: 0 0 9px 9px;
+}
+.impact-entry.lineage-step:first-of-type:last-of-type {
+  border-radius: 9px;
+}
+.impact-entry > header {
+  margin-bottom: 0;
+}
+.impact-entry > .small,
+.impact-entry .impact-code {
+  color: var(--lineage-muted);
+  font-size: 11px;
+}
+.impact-entry code {
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.impact-actions,
+.impact-code {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.impact-code {
+  margin-top: 5px;
+}
+.impact-code a {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+.impact-code a:hover {
+  text-decoration: underline;
+}
+.impact-actions {
+  margin-block: 10px;
+}
+.impact-rename {
+  margin-block: 12px 0;
+}
+.impact-rename label {
+  display: grid;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.impact-rename > summary {
+  display: inline-flex;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  font-size: 11.5px;
+  font-weight: 600;
+  list-style: none;
+  cursor: pointer;
+}
+.impact-rename > summary::-webkit-details-marker {
+  display: none;
+}
+.impact-rename > summary:hover {
+  border-color: var(--accent);
+}
+.impact-file {
+  margin-block: 8px;
+  font-size: 11.5px;
+}
+.impact-file > summary {
+  font-family: var(--mono);
+  cursor: pointer;
+}
+/* Outputs which follow or derive need no code: they stay a compact list. */
+.impact-follows,
+.impact-derived,
+.impact-unaffected {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.impact-follows > h3,
+.impact-derived > h3,
+.impact-unaffected > h3,
+.impact-follows > .muted,
+.impact-derived > .muted,
+.impact-unaffected > .muted {
+  flex-basis: 100%;
+  margin-bottom: 3px;
+}
+.impact-follows .impact-entry.lineage-step,
+.impact-derived .impact-entry.lineage-step,
+.impact-unaffected .impact-entry.lineage-step {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 7px;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--surface-alt);
+}
+.impact-derived .impact-entry.lineage-step {
+  background: var(--accent-soft);
+}
+.impact-follows .impact-entry .text-button,
+.impact-derived .impact-entry .text-button,
+.impact-unaffected .impact-entry .text-button {
+  font-size: 11px;
+  font-weight: 600;
+}
+.impact-derived .impact-entry > .small {
+  color: color-mix(in srgb, var(--accent) 70%, var(--text));
+  font-family: var(--mono);
+}
+.schema-impact-results h4 {
+  margin: 14px 0 6px;
   font-size: 11px;
   font-weight: 650;
+}
+
+/* Value impact: the fate of one row along each path. */
+.row-impact-verdict {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--success) 10%, var(--surface));
+}
+.row-impact-verdict.stops {
+  background: color-mix(in srgb, var(--danger) 10%, var(--surface));
+}
+.row-impact-verdict > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
   color: var(--success);
 }
-.row-impact-discarded .row-impact-state {
+.row-impact-verdict.stops > svg {
   color: var(--danger);
+}
+.row-impact-step > .lineage-dot {
+  background: var(--success);
+}
+.row-impact-step:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  top: 19px;
+  bottom: 0;
+  left: 7px;
+  width: 2px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--success) 40%, var(--surface));
+}
+.row-impact-discarded > .lineage-dot {
+  background: var(--danger);
+}
+.row-impact-discarded:not(:last-child)::before,
+.row-impact-unreached:not(:last-child)::before,
+.row-impact-unknown:not(:last-child)::before {
+  background: repeating-linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--edge) 70%, transparent) 0 4px,
+    transparent 4px 8px
+  );
+}
+.row-impact-unreached > .lineage-dot,
+.row-impact-unknown > .lineage-dot {
+  top: 3px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border: 1.5px dashed var(--edge);
+  background: var(--surface);
+  color: var(--edge);
+}
+.row-impact-unreached > header .text-button {
+  color: var(--lineage-muted);
+  font-weight: 600;
+}
+.row-impact-unreached.lineage-step {
+  padding-bottom: 9px;
+}
+.row-impact-state {
+  padding: 1px 7px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--success) 14%, var(--surface));
+  color: color-mix(in srgb, var(--success) 82%, var(--text));
+  font-size: 10.5px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.row-impact-discarded .row-impact-state {
+  background: color-mix(in srgb, var(--danger) 14%, var(--surface));
+  color: color-mix(in srgb, var(--danger) 82%, var(--text));
 }
 .row-impact-unreached .row-impact-state,
 .row-impact-unknown .row-impact-state {
-  color: var(--muted);
+  background: var(--surface-alt);
+  color: var(--lineage-muted);
+  font-weight: 600;
+}
+.row-impact-step > header small {
+  color: var(--lineage-muted);
+  font-size: 11px;
+}
+.row-impact-port {
+  color: var(--lineage-muted);
+  font-family: var(--mono);
+  font-size: 10.5px;
 }
 .row-impact-reason {
-  padding: 8px;
   margin-top: 5px;
-  background: color-mix(in srgb, var(--danger) 8%, transparent);
-  border-radius: 6px;
+  padding: 7px 9px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--danger) 9%, var(--surface));
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+.row-impact-reason p {
+  margin: 2px 0 0;
 }
 .row-impact-step code {
-  white-space: pre-wrap;
+  font-family: var(--mono);
+  font-size: 11px;
   overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.row-impact-step > p {
+  margin: 4px 0 0;
+  font-size: 11.5px;
+}
+.row-impact-detail {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 6px;
+  margin: 5px 6px 0 0;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--surface-alt);
+  font-size: 10.5px;
 }
 .row-impact-pages {
   display: flex;
@@ -250,27 +1056,22 @@
   display: block;
   width: 100%;
   margin: 4px 0;
+  padding: 3px 7px;
+  border-color: var(--border);
+  background: var(--surface);
   text-align: left;
   white-space: normal;
   overflow-wrap: anywhere;
 }
-.row-impact-travelled .node-shape {
-  box-shadow: 0 0 0 2px var(--success);
+.row-impact section > h3 + .lineage-path-summary {
+  margin: -4px 0 10px;
+  color: var(--lineage-muted);
+  font-size: 11px;
 }
-.row-impact-stopped .node-shape {
-  box-shadow: 0 0 0 2px var(--danger);
-}
-.row-impact-travelled .node-lineage-value {
-  color: var(--success);
-  border-color: var(--success);
-}
-.row-impact-stopped .node-lineage-value {
-  color: var(--danger);
-  border-color: var(--danger);
-}
-.react-flow__edge-pipeline.row-impact-travelled.highlighted
-  .react-flow__edge-path {
-  stroke: var(--success);
+
+/* Canvas: the path stays lit, each node carries the column or the value. */
+.lineage-dimmed {
+  opacity: 0.22;
 }
 .lineage-traced .node-shape,
 .lineage-hovered .node-shape {
@@ -281,130 +1082,95 @@
 }
 .node-lineage-value {
   position: absolute;
-  top: -29px;
+  top: -31px;
   left: 50%;
-  transform: translateX(-50%);
-  border: 1px solid var(--accent);
-  border-radius: 8px;
+  padding: 2px 9px;
+  border: 1.5px solid var(--accent);
+  border-radius: 12px;
   background: var(--surface);
+  box-shadow: 0 2px 6px #18181b22;
   color: var(--accent);
-  padding: 2px 7px;
   font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: center;
   white-space: nowrap;
+  transform: translateX(-50%);
+}
+.node-lineage-value > span {
+  font-family: var(--mono);
 }
 .node-lineage-value small {
   display: block;
+  color: light-dark(#6b589c, #d0bcff);
   font-size: 10px;
+  font-weight: 600;
 }
-.lineage-step.unchanged {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  column-gap: 8px;
+.row-impact-travelled .node-shape {
+  box-shadow: 0 0 0 2px var(--success);
 }
-.lineage-step.unchanged header {
-  margin-bottom: 0;
+.row-impact-stopped .node-shape {
+  box-shadow: 0 0 0 2px var(--danger);
 }
-.lineage-step.unchanged .lineage-selection {
-  grid-column: 2;
+.row-impact-travelled .node-lineage-value {
+  border-color: var(--success);
+  color: var(--success);
 }
-.lineage-value[aria-pressed="true"] {
-  border-color: var(--accent);
+.row-impact-stopped .node-lineage-value {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: light-dark(#fff, #16161b);
+}
+.row-impact-travelled .node-lineage-value > span,
+.row-impact-stopped .node-lineage-value > span {
+  font-family: inherit;
+}
+.react-flow__edge-pipeline.row-impact-travelled.highlighted
+  .react-flow__edge-path {
+  stroke: var(--success);
+}
+.cell.lineage-selected-cell {
+  box-shadow: inset 0 0 0 2px var(--accent);
   background: var(--accent-soft);
-  font-weight: 650;
 }
 @media (max-width: 600px) {
   .preview-open .lineage-panel {
     bottom: var(--preview-height);
   }
 }
-.cell.lineage-selected-cell {
-  box-shadow: inset 0 0 0 2px var(--accent);
-  background: var(--accent-soft);
+/* Row paths are flat lists: the rail crosses the branches and headings between two steps. */
+.row-impact .lineage-branch:not(:last-child)::before,
+.row-impact .lineage-step ~ .lineage-component::before {
+  content: "";
+  position: absolute;
+  width: 2px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--success) 40%, var(--surface));
 }
-.lineage-column-link {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 8px 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
+/* Past the node which discards the row, nothing is travelled any more. */
+.row-impact .row-impact-discarded ~ .lineage-branch:not(:last-child)::before,
+.row-impact .row-impact-unreached ~ .lineage-branch:not(:last-child)::before,
+.row-impact .row-impact-unknown ~ .lineage-branch:not(:last-child)::before,
+.row-impact .row-impact-discarded ~ .lineage-component::before,
+.row-impact .row-impact-unreached ~ .lineage-component::before,
+.row-impact .row-impact-unknown ~ .lineage-component::before {
+  background: repeating-linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--edge) 70%, transparent) 0 4px,
+    transparent 4px 8px
+  );
 }
-
-.lineage-column-link > strong {
-  min-width: 100px;
+.row-impact .lineage-branch:not(:last-child)::before {
+  top: -4px;
+  bottom: -16px;
+  left: -20px;
 }
-
-.lineage-column-link > span:last-child {
-  margin-left: auto;
+.row-impact .lineage-component {
+  position: relative;
+  margin-left: 26px;
 }
-
-.lineage-column-expression,
-.lineage-column-condition {
-  margin: 6px 0;
-  overflow-wrap: anywhere;
-}
-
-.lineage-column-condition summary {
-  cursor: pointer;
-  font-size: 11px;
-}
-
-.column-lineage-button {
-  margin-left: 8px;
-}
-.column-impact pre {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  max-height: 320px;
-  overflow: auto;
-}
-
-.impact-group,
-.impact-rename {
-  margin-block: 16px;
-}
-
-.impact-actions,
-.impact-code {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.impact-actions {
-  margin-block: 10px;
-}
-
-.impact-rename label {
-  display: grid;
-  gap: 6px;
-}
-
-.impact-file {
-  margin-block: 10px;
-}
-
-.impact-follows .lineage-step,
-.impact-derived .lineage-step,
-.impact-unaffected .lineage-step {
-  padding: 6px 8px;
-  margin-block: 4px;
-}
-
-.impact-follows .lineage-step,
-.impact-derived .lineage-step {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 8px;
-}
-
-.impact-unaffected,
-.impact-mentions {
-  opacity: 0.75;
+.row-impact .lineage-step ~ .lineage-component::before {
+  top: -4px;
+  bottom: -12px;
+  left: -19px;
 }

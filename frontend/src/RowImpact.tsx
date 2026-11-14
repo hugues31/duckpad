@@ -1,5 +1,15 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2 } from "lucide-react";
+import {
+  ArrowRight,
+  Check,
+  CircleAlert,
+  CircleCheck,
+  FileOutput,
+  Group,
+  Loader2,
+  Split,
+  X,
+} from "lucide-react";
 import { api, send, withQuery } from "./api";
 import { formatValue } from "./graph";
 import { countLabel, useT } from "./i18n";
@@ -69,6 +79,15 @@ const labels = {
   written: "rowImpactWritten",
   unreached: "rowImpactUnreached",
   unknown: "rowImpactUnknown",
+} as const;
+const marks = {
+  kept: <Check />,
+  discarded: <X />,
+  grouped: <Group />,
+  duplicated: <Split />,
+  written: <FileOutput />,
+  unreached: null,
+  unknown: null,
 } as const;
 const anchor = (id: string) => `row-impact-${encodeURIComponent(id)}`;
 
@@ -250,11 +269,12 @@ export function RowImpact({
       </div>
     );
   const seen = new Set<string>();
-  const destinations = (id: string): string[] => {
+  /** Where a path leads when each node keeps its first consumer. */
+  const end = (id: string): string => {
     const step = byId.get(id)!;
     return step.children.length
-      ? step.children.flatMap(destinations)
-      : [name(step.node)];
+      ? end(step.children[0])
+      : [name(step.node), step.port].filter(Boolean).join(" · ");
   };
   const depth = (id: string): number =>
     1 + Math.max(0, ...byId.get(id)!.children.map(depth));
@@ -262,13 +282,16 @@ export function RowImpact({
     let current: RowImpactStep | undefined = byId.get(id);
     let count = 0;
     while (current) {
+      if (current.state === "unreached") return t("rowImpactUnreached");
       if (current.state === "discarded")
-        return countLabel(
-          t,
-          count,
-          "rowImpactStopsAfterOne",
-          "rowImpactStopsAfter",
-        );
+        return count
+          ? countLabel(
+              t,
+              count,
+              "rowImpactStopsAfterOne",
+              "rowImpactStopsAfter",
+            )
+          : t("rowImpactDiscarded");
       if (current.state === "unknown") return t("rowImpactUnknown");
       count += 1;
       current = byId.get(current.children[0]);
@@ -285,6 +308,10 @@ export function RowImpact({
       );
     seen.add(id);
     const components = componentPaths(step.node);
+    // The first consumer continues the path; the others branch off under this step.
+    // The path is read first, so a node reached twice stays on it.
+    const [next, ...others] = step.children;
+    const rest = next === undefined ? null : render(next, components);
     return (
       <Fragment key={id}>
         {components
@@ -298,6 +325,9 @@ export function RowImpact({
           onMouseEnter={() => onHover(step.node)}
           onMouseLeave={() => onHover(null)}
         >
+          <span className="lineage-dot" aria-hidden="true">
+            {marks[step.state]}
+          </span>
           <header>
             <button
               className="text-button"
@@ -316,8 +346,8 @@ export function RowImpact({
                 {t("lineageRow")} {step.row + 1}
               </small>
             )}
+            {step.port && <span className="row-impact-port">{step.port}</span>}
           </header>
-          {step.port && <small className="muted">{step.port}</small>}
           {step.reason && (
             <div className="row-impact-reason">
               <code>{step.reason.condition}</code>
@@ -327,11 +357,13 @@ export function RowImpact({
           {step.conditions
             ?.filter((r) => r !== null)
             .map((r, i) => (
-              <p className="small" key={i}>
+              <span className="row-impact-detail" key={i}>
                 <code>{r!.condition}</code>
-                <br />
-                <code>{r!.evaluated}</code>
-              </p>
+                <code className="evaluated">
+                  <ArrowRight size={10} aria-hidden="true" />
+                  {r!.evaluated}
+                </code>
+              </span>
             ))}
           {step.other_rows !== undefined && (
             <p>
@@ -344,12 +376,16 @@ export function RowImpact({
             </p>
           )}
           {step.group?.map((g) => (
-            <code key={g.expression}>
-              {g.expression} = {formatValue(g.value)}{" "}
-            </code>
+            <span className="row-impact-detail" key={g.expression}>
+              <code>
+                {g.expression} = {formatValue(g.value)}
+              </code>
+            </span>
           ))}
           {step.destinations?.map((d) => (
-            <code key={d}>{d}</code>
+            <span className="row-impact-detail" key={d}>
+              <code>{d}</code>
+            </span>
           ))}
           {step.warning && step.state === "unknown" && (
             <p className="notice warning">{step.warning}</p>
@@ -406,43 +442,43 @@ export function RowImpact({
             </div>
           )}
         </article>
-        {step.children.map((child, i) =>
-          i === 0 ? (
-            render(child, components)
-          ) : (
-            <details
-              className="lineage-branch"
-              key={child}
-              open={depth(child) <= 3}
-            >
-              <summary>
-                {t("rowImpactTowards").replace(
-                  "{nodes}",
-                  [...new Set(destinations(child))].join(", "),
-                )}
-              </summary>
-              {render(child, components)}
-            </details>
-          ),
-        )}
+        {others.map((child) => (
+          <details
+            className="lineage-branch"
+            key={child}
+            // What the row never reaches, or cannot be followed into, stays one line.
+            open={
+              depth(child) <= 3 &&
+              !["unreached", "unknown"].includes(byId.get(child)!.state)
+            }
+          >
+            <summary>
+              <span>
+                {t("rowImpactTowards").replace("{nodes}", end(child))}
+              </span>
+              <span className="muted">{pathSummary(child)}</span>
+            </summary>
+            {render(child, components)}
+          </details>
+        ))}
+        {rest}
       </Fragment>
     );
   };
+  const stops = !!data.stops.length && !written;
   return (
     <div className="row-impact">
-      <p className={`notice ${data.stops.length && !written ? "error" : ""}`}>
-        {verdict}
+      <p className={`row-impact-verdict ${stops ? "stops" : ""}`}>
+        {stops ? <CircleAlert size={15} /> : <CircleCheck size={15} />}
+        <span>{verdict}</span>
       </p>
       {pending && <span role="status">{t("lineageLoading")}</span>}
       {data.roots.map((root) => (
         <section key={root}>
           <h3>
-            {t("rowImpactTowards").replace(
-              "{nodes}",
-              [...new Set(destinations(root))].join(", "),
-            )}
+            {t("rowImpactTowards").replace("{nodes}", end(root))}
+            <small>{pathSummary(root)}</small>
           </h3>
-          <p className="small muted">{pathSummary(root)}</p>
           {render(root)}
         </section>
       ))}

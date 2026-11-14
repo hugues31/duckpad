@@ -22,6 +22,8 @@ class Matcher:
         if data.partition or data.partition_context or data.origins or data.disk:
             raise Coverage("Downstream row tracing across partitions is not yet supported.")
         tree = parse(data)
+        if isinstance(tree, exp.SetOperation):
+            raise Coverage("UNION, INTERSECT and EXCEPT have no captured forward row mapping.")
         check_supported(tree)
         if tree.args.get("with_") or tree.find(exp.Subquery):
             raise Coverage("This composed SQL step has no captured forward row mapping.")

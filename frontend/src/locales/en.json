@@ -1681,6 +1681,7 @@
   "lineageShowValues": "Show the {count} values",
   "lineageHideValues": "Hide values",
   "lineageChooseValue": "Click a value to follow it",
+  "lineageContinues": "continues below",
   "lineageOpenRow": "Open the row in Data",
   "lineageOpenRows": "Open the {count} rows in Data",
   "lineageStepInside": "1 step inside",
