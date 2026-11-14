@@ -1182,11 +1182,6 @@ button.lineage-crumb:not(:disabled):hover {
   white-space: normal;
   overflow-wrap: anywhere;
 }
-.row-impact section > h3 + .lineage-path-summary {
-  margin: -4px 0 10px;
-  color: var(--lineage-muted);
-  font-size: 11px;
-}
 
 /* Canvas: the path stays lit, each node carries the column or the value. */
 .lineage-dimmed {

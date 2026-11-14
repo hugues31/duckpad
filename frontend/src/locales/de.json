@@ -1671,7 +1671,7 @@
   "lineageLevels": "Herkunftsebenen",
   "lineagePickValue": "Einen Wert in Daten anklicken",
   "lineageChooseColumn": "Spalte wählen",
-  "lineageWrittenColumn": "{node} schreibt {column} außerhalb des Projekts: Danach liest nichts mehr diese Spalte.",
+  "lineageWrittenColumn": "{node} ist ein Export: Danach liest nichts im Projekt {column}.",
   "lineageSources": "Quellen",
   "lineageExports": "Außerhalb des Projekts geschrieben",
   "lineageNoEndpoints": "Keine externen Ressourcen auf diesem Pfad",

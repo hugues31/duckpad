@@ -1671,7 +1671,7 @@
   "lineageLevels": "Niveaux de traçabilité",
   "lineagePickValue": "Cliquez sur une valeur dans Données",
   "lineageChooseColumn": "Choisir une colonne",
-  "lineageWrittenColumn": "{node} écrit {column} hors du projet : rien ne la lit en aval.",
+  "lineageWrittenColumn": "{node} est un export : rien dans le projet ne lit {column} après lui.",
   "lineageSources": "Sources",
   "lineageExports": "Écrit hors du projet",
   "lineageNoEndpoints": "Aucune ressource externe sur ce chemin",

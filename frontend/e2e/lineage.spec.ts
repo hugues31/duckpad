@@ -334,7 +334,7 @@ test("an export lists the columns of its input, like its results", async ({
   );
   await panel.getByRole("button", { name: "Impact", exact: true }).click();
   await expect(panel.locator(".lineage-column-summary")).toHaveText(
-    "Export revenue writes net_share outside the project: nothing reads it downstream.",
+    "Export revenue is an export: nothing in the project reads net_share after it.",
   );
 });
 

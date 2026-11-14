@@ -7,7 +7,7 @@ import {
   Filter,
   SquareFunction,
 } from "lucide-react";
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { api, withQuery } from "./api";
 import { formatValue } from "./graph";
@@ -139,13 +139,17 @@ export function TableSteps({
     onMap(Object.fromEntries(Object.keys(tables.nodes).map((id) => [id, {}])));
     return () => onMap(null);
   }, [tables, onMap]);
+  const adjacent = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const e of tables.edges) {
+      const [from, to] =
+        direction === "origin" ? [e.target, e.source] : [e.source, e.target];
+      map.set(from, [...(map.get(from) ?? []), to]);
+    }
+    return map;
+  }, [tables, direction]);
   const seen = new Set<string>();
-  const next = (id: string) =>
-    tables.edges
-      .filter((e) =>
-        direction === "origin" ? e.target === id : e.source === id,
-      )
-      .map((e) => (direction === "origin" ? e.source : e.target));
+  const next = (id: string) => adjacent.get(id) ?? [];
   /** The nodes a branch would add, and the ones it ends on. */
   const reach = (id: string, found = new Set<string>()) => {
     if (seen.has(id) || found.has(id)) return found;
