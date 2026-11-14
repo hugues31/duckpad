@@ -250,6 +250,15 @@ export default function FlowPage() {
         ...(isWideLayout() ? {} : { palette: false }),
       });
   };
+  /** A node chosen on the canvas: an open lineage panel follows it, in the direction shown. */
+  const chooseNode = (id: string | null) => {
+    select(id);
+    if (lineageTarget && id && prefix + id !== lineageTarget.node)
+      changeLineage({
+        node: prefix + id,
+        direction: lineageTarget.direction,
+      });
+  };
   const reveal = useEffectEvent(
     (found: { path: PathPart[]; id: string | null } | null) => {
       if (!found) {
@@ -555,7 +564,12 @@ export default function FlowPage() {
             viewKey={worktree + ":" + path.map((p) => p.instance).join("/")}
             selected={selected}
             focusRequest={focusRequest}
-            onSelect={select}
+            onSelect={chooseNode}
+            onDismiss={() => {
+              if (!lineageTarget) return false;
+              closeLineage();
+              return true;
+            }}
             onMove={(nodes, insertion) =>
               reported(
                 updateGraph((g) => {

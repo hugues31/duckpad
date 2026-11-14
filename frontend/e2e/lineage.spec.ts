@@ -252,6 +252,54 @@ test("the column level of the breadcrumb lists the columns to choose from", asyn
   await expect(panel).toContainText("Renaming net_revenue");
 });
 
+test("the panel follows the node chosen on the canvas and Escape closes it from anywhere", async ({
+  page,
+}) => {
+  await example(page);
+  const panel = await explain(page);
+  const selection = page.locator(".react-flow__node.selected");
+  const node = (name: string) =>
+    page
+      .locator(".react-flow__node")
+      .filter({ has: page.getByText(name, { exact: true }) });
+  const fit = page.getByRole("button", { name: "Fit view", exact: true });
+  // The focus is still on the cell in Data: Escape closes the panel and keeps the node.
+  await page.keyboard.press("Escape");
+  await expect(panel).toHaveCount(0);
+  await expect(selection).toHaveCount(1);
+  await expect(page.locator("#node-inspector .inspector")).toBeVisible();
+  await page.goBack();
+  await expect(panel.locator(".lineage-step.root")).toBeVisible();
+  // Another node chosen on the canvas replaces the explanation by its own lineage.
+  const table = panel.locator(".lineage-breadcrumb button").first();
+  await fit.click();
+  await node("Net amounts").click();
+  await expect(table).toHaveText("Net amounts");
+  await expect(table).toHaveAttribute("aria-current", "page");
+  await expect(panel.locator(".lineage-sources")).toContainText("Channel fees");
+  // The direction shown is kept from one node to the next.
+  const impact = panel.getByRole("button", { name: "Impact", exact: true });
+  await impact.click();
+  await fit.click();
+  await node("Paid orders").click();
+  await expect(table).toHaveText("Paid orders");
+  await expect(impact).toHaveAttribute("aria-pressed", "true");
+  await expect(selection).toHaveAttribute("data-id", "validated");
+  // Back returns to the previous node.
+  await page.goBack();
+  await expect(table).toHaveText("Net amounts");
+  await expect(selection).toHaveAttribute("data-id", "net");
+  // On a focused node, Escape closes the panel first and clears the selection next.
+  await fit.click();
+  await node("Paid orders").click();
+  await expect(table).toHaveText("Paid orders");
+  await page.keyboard.press("Escape");
+  await expect(panel).toHaveCount(0);
+  await expect(selection).toHaveAttribute("data-id", "validated");
+  await page.keyboard.press("Escape");
+  await expect(selection).toHaveCount(0);
+});
+
 test("table Origin and Impact work before a run and include computed variables", async ({
   page,
 }) => {

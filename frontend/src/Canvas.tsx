@@ -312,6 +312,16 @@ function CanvasInner({ ref, ...props }: CanvasProps) {
     )
       return;
     event.preventDefault();
+    if (props.onDismiss?.()) {
+      // React Flow has already cleared a focused node: the selection outlives the panel.
+      setNodes((current) =>
+        current.map((node) => ({
+          ...node,
+          selected: node.id === props.selected,
+        })),
+      );
+      return;
+    }
     setFocus(null);
     setNodes((current) =>
       current.map((node) => ({ ...node, selected: false })),
