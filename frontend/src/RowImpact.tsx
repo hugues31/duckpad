@@ -310,8 +310,25 @@ export function RowImpact({
     const components = componentPaths(step.node);
     // The first consumer continues the path; the others branch off under this step.
     // The path is read first, so a node reached twice stays on it.
-    const [next, ...others] = step.children;
+    const unreached = step.children.filter(
+      (child) => byId.get(child)!.state === "unreached",
+    );
+    const [next, ...others] = step.children.filter(
+      (child) => !unreached.includes(child),
+    );
     const rest = next === undefined ? null : render(next, components);
+    // Everything after a node the row does not pass is named once.
+    const missed = (id: string, found = new Set<string>()) => {
+      const item = byId.get(id)!;
+      seen.add(id);
+      found.add(name(componentPaths(item.node)[0] || item.node));
+      for (const child of item.children) missed(child, found);
+      return found;
+    };
+    const lost = new Set<string>();
+    for (const child of unreached) missed(child, lost);
+    // Another output of the node which discards the row adds nothing to read.
+    lost.delete(name(componentPaths(step.node)[0] || step.node));
     return (
       <Fragment key={id}>
         {components
@@ -461,6 +478,17 @@ export function RowImpact({
             {render(child, components)}
           </details>
         ))}
+        {!!unreached.length && (
+          <article className="lineage-step row-impact-step row-impact-unreached">
+            <span className="lineage-dot" aria-hidden="true" />
+            <header>
+              <span className="row-impact-state">
+                {t("rowImpactUnreached")}
+              </span>
+              <span className="row-impact-lost">{[...lost].join(", ")}</span>
+            </header>
+          </article>
+        )}
         {rest}
       </Fragment>
     );

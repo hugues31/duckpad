@@ -200,7 +200,11 @@ export function ColumnImpact({
       {data && (
         <>
           <p>
-            {t("impactSummary")
+            {t(
+              data.edit.some((e) => e.file === "views.json")
+                ? "impactSummary"
+                : "impactSummaryNodes",
+            )
               .replace("{column}", target.column || "")
               .replace(
                 "{nodes}",

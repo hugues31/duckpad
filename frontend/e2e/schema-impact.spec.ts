@@ -59,7 +59,10 @@ test("simulate a type without a run or a save, and clear old results when editin
   await expect(
     form.getByRole("heading", { name: "Compilation errors (1)" }),
   ).toBeVisible();
-  await expect(form.locator("pre")).toContainText("Binder Error");
+  // The message leads; DuckDB's candidates and failing line open on demand.
+  await expect(form.locator(".schema-error summary")).toContainText(
+    "Binder Error",
+  );
   await expect(
     form.getByRole("link", { name: "Open code" }).first(),
   ).toHaveAttribute("href", /total/);

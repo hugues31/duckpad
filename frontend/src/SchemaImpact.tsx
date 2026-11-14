@@ -10,6 +10,18 @@ import { displayNodeName } from "./nodeNames";
 import { useResource } from "./useApiResource";
 import { useLoadedWorktree } from "./worktree";
 
+/** DuckDB lists candidates and the failing line after its message: keep them on demand. */
+function SchemaError({ text }: { text: string }) {
+  const [message, ...rest] = text.trim().split("\n");
+  if (!rest.length) return <pre>{message}</pre>;
+  return (
+    <details className="schema-error">
+      <summary>{message}</summary>
+      <pre>{rest.join("\n")}</pre>
+    </details>
+  );
+}
+
 type Entry = {
   node: string;
   name?: string;
@@ -96,7 +108,7 @@ function SchemaResults({
                   .join(" · ")}
               </p>
             )}
-            <pre>{entry.error}</pre>
+            <SchemaError text={entry.error || ""} />
           </article>
         ))}
       </section>

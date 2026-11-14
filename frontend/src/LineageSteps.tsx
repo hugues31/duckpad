@@ -844,33 +844,46 @@ function Contributions({
       )}
       {groups ? (
         <>
-          {groups.map((g) => (
-            <button
-              key={g.key}
-              className="text-button"
-              disabled={busy || disabled}
-              onClick={() => void load(0, g.key)}
-            >
-              {t("lineageShowRows")}: <Value value={g.value} /> ({g.rows})
-            </button>
-          ))}
-          {groups.length < page.total && (
-            <button
-              className="text-button"
-              disabled={busy || disabled}
-              onClick={() =>
-                void load(
-                  ("offset" in page ? Number(page.offset) : 0) + groups.length,
-                )
-              }
-            >
-              {t("next")}
-            </button>
-          )}
+          <div className="lineage-values groups">
+            {groups.map((g) => (
+              <button
+                key={g.key}
+                className="lineage-value"
+                aria-label={`${t("lineageShowRows")}: ${formatValue(g.value)} (${g.rows})`}
+                title={t("lineageShowRows")}
+                disabled={busy || disabled}
+                onClick={() => void load(0, g.key)}
+              >
+                <Value value={g.value} /> <small>× {g.rows}</small>
+              </button>
+            ))}
+          </div>
+          <div className="lineage-actions">
+            {groups.length < page.total && (
+              <button
+                className="text-button"
+                disabled={busy || disabled}
+                onClick={() =>
+                  void load(
+                    ("offset" in page ? Number(page.offset) : 0) +
+                      groups.length,
+                  )
+                }
+              >
+                {t("next")}
+              </button>
+            )}
+            <span className="muted">{t("lineageShowRows")}</span>
+          </div>
         </>
       ) : (
         <>
           <div className={`lineage-values ${label ? "" : "lineage-equation"}`}>
+            {/* Counted rows are listed by one of their columns: name it. */}
+            {operation !== "sum" &&
+              new Set(items.map((item) => item.column)).size === 1 && (
+                <span className="lineage-values-label">{items[0].column}</span>
+              )}
             {items.slice(0, expanded ? undefined : 5).map((input, index) => (
               <Fragment key={cellId(input)}>
                 {index > 0 && operation === "sum" && <span>+</span>}

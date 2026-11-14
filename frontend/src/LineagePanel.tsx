@@ -54,10 +54,13 @@ export default function LineagePanel({
   onHover,
   onOpen,
   onRows,
+  onLocate,
 }: {
   target: LineageTarget;
   onChange: (target: LineageTarget) => void;
   onClose: () => void;
+  /** Bring the explained value back in the Data grid. */
+  onLocate: () => void;
   onMap: (map: LineageMap | null) => void;
   onHover: (node: string | null) => void;
   onOpen: (node: string) => void;
@@ -219,16 +222,22 @@ export default function LineagePanel({
           {target.cell?.column || target.column || t("columns")}
         </button>
         <ChevronRight size={13} aria-hidden="true" />
-        <span
-          className={`lineage-crumb ${target.cell ? "" : "placeholder"}`}
-          aria-current={target.cell ? "page" : undefined}
-          title={value === undefined ? undefined : formatValue(value)}
-        >
-          <Hash size={12} />
-          {target.cell
-            ? `${t("lineageRow")} ${target.cell.row + 1}${value === undefined ? "" : ` = ${roundedValue(value)}`}`
-            : t("lineagePickValue")}
-        </span>
+        {target.cell ? (
+          <button
+            className="lineage-crumb"
+            aria-current="page"
+            title={t("lineageShowValue")}
+            onClick={onLocate}
+          >
+            <Hash size={12} />
+            {`${t("lineageRow")} ${target.cell.row + 1}${value === undefined ? "" : ` = ${roundedValue(value)}`}`}
+          </button>
+        ) : (
+          <span className="lineage-crumb placeholder">
+            <Hash size={12} />
+            {t("lineagePickValue")}
+          </span>
+        )}
       </nav>
       <div className="lineage-body">
         {error && (
@@ -276,6 +285,7 @@ export default function LineagePanel({
               onValue={(value) =>
                 setExplained({ cell: cellId(target.cell!), value })
               }
+              onImpact={() => onChange({ ...target, direction: "impact" })}
             />
           ) : target.column && target.direction === "impact" ? (
             <ColumnImpact
@@ -327,6 +337,7 @@ function ValueLineage({
   onChange,
   onText,
   onValue,
+  onImpact,
 }: {
   target: LineageTarget;
   tables: TableLineage;
@@ -337,6 +348,7 @@ function ValueLineage({
   onChange: (target: LineageTarget) => void;
   onText: (text: string) => void;
   onValue: (value: unknown) => void;
+  onImpact: () => void;
 }) {
   const t = useT();
   const {
@@ -541,6 +553,15 @@ function ValueLineage({
             onChange({ ...target, node: cell.node || target.node, cell })
           }
         />
+      )}
+      {/* Nothing is upstream of a source value: its row can be followed the other way. */}
+      {graph && !error && graph.original.kind === "source" && (
+        <p className="lineage-hint">
+          {t("lineageSourceHint")}{" "}
+          <button className="text-button" onClick={onImpact}>
+            {t("lineageFollowRow")}
+          </button>
+        </p>
       )}
     </>
   );

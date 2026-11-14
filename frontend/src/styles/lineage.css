@@ -1174,3 +1174,36 @@ button.lineage-crumb:not(:disabled):hover {
   bottom: -12px;
   left: -19px;
 }
+/* Distinct values and counted rows: what is listed, then the values. */
+.lineage-values.groups .lineage-value {
+  border-color: var(--border);
+  background: var(--surface);
+  color: color-mix(in srgb, var(--accent) 70%, var(--text));
+}
+.lineage-value small {
+  color: var(--lineage-muted);
+  font-size: 10px;
+}
+.lineage-values-label {
+  margin-right: 3px;
+  color: var(--lineage-muted);
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+.row-impact-lost {
+  color: var(--lineage-muted);
+  font-size: 11.5px;
+}
+.lineage-hint .text-button {
+  font-size: 11px;
+  font-weight: 600;
+}
+.schema-error > summary {
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.schema-error > pre {
+  margin-top: 6px;
+}

@@ -682,6 +682,22 @@ export default function FlowPage() {
           onMap={setLineageMap}
           onHover={setLineageHover}
           onOpen={openLineageNode}
+          onLocate={() => {
+            const found = bundle && resolveNodePath(bundle, lineageTarget.node);
+            if (!found) return;
+            setContributingRows(null);
+            view.change({
+              path: found.path,
+              selected: found.id,
+              paletteNode: null,
+            });
+            setFocusRequest({
+              id: found.id,
+              key: String(Date.now()),
+              reveal: true,
+            });
+            showResults("data");
+          }}
           onRows={(rows) => {
             setContributingRows(rows);
             openLineageNode(rows.input.node || "");
