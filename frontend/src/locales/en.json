@@ -835,7 +835,7 @@
   "hostKeyType": "Key type",
   "noTrustedHosts": "No trusted host yet. Projects cannot synchronize over SSH.",
   "projectExtensionsTitle": "Extensions for this project",
-  "projectExtensionsHint": "Enable DuckDB functions directly in SQL models. Requirements and their origins are saved with this branch and included when sharing or exporting the project.",
+  "projectExtensionsHint": "Enable DuckDB functions directly in SQL templates. Requirements and their origins are saved with this branch and included when sharing or exporting the project.",
   "projectExtensionsRefresh": "Refresh availability",
   "projectExtensionsInvalid": "Correct extensions.json in Code before editing requirements here.",
   "projectExtensionsStop": "Wait for the active execution to finish before changing extensions.",
