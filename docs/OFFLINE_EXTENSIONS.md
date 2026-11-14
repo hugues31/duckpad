@@ -17,7 +17,7 @@ does not need DuckDB, Python, Linux, or a prepared extension cache.
 3. Open **Project settings → Extensions**. Add the same name and origin, then
    tick its **Activate for this project** checkbox once it shows
    **Ready to activate**.
-   Its functions can now be used directly in SQL models. For a data-source
+   Its functions can now be used directly in SQL nodes. For a data-source
    connector, continue to configure its connection under
    **Instance settings → Connections** and grant it to the project; connector
    extensions still load automatically.
@@ -66,7 +66,7 @@ instance administrator can import binaries or change the signature policy.
   never enables unsigned extensions on its own.
 
 For example, add **duckfn_statrs** with origin **DuckDB community**, import its
-server binary, and activate it. Create this SQL model without a connection
+server binary, and activate it. Create this SQL node without a connection
 parameter:
 
 ```sql
@@ -84,7 +84,7 @@ The result is `0.5`, `0.9750021048529024`, `0.39894228040143265` and
 
 ## Reopen, share and deactivate
 
-Requirements live in `extensions.json` alongside the flow and SQL models:
+Requirements live in `extensions.json` alongside the flow and SQL templates:
 
 ```json
 {

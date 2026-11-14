@@ -835,7 +835,7 @@
   "hostKeyType": "Type de clé",
   "noTrustedHosts": "Aucun hôte de confiance pour l’instant. Les projets ne peuvent pas se synchroniser en SSH.",
   "projectExtensionsTitle": "Extensions de ce projet",
-  "projectExtensionsHint": "Activez des fonctions DuckDB directement dans les modèles SQL. Les extensions requises et leurs origines sont enregistrées avec cette branche et incluses lors du partage ou de l’export du projet.",
+  "projectExtensionsHint": "Activez des fonctions DuckDB directement dans les nœuds SQL. Les extensions requises et leurs origines sont enregistrées avec cette branche et incluses lors du partage ou de l’export du projet.",
   "projectExtensionsRefresh": "Actualiser la disponibilité",
   "projectExtensionsInvalid": "Corrigez extensions.json dans Code avant de modifier les extensions ici.",
   "projectExtensionsStop": "Attendez la fin de l’exécution avant de modifier les extensions.",
