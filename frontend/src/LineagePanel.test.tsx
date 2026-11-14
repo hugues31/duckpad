@@ -1,6 +1,12 @@
 // @vitest-environment happy-dom
 import { afterEach, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { useState } from "react";
 import type { LineageTarget } from "./lineageGraph";
 import { MemoryRouter } from "react-router";
@@ -48,7 +54,11 @@ const python = (
   parents,
 });
 
-function serve(explanations: Record<string, Explanation>) {
+/** Answer lineage requests; a held dataset answers once its promise resolves. */
+function serve(
+  explanations: Record<string, Explanation>,
+  held: Record<string, Promise<void>> = {},
+) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, options?: RequestInit) => {
@@ -56,6 +66,7 @@ function serve(explanations: Record<string, Explanation>) {
         return json({ node: "total", seeds: ["total"], nodes: {}, edges: [] });
       if (url.includes("/generations/")) return json({ valid: true });
       const query = JSON.parse(String(options?.body));
+      await held[query.dataset];
       return json(explanations[`${query.dataset}:${query.row}`]);
     }),
   );
@@ -156,4 +167,52 @@ it("does not ask to select parent cells of a Python source", async () => {
   await screen.findByText("Opaque Python operation");
   expect(screen.queryByText(/captured parent results/)).toBeNull();
   expect(document.querySelector(".lineage-parents")).toBeNull();
+});
+
+it("shows the steps traced so far while the next one is read", async () => {
+  const step = (
+    node: string,
+    contributions: Explanation["contributions"],
+  ): Explanation => ({
+    dataset: node,
+    node,
+    port: "result",
+    row: 0,
+    column: "amount",
+    value: 10,
+    kind: "projection",
+    calculation: {
+      operation: "expression",
+      formula: "amount * 1",
+      passthrough: false,
+    },
+    complete: true,
+    warnings: [],
+    total: contributions.length,
+    page_size: 5,
+    contributions,
+    context_total: 0,
+  });
+  const orders = { ...step("orders", []), source: true };
+  const upstream = step("upstream", [orders]);
+  let release = () => {};
+  serve(
+    { "total:0": step("total", [upstream]), "upstream:0": upstream },
+    { upstream: new Promise<void>((resolve) => (release = resolve)) },
+  );
+  open("total", 0);
+  await waitFor(() =>
+    expect(document.querySelectorAll(".lineage-step")).toHaveLength(1),
+  );
+  // The next step is announced below the path already shown.
+  expect(document.querySelector(".lineage-path + .lineage-loading")).not.toBe(
+    null,
+  );
+  release();
+  await waitFor(() =>
+    expect(document.querySelectorAll(".lineage-step")).toHaveLength(3),
+  );
+  await waitFor(() =>
+    expect(document.querySelector(".lineage-loading")).toBe(null),
+  );
 });

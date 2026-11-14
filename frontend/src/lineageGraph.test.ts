@@ -130,6 +130,52 @@ describe("node lineage path", () => {
       false,
     );
   });
+  it("reports each step once it is read, before the steps after it", async () => {
+    const root = input("root"),
+      middle = input("middle"),
+      source = input("source", 0, true);
+    let release = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const data = new Map(
+      [result(root, [middle]), result(middle, [source])].map((r) => [
+        cellId(r),
+        r,
+      ]),
+    );
+    const steps: { nodes: (string | undefined)[]; complete: boolean }[] = [];
+    const building = buildLineageGraph(
+      root,
+      {},
+      new Set(),
+      async (query) => {
+        // The step after the root stays unread until the test releases it.
+        if (query.dataset === "middle") await held;
+        return data.get(cellId(query))!;
+      },
+      tables,
+      (graph) =>
+        steps.push({
+          nodes: graph.entries.map((e) => e.result.node),
+          complete: graph.complete,
+        }),
+    );
+    await vi.waitFor(() => expect(steps).toHaveLength(1));
+    // The root is shown with the input it leads to, which is not traced yet.
+    expect(steps[0]).toEqual({ nodes: ["root"], complete: false });
+    release();
+    const graph = await building;
+    expect(steps.map((step) => step.nodes)).toEqual([
+      ["root"],
+      ["root", "middle"],
+      ["root", "middle", "source"],
+    ]);
+    expect(steps.every((step) => !step.complete)).toBe(true);
+    expect(graph.complete).toBe(true);
+    expect(graph.entries.map((e) => e.result.node)).toEqual(steps[2].nodes);
+    expect(graph.entries[0].children.map((c) => c.id)).toEqual([
+      cellId(middle),
+    ]);
+  });
   it("shares ancestors and stops an incomplete branch", async () => {
     const root = input("root"),
       left = input("left"),
