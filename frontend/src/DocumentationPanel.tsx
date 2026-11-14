@@ -89,6 +89,9 @@ function usePrinting(title: string) {
   return printing;
 }
 
+/** What a reader does to scroll by hand, the scrollbar included. */
+const RELEASES = ["wheel", "touchmove", "keydown", "pointerdown"] as const;
+
 /**
  * The outline entry of the section being read: the last one that scrolled
  * past the top of the page. A followed link stays active until the reader
@@ -121,21 +124,21 @@ function useActiveSection(page: RefObject<HTMLElement | null>, ids: string[]) {
       followed.current = false;
     };
     root.addEventListener("scroll", onScroll, { passive: true });
-    for (const event of ["wheel", "touchmove", "keydown"] as const)
+    for (const event of RELEASES)
       root.addEventListener(event, release, { passive: true });
     update();
     return () => {
       cancelAnimationFrame(frame);
       root.removeEventListener("scroll", onScroll);
-      for (const event of ["wheel", "touchmove", "keydown"] as const)
-        root.removeEventListener(event, release);
+      for (const event of RELEASES) root.removeEventListener(event, release);
     };
   }, [page, key]);
   return {
     active,
-    follow: (id: string) => {
-      followed.current = true;
-      setActive(id);
+    /** Keep an entry active while the page scrolls to it; null follows the scroll again. */
+    follow: (id: string | null) => {
+      followed.current = id !== null;
+      if (id !== null) setActive(id);
     },
   };
 }
@@ -297,11 +300,6 @@ export default function DocumentationPanel({
   const title = `${name} - ${t("documentation")}`;
   const printed = usePrinting(title);
   const printing = !!printed;
-  // A link from elsewhere can name a section.
-  useEffect(() => {
-    const id = decodeURIComponent(window.location.hash.slice(1));
-    if (id.startsWith("doc-")) document.getElementById(id)?.scrollIntoView();
-  }, []);
   if (!documentation) return null;
 
   /** Scroll to a section of the page without leaving it: drafts stay open. */
@@ -314,17 +312,18 @@ export default function DocumentationPanel({
     )
       return;
     const link = (event.target as Element).closest("a[href^='#']");
-    const id = decodeURIComponent(link?.getAttribute("href")?.slice(1) || "");
+    const id = link?.getAttribute("href")?.slice(1);
     const target = id && document.getElementById(id);
     if (!target || !page.current?.contains(target)) return;
     event.preventDefault();
+    // A node inside a component has no entry: the outline shows where it is.
     follow(
       entries.some(
         (entry) =>
           entry.id === id || entry.children?.some((child) => child.id === id),
       )
         ? id
-        : active,
+        : null,
     );
     target.scrollIntoView({ block: "start" });
     target.focus({ preventScroll: true });

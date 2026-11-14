@@ -437,6 +437,29 @@ test("capture the results panel: samples, columns, tests, log and chart", async 
   await capture(page, "results-chart", panel);
 });
 
+test("capture the generated project documentation", async ({ page }) => {
+  await example(page);
+  await run(page);
+  await page.getByRole("link", { name: "Documentation", exact: true }).click();
+  const documentation = page.locator(".documentation-page");
+  await expect(documentation.locator(".doc-stats li").first()).toHaveText(
+    "3Sources",
+  );
+  await expect(
+    documentation.locator("#doc-node-validated .doc-test-status").first(),
+  ).toHaveText("OK");
+  await capture(page, "project-documentation");
+  await documentation
+    .locator(".doc-diagram a", { hasText: "Paid orders" })
+    .click();
+  await expect(
+    documentation
+      .getByRole("navigation", { name: "Contents" })
+      .getByRole("link", { name: "Paid orders", exact: true }),
+  ).toHaveAttribute("aria-current", "location");
+  await capture(page, "project-documentation-node");
+});
+
 test("capture parameters, node documentation and nested components", async ({
   page,
 }) => {

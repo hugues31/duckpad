@@ -204,8 +204,11 @@ test("unsaved code and documentation guard links and browser history without los
     .getByRole("button", { name: "Discard and leave", exact: true })
     .click();
   await expect(page).toHaveURL(/\/instance-settings\/users$/);
+  // The settings replace the tab before the browser goes back to it.
+  await expect(page.locator(".documentation-page")).toHaveCount(0);
   await page.goBack();
-  await expect(page.locator(".project-documentation")).not.toHaveValue(
+  // The tab opens on the rendered overview again; its editor lost the draft.
+  await expect(await editOverview(page)).not.toHaveValue(
     "Unsaved documentation",
   );
   await page.getByRole("link", { name: "Code", exact: true }).click();
