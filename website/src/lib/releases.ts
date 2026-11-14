@@ -1,6 +1,7 @@
 import snapshot from "../data/releases.json" with { type: "json" };
 
-export const releasesURL = "https://github.com/hugues31/duckpad/releases";
+export const repositoryURL = "https://github.com/hugues31/duckpad";
+export const releasesURL = `${repositoryURL}/releases`;
 const endpoint = "https://api.github.com/repos/hugues31/duckpad/releases";
 
 export interface Release {

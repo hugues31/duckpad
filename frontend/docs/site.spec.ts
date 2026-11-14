@@ -616,9 +616,11 @@ test("content and documentation navigation remain usable without JavaScript", as
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "What’s new in Duckpad.",
   );
-  const olderRelease = page.locator(".release-entry").nth(1);
-  await olderRelease.locator("summary").click();
-  await expect(olderRelease.locator(".release-body")).toBeVisible();
+  await expect(page.locator(".release-body").nth(1)).toBeVisible();
+  const maintenance = page.locator("details.release-group").first();
+  await expect(maintenance.locator("ul")).not.toBeVisible();
+  await maintenance.locator("summary").click();
+  await expect(maintenance.locator("ul")).toBeVisible();
   await context.close();
 });
 
@@ -635,10 +637,12 @@ test("release notes match the feed and remain readable on mobile", async ({
       page.getByRole("heading", { name: release.tag, exact: true }),
     ).toBeVisible();
   }
-  await expect(page.locator(".release-body").first()).toContainText(
+  await expect(page.locator(".release-install").first()).toContainText(
     "pip install duckpad==",
   );
-  await expect(page.getByText("Latest release", { exact: true })).toBeVisible();
+  await expect(
+    page.locator(".release-entry").first().getByText("Latest release"),
+  ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Release and downloads on GitHub" }).first(),
   ).toHaveAttribute(
@@ -785,4 +789,54 @@ test("the mobile menu opens on the current guide and covers the page", async ({
   await expect(guides).not.toBeVisible();
   expect(await overflow()).not.toBe("hidden");
   await context.close();
+});
+
+test("release versions follow the reading position and flag breaking changes", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const feed: { tag: string; body: string }[] = await (
+    await page.request.get("releases.json")
+  ).json();
+  await page.goto("releases/");
+  const versions = page.getByRole("navigation", {
+    name: "Versions",
+    exact: true,
+  });
+  await expect(versions.getByRole("link").first()).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
+  const second = versions.getByRole("link").nth(1);
+  await second.click();
+  await expect(second).toHaveAttribute("aria-current", "true");
+  await expect(versions.locator("[aria-current]")).toHaveCount(1);
+
+  for (const release of feed) {
+    const id = `release-${encodeURIComponent(release.tag)}`;
+    const breaking = /^### Breaking changes$/m.test(release.body);
+    await expect(
+      versions.locator(`a[href="#${id}"] .breaking-mark`),
+    ).toHaveCount(breaking ? 1 : 0);
+    await expect(
+      page.locator(`[id="${id}"] .release-group[data-kind="breaking-changes"]`),
+    ).toHaveCount(breaking ? 1 : 0);
+  }
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const bar = page.locator(".mobile-toc");
+  await bar.locator("summary").click();
+  const last = page
+    .getByRole("navigation", { name: "Versions on mobile" })
+    .getByRole("link")
+    .last();
+  const tag = (await last.getAttribute("data-label"))!;
+  await last.click();
+  await expect(bar.locator("summary")).toContainText(tag);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBeTruthy();
 });
