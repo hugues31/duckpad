@@ -42,7 +42,7 @@ function setup() {
       for (const entry of entries) {
         if (!entry.isIntersecting) continue;
         const element = entry.target as HTMLElement;
-        if (element.matches(".feature-card, .workflow-item")) {
+        if (element.matches(".feature-card, .audience-card, .value-card")) {
           const index = groups.get(element.parentElement) || 0;
           element.style.setProperty(
             "--reveal-delay",

@@ -429,10 +429,6 @@ h2 {
   font-weight: 800;
   color: var(--ink);
 }
-.workflow {
-  padding-top: 110px;
-  padding-bottom: 90px;
-}
 .section-heading {
   max-width: 650px;
 }
@@ -444,100 +440,15 @@ h2 {
   color: var(--muted);
   margin-top: 22px;
 }
-.workflow-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0;
-  margin-top: 50px;
-  border-block: 1px solid var(--line);
-}
-.workflow-item {
-  padding: 32px 30px;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  border-right: 1px solid var(--line);
-  transition: background 0.2s;
-}
-.workflow-item:first-child {
-  padding-left: 0;
-}
-.workflow-item:last-child {
-  border: 0;
-  padding-right: 0;
-}
-.workflow-item:hover {
-  background: var(--soft);
-}
-.step-number {
-  color: var(--blue);
-  font-size: 9px;
-}
-.workflow-item h3 {
-  font-size: 28px;
-  margin-block: 24px 20px;
-  letter-spacing: -0.04em;
-}
-.workflow-item p {
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.8;
-}
-.workflow-item code {
-  font-size: 10px;
-  color: var(--blue);
-  padding: 17px 10px;
-  margin-top: 24px;
-  background: var(--soft);
-  width: 100%;
-}
-.card-link {
-  margin-top: auto;
-  padding-top: 35px;
-  font-size: 12px;
-  font-weight: 750;
-}
-.mini-lineage {
-  margin-top: 24px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 50px;
-  font-family: ui-monospace, monospace;
-}
-.mini-lineage span {
-  padding: 7px 12px;
-  background: var(--soft);
-  color: var(--blue);
-  border: 1px solid var(--line);
-  border-radius: 5px;
-}
-.mini-lineage i {
-  font-style: normal;
-}
-.mini-lineage b {
-  font-weight: 400;
-}
-.branch-illustration {
-  display: flex;
-  flex-direction: column;
-  margin-top: 20px;
-  font-size: 11px;
-  color: var(--blue);
-  font-family: ui-monospace, monospace;
-}
-.branch-illustration span + span {
-  padding-left: 15px;
-}
 .detail-section {
   display: grid;
-  grid-template-columns: 0.9fr 1.1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 60px;
   align-items: center;
   padding-bottom: 100px;
 }
 .detail-copy h2 {
-  font-size: clamp(2.5rem, 3.7vw, 3.7rem);
+  font-size: clamp(2.3rem, 3.6vw, 3.5rem);
 }
 .detail-copy p:not(.eyebrow) {
   font-size: 14px;
@@ -567,62 +478,6 @@ h2 {
   font-size: 10px;
   color: var(--muted);
   padding-top: 15px;
-  text-align: center;
-}
-.open-section {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 60px;
-  padding-top: 70px;
-  padding-bottom: 90px;
-  border-top: 1px solid var(--line);
-}
-.open-section h2 {
-  font-size: 3rem;
-}
-.open-details {
-  padding-top: 24px;
-}
-.open-details p {
-  font-size: 15px;
-  color: var(--muted);
-}
-.tag-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-block: 22px;
-}
-.tag-row span {
-  padding: 5px 10px;
-  font-family: ui-monospace, monospace;
-  font-size: 10px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-}
-.start-section {
-  background-color: #1559df;
-  background-image: var(--blue-gradient);
-  color: white;
-  padding-block: 70px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 30px;
-}
-.start-section .eyebrow {
-  color: #fff;
-}
-.start-section p:not(.eyebrow) {
-  margin-top: 22px;
-  font-size: 14px;
-  color: #fff;
-}
-.start-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 23px;
-  font-size: 12px;
   text-align: center;
 }
 .site-footer {
@@ -695,7 +550,6 @@ h2 {
   background: var(--soft);
   color: var(--blue);
   font-weight: 750;
-  overscroll-behavior: contain;
 }
 .docs-nav a:hover {
   color: var(--blue);
@@ -708,32 +562,16 @@ h2 {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 6px;
-  transition:
-    color 160ms ease,
-    border-color 160ms ease;
-}
-.toc ul ul a {
-  padding-left: 26px;
   padding: 11px 14px;
   font-size: 12px;
   white-space: nowrap;
-}
-.toc a[aria-current="true"] {
-  color: var(--blue);
-  border-left-color: var(--blue);
-}
-.mobile-toc {
-  display: none;
 }
 .search-trigger[hidden] {
   display: none;
 }
 .search-trigger:hover {
   border-color: var(--blue);
-}
-.doc-edit {
   background: var(--soft);
-  font-weight: 650;
 }
 kbd {
   color: var(--muted);
@@ -857,12 +695,174 @@ pre {
   top: calc(var(--header-height) + 24px);
   max-height: calc(100dvh - var(--header-height) - 48px);
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .toc strong {
   display: block;
   margin-bottom: 12px;
 }
 /* A rail marks the section being read; nested sections share it. */
+.toc a {
+  display: block;
+  color: var(--muted);
+  padding: 6px 0 6px 14px;
+  border-left: 2px solid var(--line);
+  line-height: 1.5;
+  transition:
+    color 160ms ease,
+    border-color 160ms ease;
+}
+.toc ul ul a {
+  padding-left: 26px;
+}
+.toc a:hover {
+  color: var(--blue);
+}
+.toc a[aria-current="true"] {
+  color: var(--blue);
+  border-left-color: var(--blue);
+}
+.mobile-toc {
+  display: none;
+}
+.doc-bottom {
+  border-top: 1px solid var(--line);
+  padding-top: 25px;
+  margin-top: 45px;
+  font-size: 12px;
+}
+.doc-edit {
+  color: var(--blue);
+  font-weight: 650;
+}
+.doc-edit:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.doc-pagination {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 26px;
+}
+.doc-pagination a {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 16px 20px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease;
+}
+.doc-pagination a:hover,
+.doc-pagination a:focus-visible {
+  border-color: var(--blue);
+  background: var(--soft);
+  color: var(--blue);
+}
+.doc-pagination small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+.doc-next {
+  grid-column: 2;
+  text-align: right;
+}
+.docs-content .demo-player {
+  margin-top: 30px;
+}
+.search-dialog {
+  max-width: 650px;
+  width: calc(100% - 30px);
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 20px 100px #0004;
+}
+.search-dialog::backdrop {
+  background: #07142780;
+  backdrop-filter: blur(5px);
+}
+.search-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 17px 22px;
+  font-weight: 750;
+}
+.search-dialog input {
+  width: calc(100% - 44px);
+  margin: 0 22px;
+  padding: 14px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink);
+}
+.search-results {
+  list-style: none;
+  padding: 15px 22px;
+  max-height: 55vh;
+  overflow: auto;
+  /* Keyboard scrolling keeps the focused result inside the list padding. */
+  scroll-padding-block: 15px;
+}
+.search-results a {
+  display: block;
+  padding: 13px 10px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.search-results a:hover,
+.search-results a:focus-visible {
+  background: var(--soft);
+}
+.search-results a:focus-visible {
+  outline-offset: -3px;
+}
+.search-results small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 3px;
+}
+.search-status,
+.search-hint {
+  color: var(--muted);
+  font-size: 11px;
+  margin: 12px 22px 0;
+}
+.search-hint {
+  margin-top: 6px;
+}
+@media (min-width: 1440px) {
+  .hero {
+    padding-top: 90px;
+    padding-bottom: 85px;
+  }
+}
+@media (max-width: 1100px) {
+  .search-trigger kbd {
+    display: none;
+  }
+  .docs-shell {
+    grid-template-columns: 190px minmax(0, 1fr);
+    gap: 35px;
+  }
+  .table-of-contents {
+    display: none;
+  }
   /* The outline moves into a bar that stays under the header. */
   html:has(.docs-content .mobile-toc) {
     scroll-padding-top: calc(var(--header-height) + 80px);
@@ -936,159 +936,6 @@ pre {
     padding-block: 8px;
     font-size: 13px;
   }
-.toc a {
-  display: block;
-  color: var(--muted);
-  padding: 6px 0 6px 14px;
-  border-left: 2px solid var(--line);
-  line-height: 1.5;
-}
-.toc a:hover {
-  color: var(--blue);
-}
-.doc-bottom {
-  border-top: 1px solid var(--line);
-  padding-top: 25px;
-  margin-top: 45px;
-  font-size: 12px;
-  color: var(--blue);
-}
-.doc-edit:hover {
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-.doc-pagination {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
-  margin-top: 26px;
-}
-.doc-pagination a {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding: 16px 20px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface);
-  font-size: 15px;
-  font-weight: 650;
-  letter-spacing: -0.01em;
-  line-height: 1.35;
-  transition:
-    border-color 160ms ease,
-    background 160ms ease;
-    display: grid;
-    place-items: center;
-    width: 44px;
-    height: 44px;
-}
-.doc-pagination a:hover,
-.doc-pagination a:focus-visible {
-  border-color: var(--blue);
-  background: var(--soft);
-  color: var(--blue);
-}
-.doc-pagination small {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0;
-}
-.doc-next {
-  grid-column: 2;
-  text-align: right;
-}
-.docs-content .demo-player {
-  margin-top: 30px;
-}
-.search-dialog {
-  max-width: 650px;
-  width: calc(100% - 30px);
-  padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface);
-  color: var(--ink);
-  box-shadow: 0 20px 100px #0004;
-}
-.search-dialog::backdrop {
-  background: #07142780;
-  backdrop-filter: blur(5px);
-}
-.search-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 17px 22px;
-  font-weight: 750;
-}
-.search-dialog input {
-  width: calc(100% - 44px);
-  margin: 0 22px;
-  padding: 14px;
-  border-radius: 6px;
-  border: 1px solid var(--line);
-  background: var(--bg);
-  color: var(--ink);
-}
-.search-results {
-  list-style: none;
-  padding: 15px 22px;
-  max-height: 55vh;
-  overflow: auto;
-  /* Keyboard scrolling keeps the focused result inside the list padding. */
-  scroll-padding-block: 15px;
-  .mobile-menu .docs-nav a {
-    margin-left: 0;
-    padding: 10px 12px;
-  }
-}
-.search-results a {
-  display: block;
-  padding: 13px 10px;
-  border-bottom: 1px solid var(--line);
-  font-size: 13px;
-}
-.search-results a:hover,
-.search-results a:focus-visible {
-  background: var(--soft);
-}
-.search-results a:focus-visible {
-  outline-offset: -3px;
-}
-.search-results small {
-  display: block;
-  color: var(--muted);
-  font-size: 11px;
-  margin-top: 3px;
-}
-.search-status,
-.search-hint {
-  color: var(--muted);
-  font-size: 11px;
-  margin: 12px 22px 0;
-}
-.search-hint {
-  margin-top: 6px;
-}
-@media (min-width: 1440px) {
-  .hero {
-    padding-top: 90px;
-    padding-bottom: 85px;
-  }
-}
-@media (max-width: 1100px) {
-  .search-trigger kbd {
-    display: none;
-  }
-  .docs-shell {
-    grid-template-columns: 190px minmax(0, 1fr);
-    gap: 35px;
-  }
-  .table-of-contents {
-    display: none;
-  }
   .desktop-nav {
     gap: 18px;
   }
@@ -1131,6 +978,10 @@ pre {
     display: block;
   }
   .mobile-nav summary {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
     list-style: none;
     border: 1px solid var(--line);
     border-radius: 7px;
@@ -1187,6 +1038,10 @@ pre {
   .mobile-menu .docs-nav {
     margin-top: 14px;
     font-size: 14px;
+  }
+  .mobile-menu .docs-nav a {
+    margin-left: 0;
+    padding: 10px 12px;
   }
 }
 @media (max-width: 500px) {
@@ -1254,35 +1109,6 @@ pre {
     padding: 24px 0;
     font-size: 11px;
   }
-  .workflow {
-    padding-block: 65px 50px;
-  }
-  .workflow-grid {
-    grid-template-columns: 1fr;
-    margin-top: 30px;
-  }
-  .workflow-item,
-  .workflow-item:first-child,
-  .workflow-item:last-child {
-    border: 0;
-    border-bottom: 1px solid var(--line);
-    padding: 30px 0;
-  }
-  .workflow-item:last-child {
-    border-bottom: 0;
-  }
-  .workflow-item h3 {
-    font-size: 27px;
-  }
-  .workflow-item p {
-    max-width: 480px;
-  }
-  .workflow-item code {
-    max-width: 300px;
-  }
-  .card-link {
-    padding-top: 24px;
-  }
   .detail-section {
     grid-template-columns: 1fr;
     gap: 35px;
@@ -1291,22 +1117,6 @@ pre {
   .lineage-image {
     transform: none;
     padding: 12px;
-  }
-  .open-section {
-    grid-template-columns: 1fr;
-    gap: 15px;
-    padding-block: 50px;
-  }
-  .open-section h2 {
-    font-size: 2.5rem;
-  }
-  .start-section {
-    flex-direction: column;
-    align-items: flex-start;
-    padding-block: 50px;
-  }
-  .start-actions {
-    text-align: left;
   }
   .site-footer {
     padding-top: 40px;
