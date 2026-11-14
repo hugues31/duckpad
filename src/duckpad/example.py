@@ -513,12 +513,22 @@ SELECT 'The report has no rows' AS problem FROM {{ source }} HAVING COUNT(*) = 0
                                         "format": ",",
                                         "scale": {"zero": False},
                                     },
-                                    "x2": {"field": "revenue"},
+                                    "x2": {
+                                        "field": "revenue",
+                                        "title": "Net revenue (point) to gross revenue",
+                                    },
                                 },
                             },
                             {
                                 "mark": {"type": "circle", "size": 200},
-                                "encoding": {"x": {"field": "net_revenue", "type": "quantitative"}},
+                                # Vega-Lite joins the distinct titles of an axis: every layer states the same one.
+                                "encoding": {
+                                    "x": {
+                                        "field": "net_revenue",
+                                        "type": "quantitative",
+                                        "title": "Net revenue (point) to gross revenue",
+                                    }
+                                },
                             },
                         ],
                     },
