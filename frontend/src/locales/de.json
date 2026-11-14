@@ -1670,6 +1670,7 @@
   "lineageImpact": "Auswirkung",
   "lineageLevels": "Herkunftsebenen",
   "lineagePickValue": "Einen Wert in Daten anklicken",
+  "lineageChooseColumn": "Spalte wählen",
   "lineageSources": "Quellen",
   "lineageExports": "Außerhalb des Projekts geschrieben",
   "lineageNoEndpoints": "Keine externen Ressourcen auf diesem Pfad",

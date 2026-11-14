@@ -1,5 +1,6 @@
 import {
   ArrowLeft,
+  ChevronDown,
   ChevronRight,
   Columns3,
   Copy,
@@ -42,7 +43,7 @@ import {
   roundedValue,
   type LineageMap,
 } from "./LineageSteps";
-import { ColumnLineage, ColumnList } from "./ColumnLineage";
+import { ColumnLineage, ColumnList, ColumnMenu } from "./ColumnLineage";
 import { ColumnImpact } from "./ColumnImpact";
 import { RowImpact } from "./RowImpact";
 
@@ -103,6 +104,9 @@ export default function LineagePanel({
     target.cell && explained?.cell === cellId(target.cell)
       ? explained.value
       : undefined;
+  // The column level lists the columns of the output until a value is explained.
+  const [choosing, setChoosing] = useState(false);
+  const chooser = useRef<HTMLButtonElement>(null);
   const [copied, setCopied] = useState(false);
   useEffect(() => {
     if (!copied) return;
@@ -206,21 +210,45 @@ export default function LineagePanel({
         </button>
         <ChevronRight size={13} aria-hidden="true" />
         <button
-          className={`lineage-crumb ${target.cell || target.column ? "" : "placeholder"}`}
-          disabled={!target.cell && !target.column}
+          ref={chooser}
+          className={`lineage-crumb ${target.cell ? "" : "chooser"}`}
           aria-current={target.column && !target.cell ? "page" : undefined}
+          aria-haspopup={target.cell ? undefined : "menu"}
+          aria-expanded={target.cell ? undefined : choosing}
+          title={
+            target.column && !target.cell ? t("lineageChooseColumn") : undefined
+          }
           onClick={() =>
-            onChange({
-              ...target,
-              cell: undefined,
-              column: target.cell?.column || target.column,
-              direction: "origin",
-            })
+            target.cell
+              ? onChange({
+                  ...target,
+                  cell: undefined,
+                  column: target.cell.column,
+                  direction: "origin",
+                })
+              : setChoosing((open) => !open)
           }
         >
           <Columns3 size={13} />
-          {target.cell?.column || target.column || t("columns")}
+          {target.cell?.column || target.column || t("lineageChooseColumn")}
+          {!target.cell && <ChevronDown size={12} aria-hidden="true" />}
         </button>
+        {choosing && !target.cell && (
+          <ColumnMenu
+            target={target}
+            anchor={chooser}
+            onChoose={(port, column) => {
+              setChoosing(false);
+              onChange({
+                node: target.node,
+                port,
+                column,
+                direction: target.direction,
+              });
+            }}
+            onClose={() => setChoosing(false)}
+          />
+        )}
         <ChevronRight size={13} aria-hidden="true" />
         {target.cell ? (
           <button

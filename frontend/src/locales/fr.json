@@ -1670,6 +1670,7 @@
   "lineageImpact": "Impact",
   "lineageLevels": "Niveaux de traçabilité",
   "lineagePickValue": "Cliquez sur une valeur dans Données",
+  "lineageChooseColumn": "Choisir une colonne",
   "lineageSources": "Sources",
   "lineageExports": "Écrit hors du projet",
   "lineageNoEndpoints": "Aucune ressource externe sur ce chemin",

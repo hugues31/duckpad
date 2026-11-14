@@ -67,6 +67,7 @@
 }
 /* The three levels: the reached ones are chips, the next ones are dashed invitations. */
 .lineage-breadcrumb {
+  position: relative;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -112,6 +113,63 @@ button.lineage-crumb:not(:disabled):hover {
   background: transparent;
   color: var(--lineage-muted);
   font-weight: 500;
+}
+/* The column level lists the columns of the output under the breadcrumb. */
+.lineage-crumb.chooser > svg:last-child {
+  margin: 0 -3px 0 -2px;
+}
+.lineage-crumb.chooser:not([aria-current]) {
+  font-weight: 500;
+}
+.lineage-column-menu {
+  position: absolute;
+  z-index: 6;
+  top: calc(100% - 4px);
+  right: 16px;
+  left: 16px;
+  max-height: min(60vh, 440px);
+  overflow: auto;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.lineage-column-menu:focus {
+  outline: none;
+}
+.lineage-column-menu > [role="status"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  color: var(--lineage-muted);
+  font-size: 12px;
+}
+.lineage-column-menu .notice {
+  margin: 4px;
+}
+.lineage-column-menu-port {
+  margin: 8px 10px 4px;
+  color: var(--lineage-muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+}
+.lineage-column-menu .lineage-column-link {
+  border-top: 0;
+  border-radius: 6px;
+}
+.lineage-column-menu .lineage-column-link:focus-visible {
+  background: color-mix(in srgb, var(--surface-alt) 60%, transparent);
+  outline-offset: -2px;
+}
+.lineage-column-menu .lineage-column-link[aria-checked="true"] {
+  background: var(--accent-soft);
+}
+.lineage-column-menu .lineage-column-link[aria-checked="true"] > svg {
+  color: var(--accent);
+  opacity: 1;
 }
 .lineage-body {
   flex: 1;
@@ -641,6 +699,9 @@ button.lineage-crumb:not(:disabled):hover {
   font-family: var(--mono);
   font-size: 11px;
   font-weight: 600;
+  /* A port is an identifier: it reads as written. */
+  letter-spacing: 0;
+  text-transform: none;
 }
 .lineage-column-list {
   overflow: hidden;

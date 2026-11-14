@@ -1670,6 +1670,7 @@
   "lineageImpact": "Impact",
   "lineageLevels": "Lineage levels",
   "lineagePickValue": "Click a value in Data",
+  "lineageChooseColumn": "Choose a column",
   "lineageSources": "Sources",
   "lineageExports": "Written outside the project",
   "lineageNoEndpoints": "No external resources on this path",

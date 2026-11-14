@@ -1,5 +1,12 @@
-import { ChevronRight, Filter, Loader2 } from "lucide-react";
-import { useEffect, useMemo } from "react";
+import { Check, ChevronRight, Filter, Loader2 } from "lucide-react";
+import {
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  type RefObject,
+} from "react";
+import { moveMenuFocus } from "./ActionMenu";
 import { withQuery } from "./api";
 import { countLabel, useT } from "./i18n";
 import type { LineageTarget, TableLineage } from "./lineageGraph";
@@ -68,6 +75,160 @@ export function useColumnOrigins(target: LineageTarget) {
   );
 }
 
+/** Where a column of the output comes from, in a few words. */
+function ColumnOrigin({ column }: { column: Column }) {
+  const t = useT();
+  const { snapshot } = useLoadedWorktree();
+  const name = (node: string) =>
+    displayNodeName(snapshot.node_names?.[node]?.slice(-1), node, t);
+  return (
+    <span className="muted small">
+      {column.status !== "complete"
+        ? t(
+            column.status === "python"
+              ? "lineageColumnPython"
+              : "lineageColumnIncomplete",
+          )
+        : column.kind === "computed"
+          ? t("lineageComputedHere")
+          : column.origin.kind === "source"
+            ? t("lineageCarriedFrom").replace(
+                "{source}",
+                `${name(column.origin.node)} · ${column.origin.column}`,
+              )
+            : t("lineageComputedIn").replace(
+                "{node}",
+                name(column.origin.node),
+              )}
+    </span>
+  );
+}
+
+/** The columns of the traced output, listed under the breadcrumb level which names one. */
+export function ColumnMenu({
+  target,
+  anchor,
+  onChoose,
+  onClose,
+}: {
+  target: LineageTarget;
+  anchor: RefObject<HTMLButtonElement | null>;
+  onChoose: (port: string, column: string) => void;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const menu = useRef<HTMLDivElement>(null);
+  const { data, error } = useColumnOrigins({
+    node: target.node,
+    port: target.port,
+    direction: target.direction,
+  });
+  const columns = data?.outputs.flatMap((output) =>
+    output.columns.map((column) => ({ port: output.port, column })),
+  );
+  const chosen = (port: string, column: Column) =>
+    column.name === target.column && (!target.port || port === target.port);
+  // One item stays in the tab order: the list scrolls, and keys must reach it.
+  const start = (
+    columns?.find((item) => chosen(item.port, item.column)) || columns?.[0]
+  )?.column.id;
+  const loaded = !!data;
+  useEffect(() => {
+    (
+      menu.current?.querySelector<HTMLElement>('button[tabindex="0"]') ||
+      menu.current
+    )?.focus();
+  }, [loaded]);
+  const close = useEffectEvent(onClose);
+  useEffect(() => {
+    const outside = (event: Event) => {
+      const element = event.target as Node;
+      if (
+        !menu.current?.contains(element) &&
+        !anchor.current?.contains(element)
+      )
+        close();
+    };
+    document.addEventListener("pointerdown", outside, true);
+    return () => document.removeEventListener("pointerdown", outside, true);
+  }, [anchor]);
+  return (
+    <div
+      ref={menu}
+      className="lineage-column-menu"
+      tabIndex={-1}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          // The panel closes on Escape: this one only closes the list.
+          event.preventDefault();
+          event.stopPropagation();
+          anchor.current?.focus();
+          onClose();
+        } else if (event.key === "Tab") onClose();
+        moveMenuFocus(event, [
+          ...menu.current!.querySelectorAll<HTMLElement>("button"),
+        ]);
+      }}
+    >
+      {error && (
+        <p className="notice error" role="alert">
+          {error}
+        </p>
+      )}
+      {!data && !error && (
+        <div role="status">
+          <Loader2 className="spin" size={16} />
+          {t("loading")}
+        </div>
+      )}
+      {data?.outputs.map((output) => (
+        <div key={output.port}>
+          {data.outputs.length > 1 && (
+            <div className="lineage-column-menu-port" aria-hidden="true">
+              {output.port}
+            </div>
+          )}
+          <Limit
+            status={output.status}
+            nodes={output.run_nodes}
+            tables={output.tables}
+          />
+          {!!output.columns.length && (
+            <div
+              role="menu"
+              aria-label={
+                data.outputs.length > 1
+                  ? `${t("lineageChooseColumn")}: ${output.port}`
+                  : t("lineageChooseColumn")
+              }
+            >
+              {output.columns.map((column) => (
+                <button
+                  className="lineage-column-link"
+                  role="menuitemradio"
+                  aria-checked={chosen(output.port, column)}
+                  tabIndex={column.id === start ? 0 : -1}
+                  key={column.id}
+                  onClick={() => {
+                    anchor.current?.focus();
+                    onChoose(output.port, column.name);
+                  }}
+                >
+                  <strong>{column.name}</strong>
+                  <ColumnOrigin column={column} />
+                  {chosen(output.port, column) && (
+                    <Check size={13} aria-hidden="true" />
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function ColumnList({
   target,
   onChange,
@@ -76,10 +237,7 @@ export function ColumnList({
   onChange: (target: LineageTarget) => void;
 }) {
   const t = useT();
-  const { snapshot } = useLoadedWorktree();
   const { data, error } = useColumnOrigins(target);
-  const name = (node: string) =>
-    displayNodeName(snapshot.node_names?.[node]?.slice(-1), node, t);
   return (
     <section className="lineage-columns" aria-label={t("columns")}>
       <h3>{t("columns")}</h3>
@@ -107,30 +265,12 @@ export function ColumnList({
                     node: target.node,
                     port: output.port,
                     column: column.name,
-                    direction: "origin",
+                    direction: target.direction,
                   })
                 }
               >
                 <strong>{column.name}</strong>
-                <span className="muted small">
-                  {column.status !== "complete"
-                    ? t(
-                        column.status === "python"
-                          ? "lineageColumnPython"
-                          : "lineageColumnIncomplete",
-                      )
-                    : column.kind === "computed"
-                      ? t("lineageComputedHere")
-                      : column.origin.kind === "source"
-                        ? t("lineageCarriedFrom").replace(
-                            "{source}",
-                            `${name(column.origin.node)} · ${column.origin.column}`,
-                          )
-                        : t("lineageComputedIn").replace(
-                            "{node}",
-                            name(column.origin.node),
-                          )}
-                </span>
+                <ColumnOrigin column={column} />
                 <ChevronRight size={13} aria-hidden="true" />
               </button>
             ))}

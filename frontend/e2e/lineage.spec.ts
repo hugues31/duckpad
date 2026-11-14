@@ -206,6 +206,52 @@ test("aggregate values paginate, change the followed row, and open contributor r
   await expect(data.locator("tbody tr")).toHaveCount(27);
 });
 
+test("the column level of the breadcrumb lists the columns to choose from", async ({
+  page,
+}) => {
+  await example(page);
+  await page.getByRole("button", { name: "Lineage", exact: true }).click();
+  const panel = page.getByRole("complementary", {
+    name: "Lineage",
+    exact: true,
+  });
+  const level = panel.locator(".lineage-crumb.chooser");
+  await expect(level).toHaveText("Choose a column");
+  await level.click();
+  const columns = panel.getByRole("menuitemradio");
+  // Opened on the node, the list covers each of its outputs and scrolls.
+  await expect(columns.filter({ hasText: "net_share" })).toContainText(
+    "Computed here",
+  );
+  await expect(columns.first()).toBeFocused();
+  const accessibility = await new AxeBuilder({ page })
+    .include(".lineage-panel")
+    .analyze();
+  expect(accessibility.violations).toEqual([]);
+  // Escape closes the list and leaves the panel open.
+  await page.keyboard.press("Escape");
+  await expect(columns).toHaveCount(0);
+  await expect(level).toBeFocused();
+  await level.click();
+  await columns.filter({ hasText: "net_share" }).click();
+  await expect(level).toHaveText("net_share");
+  await expect(panel.locator(".lineage-column-summary")).toContainText(
+    "3 calculations",
+  );
+  // Another column is one choice away, in the direction already shown.
+  const impact = panel.getByRole("button", { name: "Impact", exact: true });
+  await impact.click();
+  await level.click();
+  await expect(columns.filter({ hasText: "net_share" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  await columns.filter({ hasText: "net_revenue" }).click();
+  await expect(level).toHaveText("net_revenue");
+  await expect(impact).toHaveAttribute("aria-pressed", "true");
+  await expect(panel).toContainText("Renaming net_revenue");
+});
+
 test("table Origin and Impact work before a run and include computed variables", async ({
   page,
 }) => {
