@@ -55,7 +55,7 @@ def values(tracer, step, expressions):
     """Evaluate operands over the exact captured row/group, never over just one page."""
     names = [f"_dp_operand_{i}" for i in range(len(expressions))]
     extra = [e.as_(name, quoted=True) for e, name in zip(expressions, names, strict=True)]
-    conditions = [step.matching.copy()]
+    conditions = [tracer.matches(step.names)]
     if step.tree.args.get("group"):
         for index, (key, stored) in enumerate(
             zip(step.tree.args["group"].expressions, tracer.dataset.groups.values(), strict=True)

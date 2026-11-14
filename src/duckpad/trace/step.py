@@ -10,12 +10,46 @@ from . import builders as b
 from .coverage import Coverage
 
 
+class Branch(NamedTuple):
+    """Contribution records of one column of one relation."""
+
+    query: exp.Select
+    dataset: str
+    column: str
+    # Whether each stored row yields at most one record.
+    once: bool
+
+
+@dataclass(frozen=True)
+class Cells:
+    """Contribution records of an explained cell, as one query per column of a relation."""
+
+    branches: tuple[Branch, ...] = ()
+
+    def __bool__(self):
+        return bool(self.branches)
+
+    def __str__(self):
+        """Every record as SQL, empty when there is none."""
+        return sql(b.union_all(branch.query.copy() for branch in self.branches)) if self.branches else ""
+
+    @property
+    def exact(self):
+        """Whether no cell can be yielded twice, so that its records need no deduplication.
+
+        A branch repeats a row when its step joins relations. Two branches repeat a cell
+        when they read the same column of one relation, as both sides of a self-join do.
+        """
+        cells = {(branch.dataset, branch.column) for branch in self.branches}
+        return len(cells) == len(self.branches) and all(branch.once for branch in self.branches)
+
+
 class Trace(NamedTuple):
-    """Provenance queries of one output column: its contributions, the cells selecting them,
+    """Provenance of one output column: its contributions, the cells selecting them,
     and the clauses lineage groups distinct values by, as (FROM clause, value expression)."""
 
-    contributions: exp.Query | None
-    context: exp.Query | None
+    contributions: Cells
+    context: Cells
     distinct: tuple[str, str] | None = None
 
 
@@ -65,8 +99,8 @@ class Step:
     expressions: list
     # Every output expression, aliased to a positional name.
     projections: list
-    # Positional output values equal the explained row's values.
-    matching: exp.Expression
+    # The positional names, which `TraceQuery.matches` compares to the explained row's values.
+    names: list
     # The rows of the step before grouping: its FROM, joins and WHERE, without projection.
     base: exp.Select
     # Columns of the target expression, without those of its FILTER clauses.
@@ -93,7 +127,7 @@ class Step:
             target=target,
             expressions=expressions,
             projections=[e.as_(name, quoted=True) for e, name in zip(expressions, names, strict=True)],
-            matching=tracer.matches(names),
+            names=names,
             base=b.without(tree, "group", "having", "order", "limit", "offset", "distinct", "qualify"),
             columns=columns,
             conditions=conditions,

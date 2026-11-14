@@ -10,21 +10,77 @@ import threading
 from sqlglot import exp
 
 from .partition_lineage import PartitionLineage
-from .sqlast import explained
+from .sqlast import explained, sql
 from .trace import Coverage, TraceQuery
 from .trace.describe import Display, aggregate_operation
-from .trace.query import render
 from .util import Problem, clean, qi, uid
 
 PAGE_SIZE = 5
 INTERRUPTED = "Lineage interrupted by recalculation. Select a cell in the new result."
+# Up to this many rows, a page reads the first records of each branch instead of sorting every cell.
+BRANCH_ROWS = 100_000
 
 
 def selected_operand(tracer, operand):
     part = next((part for key, _, part in tracer.operands if key == operand), None)
     if part is None:
         raise Problem("Unknown calculation operand", 422)
-    return render(part.contributions), render(part.context), part.distinct
+    return part
+
+
+def union(queries):
+    return " UNION ALL ".join(queries)
+
+
+def record(row):
+    """A contribution record, in the column order `TraceQuery.contribution` projects."""
+    return {
+        "dataset": row[0],
+        "node": row[1],
+        "port": row[2],
+        "row": row[3],
+        "column": row[4],
+        "value": json.loads(row[5]) if row[5] is not None else None,
+        "source": row[6],
+    }
+
+
+def page_statements(cells, offset, page_size):
+    """The statements reading a page of records, plus one row telling whether more follow,
+    and counting every record."""
+    offset, page_size = int(offset), int(page_size)
+    branches = [sql(branch.query) for branch in cells.branches]
+    records = union(branches)
+    # A cell is identified by these columns: the other columns of its record depend on them.
+    # A branch holds one column of one relation, so its own records are ordered by row alone.
+    cell = "dataset, row_id, column_name"
+    order = "row_id" if len(branches) == 1 else cell
+    distinct = "" if cells.exact else "DISTINCT "
+    rows = f"LIMIT {page_size + 1} OFFSET {offset}"
+    reach = offset + page_size + 1
+    if cells.exact and reach <= BRANCH_ROWS:
+        # The first rows of the page order are among the first rows of each branch.
+        first = union(
+            f"(SELECT * FROM ({branch}) branch ORDER BY row_id LIMIT {reach})" for branch in branches
+        )
+        page = f"SELECT * FROM ({first}) contributions ORDER BY {order} {rows}"
+    else:
+        # Only cell identities are deduplicated and sorted; values are formatted for the page alone.
+        identities = f"SELECT {distinct}{order} FROM ({records}) cells ORDER BY {order} {rows}"
+        page = (
+            f"SELECT {distinct}* FROM ({records}) contributions "
+            f"WHERE ({order}) IN ({identities}) ORDER BY {order}"
+        )
+    counted = records if cells.exact else f"SELECT DISTINCT {cell} FROM ({records}) cells"
+    return page, f"SELECT COUNT(*) FROM ({counted}) counted"
+
+
+def first_of_each(contributions, limit):
+    """The first record of each column in a complete page, as `Lineage.first_inputs` reads them."""
+    found = {}
+    for item in contributions:
+        found.setdefault((item["dataset"], item["column"]), dict(item))
+    return list(found.values())[:limit]
 
 
 def incomplete(response, warning):
@@ -200,86 +256,84 @@ class Lineage:
                 tree = tracer.normalize(dataset)
                 # Operand pages and contributing rows only need their own contributions.
                 summary = not context_values and operand is None and rows_dataset is None
-                contribution_sql, selection_sql, distinct = tracer.trace(
-                    tree, columns.index(column), context_values, operand=operand
-                )
+                trace = tracer.trace(tree, columns.index(column), context_values, operand=operand)
                 if operand is not None:
-                    contribution_sql, selection_sql, distinct = selected_operand(tracer, operand)
+                    trace = selected_operand(tracer, operand)
+                contributions, selection, distinct = trace
                 response["expression"] = tracer.expression
                 response["kind"] = tracer.kind
-                if summary:
-                    response["input_order"] = [
-                        {
-                            "dataset": tracer.sources[c.table].id,
-                            "column": tracer.original_column(tracer.sources[c.table], c.name),
-                        }
-                        for c in tracer.referenced(tracer.step.columns if tracer.step else [])
-                    ]
-                if contribution_sql and summary:
-                    first_inputs = (
-                        f"SELECT * FROM ({contribution_sql}) c QUALIFY "
-                        "row_number() OVER (PARTITION BY dataset, column_name ORDER BY row_id)=1"
-                    )
-                    response["first_inputs"] = self.page(
-                        cursor,
-                        first_inputs,
-                        0,
-                        max(1, sum(len(d.columns) for d in tracer.sources.values())),
-                    )["contributions"]
-                if distinct and not context_values:
-                    if group is None:
-                        response.update(self.distinct_groups(cursor, distinct, offset, page_size))
-                    else:
-                        contribution_sql, selection_sql, _ = tracer.trace(
-                            tree, columns.index(column), False, json.loads(group), operand
-                        )
-                        if operand is not None:
-                            contribution_sql, selection_sql, _ = selected_operand(tracer, operand)
-                        response.update(self.page(cursor, contribution_sql, offset, page_size))
-                        response["group"] = json.loads(group)
-                else:
-                    response.update(self.page(cursor, contribution_sql, offset, page_size))
-                selection = (
-                    self.page(cursor, selection_sql, 0, page_size)
-                    if selection_sql
-                    else {"total": 0, "contributions": []}
-                )
-                response.update(
-                    context_total=selection["total"],
-                    context=selection["contributions"],
-                    tables=[
-                        {"dataset": data.id, "node": data.node, "port": data.port, "columns": data.columns}
-                        for data in tracer.sources.values()
-                    ],
-                )
-                if summary:
-                    response["calculation"] = tracer.describe(response)
-                    if tracer.operands and tracer.step is not None:
-                        display = Display(tracer, tracer.step.tree)
-                        response["operands"] = [
-                            {
-                                "id": key,
-                                "formula": explained(display(expression)),
-                                "value": clean(tracer.operand_values[key]),
-                                "aggregate": expression.find(exp.AggFunc, exp.Window) is not None,
-                                "operation": aggregate_operation(expression) or "expression",
-                                **(
-                                    self.distinct_groups(cursor, part.distinct, 0, PAGE_SIZE)
-                                    if part.distinct
-                                    else self.page(cursor, render(part.contributions), 0, PAGE_SIZE)
-                                ),
-                            }
-                            for key, expression, part in tracer.operands
-                        ]
-                if rows_dataset is None:
-                    response["partition_groups"] = self.partitions.groups(
-                        context, cursor, contribution_sql, tracer.sources
-                    )
-                else:
+                # COUNT(DISTINCT ...) pages its distinct values, then the rows of a chosen one.
+                grouped = bool(distinct) and not context_values
+                chosen = contributions
+                if grouped and group is not None:
+                    trace = tracer.trace(tree, columns.index(column), False, json.loads(group), operand)
+                    if operand is not None:
+                        trace = selected_operand(tracer, operand)
+                    chosen, selection, _ = trace
+                if rows_dataset is not None:
                     data = next((d for d in tracer.sources.values() if d.id == rows_dataset), None)
-                    if data is None or not contribution_sql:
+                    if data is None or not chosen:
                         raise Problem("This dataset does not contribute to the selected value", 422)
-                    response = self.rows(cursor, data, contribution_sql, offset, page_size, search)
+                    response = self.rows(cursor, data, chosen, offset, page_size, search)
+                else:
+                    if summary:
+                        response["input_order"] = [
+                            {
+                                "dataset": tracer.sources[c.table].id,
+                                "column": tracer.original_column(tracer.sources[c.table], c.name),
+                            }
+                            for c in tracer.referenced(tracer.step.columns if tracer.step else [])
+                        ]
+                    if not grouped:
+                        page = self.page(cursor, chosen, offset, page_size)
+                    elif group is None:
+                        page = self.distinct_groups(cursor, distinct, offset, page_size)
+                    else:
+                        page = self.page(cursor, chosen, offset, page_size)
+                        page["group"] = json.loads(group)
+                    if contributions and summary:
+                        columns_read = max(1, sum(len(d.columns) for d in tracer.sources.values()))
+                        if not grouped and not offset and page["total"] == len(page["contributions"]):
+                            response["first_inputs"] = first_of_each(page["contributions"], columns_read)
+                        else:
+                            response["first_inputs"] = self.first_inputs(cursor, contributions, columns_read)
+                    response.update(page)
+                    selected = self.page(cursor, selection, 0, page_size)
+                    response.update(
+                        context_total=selected["total"],
+                        context=selected["contributions"],
+                        tables=[
+                            {
+                                "dataset": data.id,
+                                "node": data.node,
+                                "port": data.port,
+                                "columns": data.columns,
+                            }
+                            for data in tracer.sources.values()
+                        ],
+                    )
+                    if summary:
+                        response["calculation"] = tracer.describe(response)
+                        if tracer.operands and tracer.step is not None:
+                            display = Display(tracer, tracer.step.tree)
+                            response["operands"] = [
+                                {
+                                    "id": key,
+                                    "formula": explained(display(expression)),
+                                    "value": clean(tracer.operand_values[key]),
+                                    "aggregate": expression.find(exp.AggFunc, exp.Window) is not None,
+                                    "operation": aggregate_operation(expression) or "expression",
+                                    **(
+                                        self.distinct_groups(cursor, part.distinct, 0, PAGE_SIZE)
+                                        if part.distinct
+                                        else self.page(cursor, part.contributions, 0, PAGE_SIZE)
+                                    ),
+                                }
+                                for key, expression, part in tracer.operands
+                            ]
+                    response["partition_groups"] = self.partitions.groups(
+                        context, cursor, chosen, tracer.sources
+                    )
             self.partitions.annotate(context, response)
             if (
                 canceled.is_set()
@@ -326,31 +380,36 @@ class Lineage:
         }
 
     @staticmethod
-    def rows(cursor, dataset, query, offset, page_size, search):
+    def rows(cursor, dataset, cells, offset, page_size, search):
         """Page whole contributing rows, recomputed from witnesses and never stored."""
         projection = ", ".join(qi(dataset.stored(c["name"])) for c in dataset.columns)
-        selected = f"rowid IN (SELECT row_id FROM ({query}) c WHERE dataset=?)"
-        parameters = [dataset.id]
-        count = cursor.execute(
-            f"SELECT count(*) FROM {qi(dataset.relation)} WHERE {selected}", parameters
-        ).fetchone()[0]
-        total = count
-        if search:
-            selected += (
-                " AND ("
-                + " OR ".join(
+        branches = [branch for branch in cells.branches if branch.dataset == dataset.id]
+        count = total = 0
+        records = []
+        if branches:
+            identities = union(f"SELECT row_id FROM ({sql(branch.query)}) branch" for branch in branches)
+            if len(branches) > 1 or not branches[0].once:
+                identities = f"SELECT DISTINCT row_id FROM ({identities}) cells"
+            count = total = cursor.execute(f"SELECT count(*) FROM ({identities}) counted").fetchone()[0]
+            parameters = []
+            if search:
+                matching = " OR ".join(
                     f"CAST({qi(dataset.stored(c['name']))} AS VARCHAR) ILIKE ?" for c in dataset.columns
                 )
-                + ")"
-            )
-            parameters += [f"%{search}%"] * len(dataset.columns)
-            total = cursor.execute(
-                f"SELECT count(*) FROM {qi(dataset.relation)} WHERE {selected}", parameters
-            ).fetchone()[0]
-        records = cursor.execute(
-            f"SELECT rowid, {projection} FROM {qi(dataset.relation)} WHERE {selected} ORDER BY rowid LIMIT ? OFFSET ?",
-            [*parameters, page_size, max(0, offset)],
-        ).fetchall()
+                identities = (
+                    f"SELECT rowid AS row_id FROM {qi(dataset.relation)} "
+                    f"WHERE rowid IN ({identities}) AND ({matching})"
+                )
+                parameters = [f"%{search}%"] * len(dataset.columns)
+                filtered = f"SELECT count(*) FROM ({identities}) counted"
+                total = cursor.execute(filtered, parameters).fetchone()[0]
+            # Only identities are sorted to find the page; whole rows are read for that page alone.
+            records = cursor.execute(
+                f"SELECT rowid, {projection} FROM {qi(dataset.relation)} WHERE rowid IN "
+                f"(SELECT row_id FROM ({identities}) selected ORDER BY row_id LIMIT ? OFFSET ?) "
+                "ORDER BY rowid",
+                [*parameters, page_size, max(0, offset)],
+            ).fetchall()
         return {
             "id": dataset.id,
             "node": dataset.node,
@@ -363,26 +422,30 @@ class Lineage:
         }
 
     @staticmethod
-    def page(cursor, query, offset, page_size=PAGE_SIZE):
-        if not query:
-            return {"total": 0, "contributions": []}
-        query = f"SELECT DISTINCT * FROM ({query}) contributions"
-        total = cursor.execute(f"SELECT COUNT(*) FROM ({query}) counted").fetchone()[0]
+    def first_inputs(cursor, cells, limit):
+        """The first record of each contributing column, from the first record of each branch."""
+        firsts = union(
+            f"(SELECT * FROM ({sql(branch.query)}) branch ORDER BY row_id LIMIT 1)"
+            for branch in cells.branches
+        )
         rows = cursor.execute(
-            query + f" ORDER BY dataset, row_id, column_name LIMIT {page_size} OFFSET ?", [max(0, offset)]
+            f"SELECT * FROM ({firsts}) firsts "
+            "QUALIFY row_number() OVER (PARTITION BY dataset, column_name ORDER BY row_id)=1 "
+            f"ORDER BY dataset, row_id, column_name LIMIT {limit}"
         ).fetchall()
-        return {
-            "total": total,
-            "contributions": [
-                {
-                    "dataset": r[0],
-                    "node": r[1],
-                    "port": r[2],
-                    "row": r[3],
-                    "column": r[4],
-                    "value": json.loads(r[5]) if r[5] is not None else None,
-                    "source": r[6],
-                }
-                for r in rows
-            ],
-        }
+        return [record(row) for row in rows]
+
+    @staticmethod
+    def page(cursor, cells, offset, page_size=PAGE_SIZE):
+        """One page of contribution records, each cell once, and their total."""
+        if not cells:
+            return {"total": 0, "contributions": []}
+        offset = max(0, offset)
+        page, count = page_statements(cells, offset, page_size)
+        rows = cursor.execute(page).fetchall()
+        if len(rows) > page_size or (offset and not rows):
+            total = cursor.execute(count).fetchone()[0]
+        else:
+            # The page ends with the last record: counting them all again is not needed.
+            total = offset + len(rows)
+        return {"total": total, "contributions": [record(row) for row in rows[:page_size]]}

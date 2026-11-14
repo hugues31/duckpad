@@ -93,23 +93,36 @@ costs. This is an analytical, unindexed workload, not an OLTP engine ranking.
 
 ## Interpreting profiles
 
-Use `Lineage.page` in `src/duckpad/lineage.py` to locate exact count, DISTINCT and
-ordered-page work. It runs the contribution query for a count and again for a
-page, and repeats the process for selection context on every request. Large
-groups and deep OFFSETs are intentional stress cases. `TraceQuery` in
-`src/duckpad/trace/query.py` constructs the queries; `AggregateVisitor` in
-`src/duckpad/trace/aggregate.py` selects the group and excludes NULL amounts.
+Use `page_statements` in `src/duckpad/lineage.py` to locate count, DISTINCT and
+ordered-page work. `Lineage.page` runs the page statement, then the count
+statement only when more records follow the page, for the contributions and
+again for the selection context. Records are deduplicated only when a cell can
+repeat: a step joining relations, or two branches reading the same column of one
+relation (`Cells.exact` in `src/duckpad/trace/step.py`). Otherwise a page reads
+the first rows of each branch in row order, up to `BRANCH_ROWS` rows. A deeper
+page, and any page that deduplicates, sorts cell identities only, then formats
+the values of that page. Large groups and deep OFFSETs are intentional stress
+cases. `TraceQuery` in `src/duckpad/trace/query.py` constructs the queries;
+`AggregateVisitor` in `src/duckpad/trace/aggregate.py` selects the group and
+excludes NULL amounts.
+
+A row-preserving step with captured witnesses joins the explained row once to
+its few candidate rows. Without witnesses every candidate row is compared with
+one scalar subquery per column: DuckDB plans that form more slowly, but filters
+many rows faster.
 
 Candidate experiments include caching counts/candidate identities for an
-immutable dataset generation, deduplicating narrow identity tuples before
-formatting JSON values, and avoiding DISTINCT only where uniqueness is proven.
-Invalidate any cache on recomputation and preserve context, NULL and duplicate
-semantics. Compare deep OFFSET with the first page before prioritizing keyset
-pagination: repeated counting may dominate both pages.
+immutable dataset generation, and selecting the rows of a joined step by
+identity so that its records need no deduplication. Invalidate any cache on
+recomputation and preserve context, NULL and duplicate semantics. Compare deep
+OFFSET with the first page before prioritizing keyset pagination: sorting the
+identities dominates a deep page.
 
-For small inputs, inspect Python profiles as well as SQL. Partition annotation
-currently looks up run metadata for each contribution/context cell, even for
-unpartitioned data; request-local reuse is a separate candidate from SQL work.
+For small inputs, inspect Python profiles as well as SQL: once the statements
+are short, parsing the step and building its queries take about as long as
+executing them. Partition annotation looks up run metadata for each
+contribution/context cell of partitioned data; request-local reuse is a separate
+candidate from SQL work.
 
 Source-level filtering and projection are hypotheses to test against the full
 materialization pipeline. Fusing flow nodes changes which intermediate outputs

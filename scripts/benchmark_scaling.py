@@ -23,6 +23,7 @@ import duckdb
 import psutil
 
 from duckpad.builtin_templates import BUILTINS
+from duckpad.lineage import PAGE_SIZE, page_statements
 from duckpad.services import Services
 from duckpad.trace import TraceQuery
 from duckpad.util import dumps, literal
@@ -170,12 +171,11 @@ def lineage_profiles(engine, worktree, dataset_id, row):
         tracer = TraceQuery(context, cursor, data, row)
         contribution, selection, _ = tracer.trace(tracer.normalize(data), 1)
         profiles = {}
-        for name, query in (("contributions", contribution), ("context", selection)):
-            distinct = f"SELECT DISTINCT * FROM ({query}) q"
-            profiles[name + "_count"] = sql_profile(cursor, f"SELECT count(*) FROM ({distinct}) q")
-            profiles[name + "_page"] = sql_profile(
-                cursor, distinct + " ORDER BY dataset, row_id, column_name LIMIT 5"
-            )
+        for name, cells in (("contributions", contribution), ("context", selection)):
+            # The statements Lineage.page executes for the first page.
+            page, count = page_statements(cells, 0, PAGE_SIZE)
+            profiles[name + "_count"] = sql_profile(cursor, count)
+            profiles[name + "_page"] = sql_profile(cursor, page)
         return profiles
 
 
