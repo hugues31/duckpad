@@ -3,7 +3,7 @@ const motion = matchMedia("(prefers-reduced-motion: reduce)");
 // Animate milestones in a guide without delaying its reading text.
 document
   .querySelectorAll<HTMLElement>(
-    ".prose > h2, .prose > h3, .prose > pre, .prose > table, .prose > p:has(> img), .doc-bottom",
+    ".prose > h2, .prose > h3, .prose > .code-block, .prose > table, .prose > p:has(> img), .doc-bottom",
   )
   .forEach((element) => {
     element.dataset.reveal = element.querySelector("img") ? "media" : "";
@@ -42,7 +42,7 @@ function setup() {
       for (const entry of entries) {
         if (!entry.isIntersecting) continue;
         const element = entry.target as HTMLElement;
-        if (element.matches(".feature-card, .workflow-item")) {
+        if (element.matches(".feature-card, .audience-card, .value-card")) {
           const index = groups.get(element.parentElement) || 0;
           element.style.setProperty(
             "--reveal-delay",

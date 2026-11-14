@@ -82,7 +82,7 @@ test("keeps an empty successful response instead of restoring removed releases",
 });
 
 test("renders release Markdown without active HTML and scopes heading links per version", async () => {
-  const html = await renderReleaseNotes(
+  const { html } = await renderReleaseNotes(
     {
       tag: "v1.0.0",
       name: "Duckpad v1.0.0",
@@ -96,4 +96,85 @@ test("renders release Markdown without active HTML and scopes heading links per 
   assert.match(html, /<h3 id="release-v1.0.0-features">/);
   assert.match(html, /href="#release-v1.0.0-features"/);
   assert.doesNotMatch(html, /<script|onerror|javascript:|<h2|Duckpad v1.0.0/);
+});
+
+test("structures generated notes into groups, scopes, links and migration notes", async () => {
+  const commit = (sha: string) =>
+    `([${sha.slice(0, 7)}](https://github.com/hugues31/duckpad/commit/${sha}))`;
+  const notes = await renderReleaseNotes(
+    {
+      tag: "v1.1.0",
+      name: "Duckpad v1.1.0",
+      publishedAt: release.published_at,
+      prerelease: false,
+      body: [
+        "## Duckpad v1.1.0",
+        "",
+        "````sh",
+        "pip install duckpad==1.1.0",
+        "````",
+        "",
+        "### Breaking changes",
+        "",
+        `- **cli:** Rename the home option (#12) ${commit("a".repeat(40))}`,
+        "",
+        " > ",
+        " > Pass --home <directory> instead.",
+        "",
+        "### Features",
+        "",
+        `- **flow:** Add \`muted\` nodes (#13) ${commit("b".repeat(40))}`,
+        "",
+        `- Speed up start-up ${commit("c".repeat(40))}`,
+        "",
+        "### Maintenance",
+        "",
+        `- **deps:** Bump a dependency ${commit("d".repeat(40))}`,
+        "",
+        "**Full changelog:** [v1.0.0...v1.1.0](https://github.com/hugues31/duckpad/compare/v1.0.0...v1.1.0)",
+        "",
+        "The wheel includes the web interface; Node.js is not required. Download the wheel,",
+        "source archive, and SHA-256 checksums from the assets below.",
+      ].join("\n"),
+    },
+    "release-v1.1.0",
+  );
+  assert.equal(notes.install, "pip install duckpad==1.1.0");
+  assert.deepEqual(notes.compare, {
+    href: "https://github.com/hugues31/duckpad/compare/v1.0.0...v1.1.0",
+    label: "v1.0.0...v1.1.0",
+  });
+  assert.deepEqual(
+    notes.groups.map(({ kind, count }) => [kind, count]),
+    [
+      ["breaking-changes", 1],
+      ["features", 2],
+      ["maintenance", 1],
+    ],
+  );
+  const { html } = notes;
+  assert.match(html, /<section class="release-group" data-kind="features">/);
+  assert.match(
+    html,
+    /<details class="release-group" data-kind="maintenance"><summary class="release-group-summary"><h3/,
+  );
+  assert.match(
+    html,
+    /<span class="release-scope">flow<\/span> Add <code>muted<\/code> nodes/,
+  );
+  assert.match(
+    html,
+    /<a class="release-pr" href="https:\/\/github.com\/hugues31\/duckpad\/pull\/13" aria-label="Pull request #13">#13<\/a>/,
+  );
+  assert.match(html, /<a href="[^"]+\/commit\/b{40}" class="release-commit"/);
+  assert.doesNotMatch(
+    html,
+    /\(<a|<\/a>\)|pip install|Full changelog|The wheel/,
+  );
+  // The migration note belongs to its breaking change, with options intact.
+  assert.match(
+    html,
+    /Rename the home option[\s\S]*<blockquote class="release-note">[\s\S]*--home[\s\S]*<\/blockquote>\s*<\/li>/,
+  );
+  assert.match(html, /<span class="release-count">2<\/span>/);
 });

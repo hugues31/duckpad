@@ -105,14 +105,52 @@ const canonical = Astro.site
           <ThemeToggle />
           <details class="mobile-nav">
             <summary aria-label="Navigation menu">
-              <span aria-hidden="true">☰</span>
+              <svg
+                class="menu-open"
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.9"
+                stroke-linecap="round"
+                aria-hidden="true"
+              >
+                <path d="M4 7h16M4 12h16M4 17h16" />
+              </svg>
+              <svg
+                class="menu-close"
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.9"
+                stroke-linecap="round"
+                aria-hidden="true"
+              >
+                <path d="m6 6 12 12M18 6 6 18" />
+              </svg>
             </summary>
-            <nav aria-label="Mobile navigation">
-              <a href={url("#features")}>Why Duckpad</a>
-              <a href={url("docs/quickstart/")}>Documentation</a>
-              <a href={url("releases/")}>Releases</a>
-              <GitHubStars />
-            </nav>
+            <div class="mobile-menu">
+              <nav class="mobile-site-nav" aria-label="Mobile navigation">
+                <a href={url("#features")}>Why Duckpad</a>
+                <a
+                  href={url("docs/quickstart/")}
+                  aria-current={docs ? "true" : undefined}
+                >
+                  Documentation
+                </a>
+                <a
+                  href={url("releases/")}
+                  aria-current={releases ? "page" : undefined}
+                >
+                  Releases
+                </a>
+                <GitHubStars />
+              </nav>
+              <slot name="menu" />
+            </div>
           </details>
         </div>
       </div>
@@ -142,6 +180,8 @@ const canonical = Astro.site
       <small>Built with DuckDB. Made for the open-source community.</small>
     </footer>
     <script>
+      // Wrap code blocks before motion picks the elements it reveals.
+      import "../lib/code-blocks";
       import "../lib/motion";
 
       document
@@ -158,27 +198,19 @@ const canonical = Astro.site
               menu.open = false;
             }),
           );
+          // Show the current guide when the menu opens on a documentation page.
+          menu.addEventListener("toggle", () => {
+            const panel = menu.querySelector<HTMLElement>(".mobile-menu");
+            const current = panel?.querySelector<HTMLElement>(
+              ".docs-nav [aria-current='page']",
+            );
+            if (!menu.open || !panel || !current) return;
+            const bounds = current.getBoundingClientRect();
+            const view = panel.getBoundingClientRect();
+            if (bounds.bottom > view.bottom - 24)
+              panel.scrollTop += bounds.top - view.top - view.height / 3;
+          });
         });
-      document.querySelectorAll<HTMLElement>("pre").forEach((pre) => {
-        const code = pre.querySelector("code");
-        if (!code) return;
-        const button = document.createElement("button");
-        button.className = "copy-code";
-        button.textContent = "Copy";
-        button.setAttribute("aria-label", "Copy code");
-        button.addEventListener("click", async () => {
-          try {
-            await navigator.clipboard.writeText(code.textContent || "");
-            button.textContent = "Copied";
-          } catch {
-            button.textContent = "Select to copy";
-          }
-          setTimeout(() => {
-            button.textContent = "Copy";
-          }, 2000);
-        });
-        pre.append(button);
-      });
     </script>
   </body>
 </html>

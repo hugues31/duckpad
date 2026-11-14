@@ -110,6 +110,372 @@
   }
 }
 
+/* Who Duckpad is for, by the tools people already use. */
+.audience {
+  padding-block: 40px 100px;
+}
+.audience-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 44px;
+}
+.audience-card {
+  display: flex;
+  flex-direction: column;
+  padding: 26px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.audience-origin {
+  align-self: flex-start;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--soft);
+  color: var(--blue);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+.audience-card h3 {
+  margin-top: 18px;
+  font-size: 23px;
+  letter-spacing: -0.04em;
+}
+.audience-card dl {
+  margin: 20px 0 26px;
+}
+.audience-card dt {
+  margin-top: 16px;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.audience-card dd {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+.audience-card .text-link,
+.node-links .text-link {
+  margin-top: auto;
+  gap: 8px;
+  color: var(--blue);
+  font-size: 13px;
+}
+.audience-card .text-link span,
+.node-links .text-link span {
+  display: inline-block;
+}
+.not-for {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 24px;
+  margin-top: 14px;
+  padding: 22px 26px;
+  border: 1px dashed var(--line);
+  border-radius: 14px;
+}
+.not-for h3 {
+  font-size: 15px;
+  letter-spacing: -0.02em;
+  line-height: 1.5;
+}
+.not-for ul {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 32px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.not-for b {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+/* A node written as a SQL file, next to what Duckpad generates from it. */
+.node-section {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 64px;
+  align-items: center;
+  padding-block: 40px 110px;
+}
+.audience h2,
+.node-copy h2,
+.values-heading h2,
+.start-section h2 {
+  font-size: clamp(2.3rem, 3.6vw, 3.5rem);
+}
+.node-copy > p:not(.eyebrow) {
+  margin-top: 22px;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.8;
+}
+.directive-list {
+  display: grid;
+  gap: 8px;
+  margin: 26px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.directive-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.directive-list code {
+  justify-self: start;
+  padding: 3px 8px;
+  border-radius: 5px;
+  background: var(--soft);
+  color: var(--blue);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.directive-list span {
+  color: var(--muted);
+}
+.node-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 30px;
+  margin-top: 26px;
+}
+.code-window {
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid #344259;
+  border-radius: 12px;
+  background: #0a0c10;
+  box-shadow: 0 30px 70px #132e6124;
+}
+.code-window .terminal-bar {
+  background: #162032;
+}
+.code-window pre {
+  margin: 0;
+  padding: 22px 24px;
+  border-radius: 0;
+  font-size: 13px;
+  line-height: 1.75;
+}
+.code-window figcaption {
+  padding: 12px 20px;
+  border-top: 1px solid #344259;
+  background: #162032;
+  color: #bcc9df;
+  font-size: 12px;
+}
+
+/* What the project stands for. */
+.values {
+  padding-block: 70px 90px;
+  border-top: 1px solid var(--line);
+}
+.values-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 40px;
+}
+.values-heading > p {
+  max-width: 380px;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.8;
+}
+.values-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  margin: 46px 0 0;
+  padding: 0;
+  list-style: none;
+  border-block: 1px solid var(--line);
+}
+.value-card {
+  padding: 30px 26px 34px;
+  border-left: 1px solid var(--line);
+}
+.value-card:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+.value-card svg {
+  color: var(--blue);
+}
+.value-card h3 {
+  margin-top: 20px;
+  font-size: 19px;
+  letter-spacing: -0.03em;
+  line-height: 1.25;
+}
+.value-card p {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+/* A concrete first step. */
+.start-section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 420px);
+  gap: 40px 70px;
+  align-items: center;
+  padding-block: 70px;
+  background-color: #1559df;
+  background-image: var(--blue-gradient);
+  color: white;
+}
+.start-section .eyebrow {
+  color: #fff;
+}
+.start-copy > p:not(.eyebrow) {
+  max-width: 560px;
+  margin-top: 22px;
+  font-size: 15px;
+  line-height: 1.8;
+}
+.start-copy .start-note {
+  font-size: 13px;
+  color: #dfe8ff;
+}
+.start-note code {
+  white-space: nowrap;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #ffffff1f;
+  font-size: 12px;
+}
+.start-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 16px;
+}
+.start-actions .install-terminal {
+  max-width: none;
+  margin: 0;
+  border-color: #ffffff38;
+  box-shadow: 0 20px 50px #0a1c4d55;
+}
+.start-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px 26px;
+  font-size: 13px;
+  font-weight: 650;
+}
+.start-links a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+@media (max-width: 1100px) {
+  .audience-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .audience-card dl {
+    display: grid;
+    grid-template-columns: 150px minmax(0, 1fr);
+    gap: 4px 20px;
+  }
+  .audience-card dt,
+  .audience-card dd {
+    margin-top: 10px;
+  }
+  .node-section {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 40px;
+  }
+  .values-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .value-card:nth-child(3) {
+    padding-left: 0;
+    border-left: 0;
+  }
+  .value-card:nth-child(n + 3) {
+    border-top: 1px solid var(--line);
+  }
+}
+@media (max-width: 760px) {
+  .audience {
+    padding-block: 20px 60px;
+  }
+  .audience-grid {
+    margin-top: 30px;
+  }
+  .audience-card {
+    padding: 22px;
+  }
+  .audience-card dl {
+    display: block;
+  }
+  .not-for {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    padding: 20px;
+  }
+  .not-for ul {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .node-section {
+    padding-block: 20px 70px;
+  }
+  .directive-list li {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+  .code-window pre {
+    padding: 18px 16px;
+    font-size: 11px;
+  }
+  .values {
+    padding-block: 60px;
+  }
+  .values-heading {
+    display: block;
+  }
+  .values-heading > p {
+    margin-top: 18px;
+  }
+  .values-grid {
+    grid-template-columns: minmax(0, 1fr);
+    margin-top: 30px;
+  }
+  .value-card,
+  .value-card:first-child {
+    padding: 24px 0;
+    border-left: 0;
+  }
+  .value-card + .value-card {
+    border-top: 1px solid var(--line);
+  }
+  .start-section {
+    grid-template-columns: minmax(0, 1fr);
+    padding-block: 50px;
+  }
+  .start-links {
+    justify-content: flex-start;
+  }
+}
+
 @keyframes hero-enter {
   from {
     opacity: 0;
@@ -173,13 +539,14 @@
   .feature-card:focus-visible .feature-arrow {
     translate: 3px -3px;
   }
-  .workflow-item .card-link,
-  .hero-actions .text-link span {
+  .hero-actions .text-link span,
+  .audience-card .text-link span,
+  .node-links .text-link span {
     transition: translate 250ms cubic-bezier(0.22, 1, 0.36, 1);
   }
-  .workflow-item:hover .card-link,
-  .workflow-item:focus-visible .card-link {
-    translate: 5px 0;
+  .audience-card .text-link:hover span,
+  .node-links .text-link:hover span {
+    translate: 3px -3px;
   }
   .hero-actions .text-link:hover span {
     translate: 0 4px;

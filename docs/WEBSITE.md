@@ -33,6 +33,9 @@ under `/site/`.
 ## Release notes
 
 `/releases/` and `/releases.json` are built from published GitHub releases.
+The page groups each release's notes by change type, from the layout that
+`cliff.toml` generates, and folds documentation and maintenance changes. Notes
+edited into another shape still render as plain Markdown.
 The build uses `GITHUB_TOKEN` when supplied; authenticated API failures fail it.
 Without a token, an API failure falls back to `website/src/data/releases.json`.
 Refresh that snapshot with:

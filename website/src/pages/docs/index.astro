@@ -1,5 +1,6 @@
 ---
 import Layout from "../../layouts/Layout.astro";
+import DocsNav from "../../components/DocsNav.astro";
 import { sections, url } from "../../lib/docs";
 ---
 
@@ -8,6 +9,7 @@ import { sections, url } from "../../lib/docs";
   description="Learn to build, run and understand your data pipelines with Duckpad."
   docs
 >
+  <DocsNav slot="menu" label="Documentation on mobile" />
   <main id="main" class="wrap prose" style="padding-block: 60px">
     <p class="eyebrow">THE FIELD GUIDE</p>
     <h1>Make yourself at home.</h1>
