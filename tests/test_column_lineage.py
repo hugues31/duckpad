@@ -7,6 +7,7 @@ from helpers import join_run, pipeline
 
 from duckpad.column_analysis import Incomplete, analyze
 from duckpad.example import create_example
+from duckpad.util import Problem
 
 SCHEMA = {"a": {"id": "INT", "amount": "DOUBLE", "region": "VARCHAR"}, "b": {"id": "INT", "rate": "DOUBLE"}}
 
@@ -58,6 +59,24 @@ def test_selection_columns_are_separate():
         assert top["selection"][0]["refs"] == [("a", "amount")]
 
 
+def test_expressions_read_as_written_and_qualify_decides_rows():
+    labels = {"a": "orders", "b": "fees"}
+    net = analyze(
+        "SELECT ROUND(x.amount * (1 - y.rate), 2) AS net FROM a x JOIN b y ON x.id = y.id WHERE region = $r",
+        SCHEMA,
+        labels,
+        {"r": "South"},
+    )[0]
+    # A column is qualified, by the name of its input, only when two inputs have it.
+    assert net["expression"] == "ROUND(amount * (1 - rate), 2)"
+    assert [c["expression"] for c in net["selection"]] == ["WHERE region = 'South'", "orders.id = fees.id"]
+    kept = analyze(
+        "SELECT id FROM a QUALIFY row_number() OVER (PARTITION BY region ORDER BY amount DESC) = 1", SCHEMA
+    )[0]
+    assert kept["selection"][0]["kind"] == "qualify"
+    assert kept["selection"][0]["refs"] == [("a", "region"), ("a", "amount")]
+
+
 def test_unknown_semantics_are_incomplete():
     with pytest.raises(Incomplete):
         analyze("SELECT SUM(amount) OVER w AS total FROM a WINDOW w AS (PARTITION BY region)", SCHEMA)
@@ -96,6 +115,32 @@ def test_northstar_origins_cache_and_limits(services, monkeypatch):
     assert any(s["kind"] == "join" for step in region["steps"] for s in step["selection"])
     monkeypatch.setattr(engine.column_lineage, "_build", lambda *args: pytest.fail("Analysis was recomputed"))
     assert engine.column_lineage.describe(worktree, "dev", "report", "report", "net_share") == result
+
+
+def test_an_export_lists_the_columns_of_its_input(services):
+    store, projects, catalog, engine = services
+    worktree = create_example(projects, catalog)["id"]
+    assert join_run(store, engine.launch(worktree, "dev")["id"])["status"] == "success"
+    read = engine.column_lineage.describe(worktree, "dev", "report", "report")["outputs"][0]
+    written = engine.column_lineage.describe(worktree, "dev", "export")["outputs"]
+    # Like its results, an export shows what it reads, under the name of its input.
+    assert [o["port"] for o in written] == ["source"]
+    assert [c["name"] for c in written[0]["columns"]] == [c["name"] for c in read["columns"]]
+    assert {c["kind"] for c in written[0]["columns"]} == {"carried"}
+    share = next(c for c in written[0]["columns"] if c["name"] == "net_share")
+    assert share["origin"]["node"] == "report::rank" and share["origin"]["kind"] == "computed"
+    result = engine.column_lineage.describe(worktree, "dev", "export", "source", "net_share")
+    assert result["complete"], result
+    first, second = result["steps"][:2]
+    assert (first["node"], first["kind"], first["inputs"][0]["node"]) == ("export", "carried", "report::rank")
+    assert (second["node"], second["kind"]) == ("report::rank", "computed")
+    assert {s["node"] for s in result["steps"] if s["kind"] == "source"} == {"orders", "fees"}
+    # The shared analysis keeps describing outputs only: impact counts are unchanged.
+    assert not any(key[0] == "export" for key in engine.column_lineage.analysis(worktree, "dev")[0])
+    with pytest.raises(Problem, match="Node or output not found"):
+        engine.column_lineage.describe(worktree, "dev", "missing")
+    with pytest.raises(Problem, match="Node or output not found"):
+        engine.column_lineage.describe(worktree, "dev", "export", "other")
 
 
 def test_never_run_literal_source_and_earlier_output(services):
@@ -175,3 +220,31 @@ def test_static_inputs_match_value_contributions(services, tmp_path, query):
     assert {(r["node"], r["column"]) for r in result["steps"][0]["inputs"]} == {
         (c["node"], c["column"]) for c in value["contributions"]
     }
+
+
+def test_same_named_join_columns_wait_for_a_run(services):
+    _, projects, _, engine = services
+    literal = "-- @output result\nSELECT 1 AS id, 2 AS amount;"
+    worktree = projects.create(
+        "Star join",
+        {
+            "flow": {
+                "nodes": [{"id": "a"}, {"id": "b"}, {"id": "j"}],
+                "edges": [
+                    {"id": "aj", "source": "a", "sourceHandle": "result", "target": "j", "targetHandle": "a"},
+                    {"id": "bj", "source": "b", "sourceHandle": "result", "target": "j", "targetHandle": "b"},
+                ],
+            },
+            "templates": {},
+            "components": {},
+            "node_sql": {
+                "nodes/a.sql": literal,
+                "nodes/b.sql": literal,
+                "nodes/j.sql": "-- @input a\n-- @input b\n-- @output result\n"
+                "SELECT * FROM {{ a }} x JOIN {{ b }} y ON x.id = y.id;",
+            },
+        },
+    )["id"]
+    # Stored names of duplicated columns exist only after a run: never guess their origins.
+    output = engine.column_lineage.describe(worktree, "dev", "j", "result")["outputs"][0]
+    assert (output["status"], output["run_nodes"], output["columns"]) == ("needs_run", ["j"], [])

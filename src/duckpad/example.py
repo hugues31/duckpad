@@ -31,8 +31,8 @@ A complete example of a documented, tested and reusable sales pipeline.
   or the shared **Orders to review** view.
 - Execution messages report the orders kept by Paid orders and the leading region
   of each report in the **Log**.
-- Select Regional revenue and open **Chart** to see revenue by region, declared
-  in `charts.json`.
+- Select Regional revenue or Export revenue and open **Chart** to see revenue by
+  region, then what channel fees cost each region. Both are declared in `charts.json`.
 
 ## Variables
 
@@ -470,7 +470,69 @@ SELECT 'The report has no rows' AS problem FROM {{ source }} HAVING COUNT(*) = 0
                             },
                         },
                     },
-                }
+                },
+                {
+                    "name": "Net and gross revenue",
+                    # A bar from the net revenue, marked by a point, to the gross one: its length is
+                    # what channel fees cost a region. Net revenue ranks the regions differently.
+                    "spec": {
+                        "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
+                        "height": 200,
+                        "encoding": {
+                            "y": {"field": "region", "type": "nominal", "sort": "-x", "title": "Region"},
+                            "color": {
+                                "field": "region",
+                                "type": "nominal",
+                                "title": "Region",
+                                "legend": None,
+                            },
+                            "tooltip": [
+                                {"field": "region", "type": "nominal", "title": "Region"},
+                                {
+                                    "field": "net_revenue",
+                                    "type": "quantitative",
+                                    "title": "Net revenue",
+                                    "format": ",",
+                                },
+                                {
+                                    "field": "revenue",
+                                    "type": "quantitative",
+                                    "title": "Gross revenue",
+                                    "format": ",",
+                                },
+                            ],
+                        },
+                        "layer": [
+                            {
+                                "mark": {"type": "bar", "size": 8, "opacity": 0.4, "cornerRadius": 4},
+                                "encoding": {
+                                    "x": {
+                                        "field": "net_revenue",
+                                        "type": "quantitative",
+                                        "title": "Net revenue (point) to gross revenue",
+                                        "format": ",",
+                                        "scale": {"zero": False},
+                                    },
+                                    "x2": {
+                                        "field": "revenue",
+                                        "title": "Net revenue (point) to gross revenue",
+                                    },
+                                },
+                            },
+                            {
+                                "mark": {"type": "circle", "size": 200},
+                                # Vega-Lite joins the distinct titles of an axis: every layer states the same one.
+                                "encoding": {
+                                    "x": {
+                                        "field": "net_revenue",
+                                        "type": "quantitative",
+                                        "title": "Net revenue (point) to gross revenue",
+                                    }
+                                },
+                            },
+                        ],
+                    },
+                },
             ]
         },
     }

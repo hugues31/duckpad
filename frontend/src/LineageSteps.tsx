@@ -1,5 +1,13 @@
-import { ArrowUpRight, Boxes, Database, GitBranch } from "lucide-react";
-import { Fragment, useEffect, useState } from "react";
+import {
+  ArrowRight,
+  ArrowUpRight,
+  Boxes,
+  Database,
+  FileOutput,
+  Filter,
+  SquareFunction,
+} from "lucide-react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { api, withQuery } from "./api";
 import { formatValue } from "./graph";
@@ -63,6 +71,19 @@ export function Value({ value }: { value: unknown }) {
 }
 const anchor = (id: string) => `lineage-${encodeURIComponent(id)}`;
 
+/** The mark of a step on the rail: a calculation, a source, or a node that only carries. */
+export function StepDot({ kind }: { kind: "computed" | "carried" | "source" }) {
+  return (
+    <span className="lineage-dot" aria-hidden="true">
+      {kind === "computed" ? (
+        <SquareFunction />
+      ) : kind === "source" ? (
+        <Database />
+      ) : null}
+    </span>
+  );
+}
+
 export const componentPaths = (node: string) => {
   const path = node.split("::").slice(0, -1);
   return path.map((_, index) => path.slice(0, index + 1).join("::"));
@@ -93,6 +114,10 @@ export function ComponentHeading({
   );
 }
 
+/** Nested forks of a table path shown open, and the nodes an open branch may hold. */
+const OPEN_FORKS = 2;
+const OPEN_NODES = 6;
+
 export function TableSteps({
   tables,
   direction,
@@ -114,30 +139,44 @@ export function TableSteps({
     onMap(Object.fromEntries(Object.keys(tables.nodes).map((id) => [id, {}])));
     return () => onMap(null);
   }, [tables, onMap]);
+  const adjacent = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const e of tables.edges) {
+      const [from, to] =
+        direction === "origin" ? [e.target, e.source] : [e.source, e.target];
+      map.set(from, [...(map.get(from) ?? []), to]);
+    }
+    return map;
+  }, [tables, direction]);
   const seen = new Set<string>();
-  const tree = (id: string, previous: string[] = []): React.ReactNode => {
-    if (seen.has(id))
-      return (
-        <a key={id} className="lineage-reference" href={`#${anchor(id)}`}>
-          {name(id)} ↗
-        </a>
-      );
+  const next = (id: string) => adjacent.get(id) ?? [];
+  /** The nodes a branch would add, and the ones it ends on. */
+  const reach = (id: string, found = new Set<string>()) => {
+    if (seen.has(id) || found.has(id)) return found;
+    found.add(id);
+    for (const child of next(id)) reach(child, found);
+    return found;
+  };
+  const reference = (id: string) => (
+    <a key={id} className="lineage-reference" href={`#${anchor(id)}`}>
+      {name(id)} ↗
+    </a>
+  );
+  // The first input continues the path; each other one forks beside it, like a branch of a
+  // Git graph. A node reached twice is shown on the path and referenced from the branch.
+  const tree = (
+    id: string,
+    previous: string[] = [],
+    depth = 0,
+  ): React.ReactNode => {
+    if (seen.has(id)) return reference(id);
     seen.add(id);
     const components = componentPaths(id);
     const item = tables.nodes[id];
-    const children = tables.edges
-      .filter((e) =>
-        direction === "origin" ? e.target === id : e.source === id,
-      )
-      .map((e) => (direction === "origin" ? e.source : e.target));
+    const [trunk, ...branches] = next(id);
+    const rest = trunk === undefined ? null : tree(trunk, components, depth);
     return (
-      <div
-        key={id}
-        className="lineage-table-step"
-        id={anchor(id)}
-        onMouseEnter={() => onHover(id)}
-        onMouseLeave={() => onHover(null)}
-      >
+      <Fragment key={id}>
         {components
           .filter((c) => !previous.includes(c))
           .map((component) => (
@@ -147,25 +186,70 @@ export function TableSteps({
               onOpen={onOpen}
             />
           ))}
-        <button
-          className="text-button"
-          onFocus={() => onHover(id)}
-          onBlur={() => onHover(null)}
-          onClick={() => onOpen(id)}
+        <div
+          className={`lineage-table-step ${item?.source ? "is-source" : ""} ${components.length ? "in-component" : ""}`}
+          id={anchor(id)}
+          onMouseEnter={() => onHover(id)}
+          onMouseLeave={() => onHover(null)}
         >
-          {name(id)}
-        </button>
-        {item?.error && <p className="notice warning">{item.error}</p>}
-        {!!item?.variables.length && (
-          <p className="muted small">
-            {t("variables")}:{" "}
-            {item.variables
-              .map((v) => `${v.name}${v.node ? ` ← ${name(v.node)}` : ""}`)
-              .join(", ")}
-          </p>
-        )}
-        {children.map((child) => tree(child, components))}
-      </div>
+          <button
+            className="text-button"
+            onFocus={() => onHover(id)}
+            onBlur={() => onHover(null)}
+            onClick={() => onOpen(id)}
+          >
+            {name(id)}
+          </button>
+          {item?.error && <p className="notice warning">{item.error}</p>}
+          {!!item?.variables.length && (
+            <p className="muted small">
+              {t("variables")}:{" "}
+              {item.variables
+                .map((v) => `${v.name}${v.node ? ` ← ${name(v.node)}` : ""}`)
+                .join(", ")}
+            </p>
+          )}
+          {branches.map((child) => {
+            if (seen.has(child)) return reference(child);
+            const added = [...reach(child)];
+            const ends = added.filter((node) => !next(node).length);
+            // A large project stays readable: forks open on two levels, and a long
+            // branch waits folded, naming how much it holds and where it ends.
+            if (
+              added.length === 1 ||
+              (depth < OPEN_FORKS && added.length <= OPEN_NODES)
+            )
+              return (
+                <div key={child} className="lineage-branch">
+                  {tree(child, components, depth + 1)}
+                </div>
+              );
+            return (
+              <details key={child} className="lineage-branch">
+                <summary>
+                  <span>
+                    {countLabel(
+                      t,
+                      added.length,
+                      "impactNodeOne",
+                      "impactNodeMany",
+                    )}
+                  </span>
+                  {!!ends.length && (
+                    <span className="muted">
+                      {direction === "origin" ? "←" : "→"}{" "}
+                      {ends.slice(0, 3).map(name).join(", ")}
+                      {ends.length > 3 && "…"}
+                    </span>
+                  )}
+                </summary>
+                {tree(child, components, depth + 1)}
+              </details>
+            );
+          })}
+        </div>
+        {rest}
+      </Fragment>
     );
   };
   const endpoints = Object.values(tables.nodes).filter((n) =>
@@ -185,7 +269,11 @@ export function TableSteps({
               onMouseEnter={() => onHover(item.id)}
               onMouseLeave={() => onHover(null)}
             >
-              <Database size={14} />
+              {direction === "origin" ? (
+                <Database size={14} />
+              ) : (
+                <FileOutput size={14} />
+              )}
               <strong>{name(item.id)}</strong>
               <Resource node={item.id} tables={tables} />
               {count !== undefined && (
@@ -203,7 +291,9 @@ export function TableSteps({
       <h3>
         {t(direction === "origin" ? "lineageUpstream" : "lineageDownstream")}
       </h3>
-      {tables.seeds.map((seed) => (seen.has(seed) ? null : tree(seed)))}
+      <div className="lineage-table-path">
+        {tables.seeds.map((seed) => (seen.has(seed) ? null : tree(seed)))}
+      </div>
     </>
   );
 }
@@ -331,12 +421,20 @@ export function LineageSteps({
           ))}
         <article
           id={anchor(id)}
-          className={`lineage-step ${entry.result.kind === "source" ? "is-source" : "calculation"} ${entry.result.calculation?.passthrough ? "unchanged" : ""} ${id === graph.root ? "root" : ""}`}
+          className={`lineage-step ${entry.result.kind === "source" ? "is-source" : "calculation"} ${entry.result.calculation?.passthrough ? "unchanged" : ""} ${components.length ? "in-component" : ""} ${id === graph.root ? "root" : ""}`}
           onMouseEnter={() => onHover(node)}
           onMouseLeave={() => onHover(null)}
         >
+          <StepDot
+            kind={
+              entry.result.kind === "source"
+                ? "source"
+                : entry.result.calculation?.passthrough
+                  ? "carried"
+                  : "computed"
+            }
+          />
           <header>
-            <GitBranch size={13} />
             <button
               className="text-button"
               onFocus={() => onHover(node)}
@@ -345,11 +443,11 @@ export function LineageSteps({
             >
               {name}
             </button>
-            <span className="muted small">
-              {entry.result.calculation?.passthrough
-                ? t("lineageUnchanged")
-                : ""}
-            </span>
+            {entry.result.calculation?.passthrough && (
+              <span className="lineage-unchanged-label">
+                {t("lineageUnchanged")}
+              </span>
+            )}
           </header>
           {sameNode.map((part) => (
             <StepDetails
@@ -375,17 +473,30 @@ export function LineageSteps({
             }}
           >
             <summary>
-              {child.input.column} = <Value value={child.input.value} /> ·{" "}
-              {displayNodeName(
-                snapshot.node_names?.[child.input.node || ""]?.slice(-1),
-                child.input.node || "",
-                t,
-              )}
-              {child.deferred && ` ← ${sources(child.input.node || "")}`}
+              <strong>
+                {child.input.column} = <Value value={child.input.value} />
+              </strong>
+              <span className="muted">
+                {displayNodeName(
+                  snapshot.node_names?.[child.input.node || ""]?.slice(-1),
+                  child.input.node || "",
+                  t,
+                )}
+                {child.deferred && ` ← ${sources(child.input.node || "")}`}
+              </span>
             </summary>
             {!child.deferred && render(child.id, components)}
           </details>
         ))}
+        {children.length > 1 && (
+          <p className="lineage-continues">
+            <strong>
+              {children[0].input.column} ={" "}
+              <Value value={children[0].input.value} />
+            </strong>
+            {t("lineageContinues")}
+          </p>
+        )}
         {children[0] && render(children[0].id, components)}
       </div>
     );
@@ -418,6 +529,18 @@ function StepDetails({
   const [page, setPage] = useState(result);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const listed =
+    !result.operands &&
+    result.complete &&
+    (result.kind === "aggregate" ||
+      result.kind === "window" ||
+      !!result.groups);
+  // A plain sum reads as one equation: its values, then its total.
+  const summed =
+    listed &&
+    !result.groups &&
+    result.calculation?.operation === "sum" &&
+    !result.calculation.evaluated;
   const replay = async () => {
     if (!result.replay) return;
     setBusy(true);
@@ -461,23 +584,24 @@ function StepDetails({
     <>
       {result.kind === "python" && <p>{t("pythonOpaque")}</p>}
       <div className="lineage-formula">
-        <code>
-          {result.column}
-          {result.calculation &&
-            !result.calculation.passthrough &&
-            ` = ${result.calculation.formula}`}
-        </code>
-        {(!result.calculation || result.calculation.passthrough) && (
+        <strong>{result.column}</strong>
+        {result.calculation && !result.calculation.passthrough ? (
           <>
             {" "}
-            ={" "}
+            <span className="equals">=</span>{" "}
+            <code>{result.calculation.formula}</code>
+          </>
+        ) : (
+          <>
+            {" "}
+            <span className="equals">=</span>{" "}
             <strong>
               <Value value={result.value} />
             </strong>
           </>
         )}
       </div>
-      {result.calculation && !result.calculation.passthrough && (
+      {result.calculation && !result.calculation.passthrough && !summed && (
         <div
           className="lineage-equation"
           title={`${result.calculation.evaluated || result.calculation.formula} = ${formatValue(result.value)}`}
@@ -495,9 +619,13 @@ function StepDetails({
       )}
       {!!result.calculation?.selection?.length && (
         <p className="lineage-selection">
-          {result.calculation.selection.join(" · ")}
+          <Filter size={11} aria-hidden="true" />
+          <span>{result.calculation.selection.join(" · ")}</span>
           {!!result.calculation.selection_evaluated?.length && (
-            <> → {result.calculation.selection_evaluated.join(" · ")}</>
+            <span className="evaluated">
+              <ArrowRight size={10} aria-hidden="true" />
+              {result.calculation.selection_evaluated.join(" · ")}
+            </span>
           )}
         </p>
       )}
@@ -532,21 +660,17 @@ function StepDetails({
             />
           ),
       )}
-      {!result.operands &&
-        result.complete &&
-        (result.kind === "aggregate" ||
-          result.kind === "window" ||
-          result.groups) && (
-          <Contributions
-            query={entry.query}
-            initial={result}
-            read={read}
-            onChoose={onChoose}
-            onRows={onRows}
-            disabled={pending}
-            followed={entry.children[0]?.input}
-          />
-        )}
+      {listed && (
+        <Contributions
+          query={entry.query}
+          initial={result}
+          read={read}
+          onChoose={onChoose}
+          onRows={onRows}
+          disabled={pending}
+          followed={entry.children[0]?.input}
+        />
+      )}
       {!!result.parents?.length && (
         <div className="lineage-parents">
           <p>{t("pythonCapturedParents")}</p>
@@ -715,9 +839,9 @@ function Contributions({
   const operation =
     "operation" in initial ? initial.operation : initial.calculation?.operation;
   return (
-    <div className="lineage-contributions">
+    <div className={`lineage-contributions ${label ? "operand" : ""}`}>
       {label && (
-        <div>
+        <div className="lineage-operand">
           <code>{label}</code> ={" "}
           <strong>
             <Value value={initial.value} />
@@ -740,33 +864,46 @@ function Contributions({
       )}
       {groups ? (
         <>
-          {groups.map((g) => (
-            <button
-              key={g.key}
-              className="text-button"
-              disabled={busy || disabled}
-              onClick={() => void load(0, g.key)}
-            >
-              {t("lineageShowRows")}: <Value value={g.value} /> ({g.rows})
-            </button>
-          ))}
-          {groups.length < page.total && (
-            <button
-              className="text-button"
-              disabled={busy || disabled}
-              onClick={() =>
-                void load(
-                  ("offset" in page ? Number(page.offset) : 0) + groups.length,
-                )
-              }
-            >
-              {t("next")}
-            </button>
-          )}
+          <div className="lineage-values groups">
+            {groups.map((g) => (
+              <button
+                key={g.key}
+                className="lineage-value"
+                aria-label={`${t("lineageShowRows")}: ${formatValue(g.value)} (${g.rows})`}
+                title={t("lineageShowRows")}
+                disabled={busy || disabled}
+                onClick={() => void load(0, g.key)}
+              >
+                <Value value={g.value} /> <small>× {g.rows}</small>
+              </button>
+            ))}
+          </div>
+          <div className="lineage-actions">
+            {groups.length < page.total && (
+              <button
+                className="text-button"
+                disabled={busy || disabled}
+                onClick={() =>
+                  void load(
+                    ("offset" in page ? Number(page.offset) : 0) +
+                      groups.length,
+                  )
+                }
+              >
+                {t("next")}
+              </button>
+            )}
+            <span className="muted">{t("lineageShowRows")}</span>
+          </div>
         </>
       ) : (
         <>
-          <div className="lineage-values">
+          <div className={`lineage-values ${label ? "" : "lineage-equation"}`}>
+            {/* Counted rows are listed by one of their columns: name it. */}
+            {operation !== "sum" &&
+              new Set(items.map((item) => item.column)).size === 1 && (
+                <span className="lineage-values-label">{items[0].column}</span>
+              )}
             {items.slice(0, expanded ? undefined : 5).map((input, index) => (
               <Fragment key={cellId(input)}>
                 {index > 0 && operation === "sum" && <span>+</span>}
@@ -794,7 +931,7 @@ function Contributions({
               </strong>
             )}
           </div>
-          <div className="row gap">
+          <div className="lineage-actions">
             {page.total > 5 && (
               <button
                 className="text-button"
@@ -811,30 +948,32 @@ function Contributions({
                 ).replace("{count}", String(page.total))}
               </button>
             )}
-            <small className="muted">{t("lineageChooseValue")}</small>
-          </div>
-          {expanded && items.length < page.total && (
-            <button
-              className="text-button"
-              disabled={busy || disabled}
-              onClick={() => void load(items.length)}
-            >
-              {t("next")} · {items.length} / {page.total}
-            </button>
-          )}
-          {[...new Map(items.map((item) => [item.dataset, item])).values()].map(
-            (input) => (
+            {expanded && items.length < page.total && (
+              <button
+                className="text-button"
+                disabled={busy || disabled}
+                onClick={() => void load(items.length)}
+              >
+                {t("next")} · {items.length} / {page.total}
+              </button>
+            )}
+            {[
+              ...new Map(items.map((item) => [item.dataset, item])).values(),
+            ].map((input) => (
               <button
                 className="text-button"
                 key={input.dataset}
                 disabled={disabled}
                 onClick={() => onRows({ query: { ...query, group }, input })}
               >
-                <ArrowUpRight size={13} />
                 {countLabel(t, page.total, "lineageOpenRow", "lineageOpenRows")}
+                <ArrowUpRight size={12} />
               </button>
-            ),
-          )}
+            ))}
+            {page.total > 1 && (
+              <span className="muted">{t("lineageChooseValue")}</span>
+            )}
+          </div>
         </>
       )}
       {error && (

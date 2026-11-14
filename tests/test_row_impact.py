@@ -77,6 +77,14 @@ def test_distinct_tuple_mapping(context):
     assert len(rows) == 1
 
 
+def test_distinct_join_conditions_use_the_followed_row(context):
+    materialize(context, "other", "SELECT id FROM src WHERE id IN (2, 4)", source=True)
+    matcher, rows, _ = matched(context, "SELECT DISTINCT a.grp FROM src a JOIN other b ON a.id=b.id", row=3)
+    assert len(rows) == 1
+    # No witness is captured: another joined row must not lend its values.
+    assert matcher.join_details(rows[0][0])["conditions"][0]["evaluated"] == "4 = 4"
+
+
 def test_public_rowid_and_null_filter_keep_physical_identity(context):
     source = materialize(context, "named", "SELECT 100 AS rowid, NULL::INTEGER AS amount", source=True)
     data = materialize(context, "target", "SELECT rowid FROM named WHERE amount > 0")
@@ -148,6 +156,8 @@ def test_duplicate_pages_and_selected_row_control_the_continuation(services):
     "query",
     [
         "SELECT * FROM src QUALIFY row_number() OVER ()=1",
+        # Equal values do not tell which row DISTINCT ON kept.
+        "SELECT DISTINCT ON (grp) grp, category FROM src ORDER BY grp, id",
         "WITH a AS (SELECT * FROM src) SELECT * FROM a",
         "SELECT random(), id FROM src",
         # No captured keys: an empty key list must not match every group.

@@ -28,12 +28,22 @@ def analyze(query, schema, labels=None, bindings=None):
     labels = labels or {}
     bindings = bindings or {}
 
+    def shared(name):
+        """Whether several inputs of the query have a column of this name."""
+        return sum(name.casefold() in {n.casefold() for n in columns} for columns in schema.values()) > 1
+
     def display(expression):
+        """SQL as its author would write it: input columns are qualified, by the name of
+        their input, only when two inputs share the column name."""
+
         def readable(item):
             if isinstance(item, exp.Placeholder) and item.name in bindings:
                 return exp.convert(bindings[item.name])
+            if isinstance(item, exp.Column) and item.table in schema:
+                table = exp.to_identifier(labels.get(item.table, item.table)) if shared(item.name) else None
+                return exp.column(exp.to_identifier(item.name), table=table)
             if isinstance(item, exp.Identifier) and item.name in labels:
-                return exp.to_identifier(labels[item.name], quoted=True)
+                return exp.to_identifier(labels[item.name])
             return item
 
         return sql(expression.transform(readable))
@@ -151,10 +161,15 @@ def analyze(query, schema, labels=None, bindings=None):
                 return replacement
             result = item.copy()
             for key, child in item.args.items():
+                # A projection reports its window frame and aggregate filter as conditions.
+                # Inside a row-selection clause such as QUALIFY, they decide the rows too.
                 value_input = collect and not (
-                    (isinstance(item, exp.Window) and key in {"partition_by", "order", "spec"})
-                    or (isinstance(item, exp.Filter) and key == "expression")
-                    or (value_expression and isinstance(item, exp.Order) and key == "expressions")
+                    value_expression
+                    and (
+                        (isinstance(item, exp.Window) and key in {"partition_by", "order", "spec"})
+                        or (isinstance(item, exp.Filter) and key == "expression")
+                        or (isinstance(item, exp.Order) and key == "expressions")
+                    )
                 )
                 if isinstance(child, exp.Expression):
                     result.set(key, visit(child, value_input))

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Link } from "react-router";
 import { api, send } from "./api";
 import { TabStatus } from "./gitTabs";
@@ -9,6 +9,18 @@ import { codeFileUrl } from "./navigation";
 import { displayNodeName } from "./nodeNames";
 import { useResource } from "./useApiResource";
 import { useLoadedWorktree } from "./worktree";
+
+/** DuckDB lists candidates and the failing line after its message: keep them on demand. */
+function SchemaError({ text }: { text: string }) {
+  const [message, ...rest] = text.trim().split("\n");
+  if (!rest.length) return <pre>{message}</pre>;
+  return (
+    <details className="schema-error">
+      <summary>{message}</summary>
+      <pre>{rest.join("\n")}</pre>
+    </details>
+  );
+}
 
 type Entry = {
   node: string;
@@ -84,7 +96,7 @@ function SchemaResults({
           <p className="muted">{t("schemaNoFailures")}</p>
         )}
         {report.failures.map((entry, i) => (
-          <article className="lineage-step" key={i}>
+          <article className="lineage-step impact-entry" key={i}>
             <header>{title(entry)}</header>
             {(entry.existing || entry.direct === false) && (
               <p className="small">
@@ -96,7 +108,7 @@ function SchemaResults({
                   .join(" · ")}
               </p>
             )}
-            <pre>{entry.error}</pre>
+            <SchemaError text={entry.error || ""} />
           </article>
         ))}
       </section>
@@ -105,7 +117,7 @@ function SchemaResults({
           {t("schemaOutputChanges")} ({report.changes.length})
         </h4>
         {report.changes.map((entry, i) => (
-          <article className="lineage-step" key={i}>
+          <article className="lineage-step impact-entry" key={i}>
             <header>{title(entry)}</header>
             {!!entry.added.length && (
               <p>
@@ -140,7 +152,7 @@ function SchemaResults({
           {t("impactExports")} ({report.exports.length})
         </h4>
         {report.exports.map((entry, i) => (
-          <article className="lineage-step" key={i}>
+          <article className="lineage-step impact-entry" key={i}>
             <header>{title(entry)}</header>
             {entry.resource && (
               <code>
@@ -156,7 +168,7 @@ function SchemaResults({
             {t("schemaUnknown")} ({report.unknown.length})
           </h4>
           {report.unknown.map((entry, i) => (
-            <article className="lineage-step" key={i}>
+            <article className="lineage-step impact-entry" key={i}>
               <header>{title(entry)}</header>
               <p>
                 {t(
@@ -185,6 +197,7 @@ export function TypeSimulation({ target }: { target: LineageTarget }) {
   const { id, environment, snapshot } = useLoadedWorktree();
   const [type, setType] = useState("");
   const [submitted, setSubmitted] = useState<string | null>(null);
+  const field = useId();
   const body = {
     environment,
     node: target.node,
@@ -198,9 +211,7 @@ export function TypeSimulation({ target }: { target: LineageTarget }) {
       api(`/worktrees/${id}/lineage/simulate-type`, { ...send(body), signal }),
   );
   return (
-    <details className="impact-rename">
-      <summary>{t("schemaSimulate")}</summary>
-      <p className="small muted">{t("schemaSimulationHint")}</p>
+    <div className="impact-form">
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -208,25 +219,29 @@ export function TypeSimulation({ target }: { target: LineageTarget }) {
           else setSubmitted(type.trim());
         }}
       >
-        <label>
-          {t("schemaNewType")}
+        <label htmlFor={field}>{t("schemaNewType")}</label>
+        <div className="impact-field">
           <input
+            id={field}
             value={type}
             placeholder="VARCHAR, DOUBLE, DECIMAL(18, 2)…"
             maxLength={256}
             autoComplete="off"
+            // The button which opened the form asked for this field.
+            autoFocus
             onChange={(event) => {
               setType(event.target.value);
               setSubmitted(null);
             }}
           />
-        </label>
-        <button
-          className="button secondary small"
-          disabled={!type.trim() || result.pending}
-        >
-          {t("schemaRunSimulation")}
-        </button>
+          <button
+            className="button primary small"
+            disabled={!type.trim() || result.pending}
+          >
+            {t("schemaRunSimulation")}
+          </button>
+        </div>
+        <p className="small muted">{t("schemaSimulationHint")}</p>
       </form>
       <TabStatus
         pending={result.pending}
@@ -240,7 +255,7 @@ export function TypeSimulation({ target }: { target: LineageTarget }) {
           environment={environment}
         />
       )}
-    </details>
+    </div>
   );
 }
 

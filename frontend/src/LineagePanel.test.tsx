@@ -76,6 +76,7 @@ function Explorer({ dataset, row }: { dataset: string; row: number }) {
         onMap={ignore}
         onHover={ignore}
         onOpen={ignore}
+        onLocate={() => {}}
         onRows={ignore}
       />
     )

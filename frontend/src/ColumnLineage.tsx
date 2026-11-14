@@ -1,5 +1,12 @@
-import { GitBranch, Loader2 } from "lucide-react";
-import { useEffect, useMemo } from "react";
+import { Check, ChevronRight, Filter, Loader2 } from "lucide-react";
+import {
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  type RefObject,
+} from "react";
+import { moveMenuFocus } from "./ActionMenu";
 import { withQuery } from "./api";
 import { countLabel, useT } from "./i18n";
 import type { LineageTarget, TableLineage } from "./lineageGraph";
@@ -7,6 +14,7 @@ import {
   ComponentHeading,
   componentPaths,
   Resource,
+  StepDot,
   type LineageMap,
 } from "./LineageSteps";
 import { displayNodeName } from "./nodeNames";
@@ -67,6 +75,160 @@ export function useColumnOrigins(target: LineageTarget) {
   );
 }
 
+/** Where a column of the output comes from, in a few words. */
+function ColumnOrigin({ column }: { column: Column }) {
+  const t = useT();
+  const { snapshot } = useLoadedWorktree();
+  const name = (node: string) =>
+    displayNodeName(snapshot.node_names?.[node]?.slice(-1), node, t);
+  return (
+    <span className="muted small">
+      {column.status !== "complete"
+        ? t(
+            column.status === "python"
+              ? "lineageColumnPython"
+              : "lineageColumnIncomplete",
+          )
+        : column.kind === "computed"
+          ? t("lineageComputedHere")
+          : column.origin.kind === "source"
+            ? t("lineageCarriedFrom").replace(
+                "{source}",
+                `${name(column.origin.node)} · ${column.origin.column}`,
+              )
+            : t("lineageComputedIn").replace(
+                "{node}",
+                name(column.origin.node),
+              )}
+    </span>
+  );
+}
+
+/** The columns of the traced output, listed under the breadcrumb level which names one. */
+export function ColumnMenu({
+  target,
+  anchor,
+  onChoose,
+  onClose,
+}: {
+  target: LineageTarget;
+  anchor: RefObject<HTMLButtonElement | null>;
+  onChoose: (port: string, column: string) => void;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const menu = useRef<HTMLDivElement>(null);
+  const { data, error } = useColumnOrigins({
+    node: target.node,
+    port: target.port,
+    direction: target.direction,
+  });
+  const columns = data?.outputs.flatMap((output) =>
+    output.columns.map((column) => ({ port: output.port, column })),
+  );
+  const chosen = (port: string, column: Column) =>
+    column.name === target.column && (!target.port || port === target.port);
+  // One item stays in the tab order: the list scrolls, and keys must reach it.
+  const start = (
+    columns?.find((item) => chosen(item.port, item.column)) || columns?.[0]
+  )?.column.id;
+  const loaded = !!data;
+  useEffect(() => {
+    (
+      menu.current?.querySelector<HTMLElement>('button[tabindex="0"]') ||
+      menu.current
+    )?.focus();
+  }, [loaded]);
+  const close = useEffectEvent(onClose);
+  useEffect(() => {
+    const outside = (event: Event) => {
+      const element = event.target as Node;
+      if (
+        !menu.current?.contains(element) &&
+        !anchor.current?.contains(element)
+      )
+        close();
+    };
+    document.addEventListener("pointerdown", outside, true);
+    return () => document.removeEventListener("pointerdown", outside, true);
+  }, [anchor]);
+  return (
+    <div
+      ref={menu}
+      className="lineage-column-menu"
+      tabIndex={-1}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          // The panel closes on Escape: this one only closes the list.
+          event.preventDefault();
+          event.stopPropagation();
+          anchor.current?.focus();
+          onClose();
+        } else if (event.key === "Tab") onClose();
+        moveMenuFocus(event, [
+          ...menu.current!.querySelectorAll<HTMLElement>("button"),
+        ]);
+      }}
+    >
+      {error && (
+        <p className="notice error" role="alert">
+          {error}
+        </p>
+      )}
+      {!data && !error && (
+        <div role="status">
+          <Loader2 className="spin" size={16} />
+          {t("loading")}
+        </div>
+      )}
+      {data?.outputs.map((output) => (
+        <div key={output.port}>
+          {data.outputs.length > 1 && (
+            <div className="lineage-column-menu-port" aria-hidden="true">
+              {output.port}
+            </div>
+          )}
+          <Limit
+            status={output.status}
+            nodes={output.run_nodes}
+            tables={output.tables}
+          />
+          {!!output.columns.length && (
+            <div
+              role="menu"
+              aria-label={
+                data.outputs.length > 1
+                  ? `${t("lineageChooseColumn")}: ${output.port}`
+                  : t("lineageChooseColumn")
+              }
+            >
+              {output.columns.map((column) => (
+                <button
+                  className="lineage-column-link"
+                  role="menuitemradio"
+                  aria-checked={chosen(output.port, column)}
+                  tabIndex={column.id === start ? 0 : -1}
+                  key={column.id}
+                  onClick={() => {
+                    anchor.current?.focus();
+                    onChoose(output.port, column.name);
+                  }}
+                >
+                  <strong>{column.name}</strong>
+                  <ColumnOrigin column={column} />
+                  {chosen(output.port, column) && (
+                    <Check size={13} aria-hidden="true" />
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function ColumnList({
   target,
   onChange,
@@ -75,10 +237,7 @@ export function ColumnList({
   onChange: (target: LineageTarget) => void;
 }) {
   const t = useT();
-  const { snapshot } = useLoadedWorktree();
   const { data, error } = useColumnOrigins(target);
-  const name = (node: string) =>
-    displayNodeName(snapshot.node_names?.[node]?.slice(-1), node, t);
   return (
     <section className="lineage-columns" aria-label={t("columns")}>
       <h3>{t("columns")}</h3>
@@ -90,48 +249,32 @@ export function ColumnList({
       {!data && !error && <Loader2 className="spin" size={16} />}
       {data?.outputs.map((output) => (
         <div key={output.port}>
-          <h4>{output.port}</h4>
+          {data.outputs.length > 1 && <h4>{output.port}</h4>}
           <Limit
             status={output.status}
             nodes={output.run_nodes}
             tables={output.tables}
           />
-          {output.columns.map((column) => (
-            <button
-              className="lineage-column-link"
-              key={column.id}
-              onClick={() =>
-                onChange({
-                  node: target.node,
-                  port: output.port,
-                  column: column.name,
-                  direction: "origin",
-                })
-              }
-            >
-              <strong>{column.name}</strong>
-              <span className="muted small">
-                {column.status !== "complete"
-                  ? t(
-                      column.status === "python"
-                        ? "lineageColumnPython"
-                        : "lineageColumnIncomplete",
-                    )
-                  : column.kind === "computed"
-                    ? t("lineageComputedHere")
-                    : column.origin.kind === "source"
-                      ? t("lineageCarriedFrom").replace(
-                          "{source}",
-                          `${name(column.origin.node)} · ${column.origin.column}`,
-                        )
-                      : t("lineageComputedIn").replace(
-                          "{node}",
-                          name(column.origin.node),
-                        )}
-              </span>
-              <span aria-hidden="true">›</span>
-            </button>
-          ))}
+          <div className="lineage-column-list">
+            {output.columns.map((column) => (
+              <button
+                className="lineage-column-link"
+                key={column.id}
+                onClick={() =>
+                  onChange({
+                    node: target.node,
+                    port: output.port,
+                    column: column.name,
+                    direction: target.direction,
+                  })
+                }
+              >
+                <strong>{column.name}</strong>
+                <ColumnOrigin column={column} />
+                <ChevronRight size={13} aria-hidden="true" />
+              </button>
+            ))}
+          </div>
         </div>
       ))}
     </section>
@@ -269,12 +412,20 @@ export function ColumnLineage({
           ))}
         <article
           id={anchor(id)}
-          className={`lineage-step ${step.kind === "source" ? "is-source" : "calculation"} ${step.kind === "carried" ? "unchanged" : ""}`}
+          className={`lineage-step ${step.kind === "source" ? "is-source" : "calculation"} ${group.every((item) => item.kind === "carried") ? "unchanged" : ""} ${components.length ? "in-component" : ""}`}
           onMouseEnter={() => onHover(step.node)}
           onMouseLeave={() => onHover(null)}
         >
+          <StepDot
+            kind={
+              step.kind === "source"
+                ? "source"
+                : group.every((item) => item.kind === "carried")
+                  ? "carried"
+                  : "computed"
+            }
+          />
           <header>
-            <GitBranch size={13} />
             <button
               className="text-button"
               onFocus={() => onHover(step.node)}
@@ -285,7 +436,7 @@ export function ColumnLineage({
             </button>
           </header>
           {group.map((item) => (
-            <div key={item.id}>
+            <div key={item.id} className="lineage-column-item">
               <Limit status={item.status} nodes={item.run_nodes} />
               {item.status === "python" && (
                 <p className="muted small">
@@ -300,10 +451,10 @@ export function ColumnLineage({
                 {item.kind === "source" ? (
                   <>
                     {" "}
-                    <code>{item.type}</code>
+                    <code className="type">{item.type}</code>
                   </>
                 ) : item.kind === "carried" ? (
-                  <span className="muted small">
+                  <span className="lineage-unchanged-label">
                     {" "}
                     {item.inputs[0]?.column === item.column
                       ? t("lineageUnchanged")
@@ -313,19 +464,26 @@ export function ColumnLineage({
                   item.expression && (
                     <>
                       {" "}
-                      = <code>{item.expression}</code>
+                      <span className="equals">=</span>{" "}
+                      <code>{item.expression}</code>
                     </>
                   )
                 )}
               </div>
               {item.kind === "source" && (
                 <>
-                  <Resource node={item.node} tables={tables} />
-                  {item.description && <p>{item.description}</p>}
+                  <p className="lineage-source-location">
+                    <Resource node={item.node} tables={tables} />
+                  </p>
+                  {item.description && (
+                    <p className="lineage-column-description">
+                      {item.description}
+                    </p>
+                  )}
                 </>
               )}
               {!!item.inputs.length && item.kind === "computed" && (
-                <p className="muted small">
+                <p className="lineage-column-inputs">
                   {item.inputs
                     .map((input) => `${name(input.node)} · ${input.column}`)
                     .join(" + ")}
@@ -334,6 +492,7 @@ export function ColumnLineage({
               {item.selection.map((selection, index) => (
                 <details className="lineage-column-condition" key={index}>
                   <summary>
+                    <Filter size={11} aria-hidden="true" />
                     <code>{selection.expression}</code>
                   </summary>
                   <span className="muted small">
@@ -354,8 +513,10 @@ export function ColumnLineage({
             open={depth(child.id) <= 3}
           >
             <summary>
-              {child.column} · {name(child.node)} ←{" "}
-              {sources(child.id).join(", ")}
+              <strong>{child.column}</strong>
+              <span className="muted">
+                {name(child.node)} ← {sources(child.id).join(", ")}
+              </span>
             </summary>
             {render(child.id, components)}
           </details>
@@ -419,7 +580,7 @@ export function ColumnLineage({
               />
             ))
           )}
-          <p className="muted small">
+          <p className="lineage-hint">
             {t("lineageColumnPickValue").replace(
               "{column}",
               target.column || "",

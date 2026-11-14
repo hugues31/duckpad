@@ -1,5 +1,23 @@
-import { ArrowLeft, Copy, GitBranch, Loader2, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ArrowLeft,
+  ChevronDown,
+  ChevronRight,
+  Columns3,
+  Copy,
+  GitBranch,
+  Hash,
+  Loader2,
+  Table2,
+  X,
+} from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { api, send, withQuery } from "./api";
 import { formatValue } from "./graph";
 import { useT } from "./i18n";
@@ -19,8 +37,13 @@ import { displayNodeName } from "./nodeNames";
 import { useApiResource } from "./useApiResource";
 import { isFinal, usePolling } from "./usePolling";
 import { useLoadedWorktree } from "./worktree";
-import { LineageSteps, TableSteps, type LineageMap } from "./LineageSteps";
-import { ColumnLineage, ColumnList } from "./ColumnLineage";
+import {
+  LineageSteps,
+  TableSteps,
+  roundedValue,
+  type LineageMap,
+} from "./LineageSteps";
+import { ColumnLineage, ColumnList, ColumnMenu } from "./ColumnLineage";
 import { ColumnImpact } from "./ColumnImpact";
 import { RowImpact } from "./RowImpact";
 
@@ -32,10 +55,13 @@ export default function LineagePanel({
   onHover,
   onOpen,
   onRows,
+  onLocate,
 }: {
   target: LineageTarget;
   onChange: (target: LineageTarget) => void;
   onClose: () => void;
+  /** Bring the explained value back in the Data grid. */
+  onLocate: () => void;
   onMap: (map: LineageMap | null) => void;
   onHover: (node: string | null) => void;
   onOpen: (node: string) => void;
@@ -69,6 +95,18 @@ export default function LineagePanel({
     cellId(parent.to.cell) === cellId(target.cell)
       ? parent.from
       : undefined;
+  // The explained value, once its trace is read: the last level names it.
+  const [explained, setExplained] = useState<{
+    cell: string;
+    value: unknown;
+  } | null>(null);
+  const value =
+    target.cell && explained?.cell === cellId(target.cell)
+      ? explained.value
+      : undefined;
+  // The column level lists the columns of the output until a value is explained.
+  const [choosing, setChoosing] = useState(false);
+  const chooser = useRef<HTMLButtonElement>(null);
   const [copied, setCopied] = useState(false);
   useEffect(() => {
     if (!copied) return;
@@ -118,7 +156,9 @@ export default function LineagePanel({
           </button>
         )}
         <h2 tabIndex={-1}>
-          <GitBranch size={18} />
+          <span className="kind-icon">
+            <GitBranch size={16} />
+          </span>
           {t("lineage")}
         </h2>
         <div
@@ -158,34 +198,74 @@ export default function LineagePanel({
       </header>
       <nav className="lineage-breadcrumb" aria-label={t("lineageLevels")}>
         <button
+          className="lineage-crumb"
+          aria-current={!target.cell && !target.column ? "page" : undefined}
           onClick={() =>
             onChange({ ...target, cell: undefined, column: undefined })
           }
         >
+          <Table2 size={13} />
           {name}
           {target.port ? ` · ${target.port}` : ""}
         </button>
-        <span>›</span>
+        <ChevronRight size={13} aria-hidden="true" />
         <button
-          disabled={!target.cell && !target.column}
+          ref={chooser}
+          className={`lineage-crumb ${target.cell ? "" : "chooser"}`}
           aria-current={target.column && !target.cell ? "page" : undefined}
+          aria-haspopup={target.cell ? undefined : "menu"}
+          aria-expanded={target.cell ? undefined : choosing}
+          title={
+            target.column && !target.cell ? t("lineageChooseColumn") : undefined
+          }
           onClick={() =>
-            onChange({
-              ...target,
-              cell: undefined,
-              column: target.cell?.column || target.column,
-              direction: "origin",
-            })
+            target.cell
+              ? onChange({
+                  ...target,
+                  cell: undefined,
+                  column: target.cell.column,
+                  direction: "origin",
+                })
+              : setChoosing((open) => !open)
           }
         >
-          {target.cell?.column || target.column || t("columns")}
+          <Columns3 size={13} />
+          {target.cell?.column || target.column || t("lineageChooseColumn")}
+          {!target.cell && <ChevronDown size={12} aria-hidden="true" />}
         </button>
-        <span>›</span>
-        <span aria-current={target.cell ? "page" : undefined}>
-          {target.cell
-            ? `${t("lineageRow")} ${target.cell.row + 1}`
-            : t("lineagePickValue")}
-        </span>
+        {choosing && !target.cell && (
+          <ColumnMenu
+            target={target}
+            anchor={chooser}
+            onChoose={(port, column) => {
+              setChoosing(false);
+              onChange({
+                node: target.node,
+                port,
+                column,
+                direction: target.direction,
+              });
+            }}
+            onClose={() => setChoosing(false)}
+          />
+        )}
+        <ChevronRight size={13} aria-hidden="true" />
+        {target.cell ? (
+          <button
+            className="lineage-crumb"
+            aria-current="page"
+            title={t("lineageShowValue")}
+            onClick={onLocate}
+          >
+            <Hash size={12} />
+            {`${t("lineageRow")} ${target.cell.row + 1}${value === undefined ? "" : ` = ${roundedValue(value)}`}`}
+          </button>
+        ) : (
+          <span className="lineage-crumb placeholder">
+            <Hash size={12} />
+            {t("lineagePickValue")}
+          </span>
+        )}
       </nav>
       <div className="lineage-body">
         {error && (
@@ -230,7 +310,20 @@ export default function LineagePanel({
               onText={(text) => {
                 explanation.current = text;
               }}
+              onValue={(value) =>
+                setExplained({ cell: cellId(target.cell!), value })
+              }
+              onImpact={() => onChange({ ...target, direction: "impact" })}
             />
+          ) : target.column &&
+            target.direction === "impact" &&
+            tables.nodes[target.node]?.export ? (
+            // An export is the end of a column: there is no use to list after it.
+            <p className="lineage-column-summary">
+              {t("lineageWrittenColumn")
+                .replace("{node}", name)
+                .replace("{column}", target.column)}
+            </p>
           ) : target.column && target.direction === "impact" ? (
             <ColumnImpact
               key={JSON.stringify([
@@ -280,6 +373,8 @@ function ValueLineage({
   onRows,
   onChange,
   onText,
+  onValue,
+  onImpact,
 }: {
   target: LineageTarget;
   tables: TableLineage;
@@ -289,6 +384,8 @@ function ValueLineage({
   onRows: (rows: ContributingRows) => void;
   onChange: (target: LineageTarget) => void;
   onText: (text: string) => void;
+  onValue: (value: unknown) => void;
+  onImpact: () => void;
 }) {
   const t = useT();
   const {
@@ -443,6 +540,11 @@ function ValueLineage({
   useEffect(() => {
     onText(text);
   }, [text, onText]);
+  const original = graph?.original;
+  const announce = useEffectEvent(onValue);
+  useEffect(() => {
+    if (original) announce(original.value);
+  }, [original]);
   if (interrupted)
     return (
       <div className="notice warning" role="alert">
@@ -488,6 +590,15 @@ function ValueLineage({
             onChange({ ...target, node: cell.node || target.node, cell })
           }
         />
+      )}
+      {/* Nothing is upstream of a source value: its row can be followed the other way. */}
+      {graph && !error && graph.original.kind === "source" && (
+        <p className="lineage-hint">
+          {t("lineageSourceHint")}{" "}
+          <button className="text-button" onClick={onImpact}>
+            {t("lineageFollowRow")}
+          </button>
+        </p>
       )}
     </>
   );

@@ -52,15 +52,33 @@ def references(text, schema, renamed, *, definition=None, automatic=None):
         for c in tree.find_all(exp.CTE, exp.Subquery)
         if c.args.get("alias") and c.args["alias"].args.get("columns")
     }
-    tree = qualify(tree, schema=schema, dialect="duckdb")
-    root = build_scope(tree)
-    if root is None:
-        raise Incomplete("scope")
     spans, changed = set(), {}
 
     def mark(identifier):
         if identifier is not None and "start" in identifier.meta:
             spans.add((identifier.meta["start"], identifier.meta["end"] + 1))
+
+    # WHERE, GROUP BY, HAVING and later projections may name the renamed output itself.
+    # Qualification replaces such a reference by a copy of its expression, so it is located
+    # first. The name designates the output only when no input of the query has it.
+    sources = [s.this for s in [tree.args.get("from_"), *tree.args.get("joins", [])] if s is not None]
+    if (
+        definition is not None
+        and isinstance(tree, exp.Select)
+        and all(isinstance(t, exp.Table) and t.name in schema for t in sources)
+        and not any(definition.casefold() == n.casefold() for t in sources for n in schema[t.name])
+    ):
+        for column in tree.find_all(exp.Column):
+            if (
+                not column.table
+                and column.name.casefold() == definition.casefold()
+                and column.find_ancestor(exp.Query) is tree
+            ):
+                mark(column.this)
+    tree = qualify(tree, schema=schema, dialect="duckdb")
+    root = build_scope(tree)
+    if root is None:
+        raise Incomplete("scope")
 
     for scope in root.traverse():
 
@@ -90,7 +108,12 @@ def references(text, schema, renamed, *, definition=None, automatic=None):
             for selected in query.selects:
                 alias = selected.args.get("alias") if isinstance(selected, exp.Alias) else None
                 value = selected.this if isinstance(selected, exp.Alias) else selected
-                forced = scope is root and selected.alias_or_name == definition
+                # Qualification lowercases every name; DuckDB compares them without case.
+                forced = (
+                    scope is root
+                    and definition is not None
+                    and selected.alias_or_name.casefold() == definition.casefold()
+                )
                 implicit = alias is None or "start" not in alias.meta
                 if forced or (follows(value) and selected.alias_or_name == value.name):
                     output.add(selected.alias_or_name)
@@ -132,7 +155,7 @@ def local_alias(text, column, name):
     tree = sqlglot.parse_one(text, read="duckdb")
     if not isinstance(tree, exp.Select):
         raise Incomplete("output_alias")
-    selected = next((s for s in tree.selects if s.alias_or_name == column), None)
+    selected = next((s for s in tree.selects if s.alias_or_name.casefold() == column.casefold()), None)
     if isinstance(selected, exp.Alias):
         return None
     if isinstance(selected, exp.Column) and not selected.is_star:

@@ -36,7 +36,7 @@ test("source row impact explains rejection, grouping and export across component
     exact: true,
   });
   await panel.getByRole("button", { name: "Impact", exact: true }).click();
-  await expect(panel.locator(".row-impact > .notice")).toContainText(
+  await expect(panel.locator(".row-impact-verdict")).toContainText(
     "stops at Paid orders",
   );
   await expect(panel.locator(".row-impact-discarded")).toContainText(
@@ -76,10 +76,10 @@ test("source row impact explains rejection, grouping and export across component
     "regional-revenue-",
   );
   // A row written to an export leads with what it reaches, not side-branch filters.
-  await expect(panel.locator(".row-impact > .notice")).toContainText(
+  await expect(panel.locator(".row-impact-verdict")).toContainText(
     /^Reaches .*Export revenue/,
   );
-  await expect(panel.locator(".row-impact > .notice")).not.toHaveClass(/error/);
+  await expect(panel.locator(".row-impact-verdict")).not.toHaveClass(/stops/);
   await expect(
     panel
       .locator(".row-impact-grouped")

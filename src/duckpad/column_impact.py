@@ -9,12 +9,13 @@ from sqlglot import exp
 
 from .bundle import bundle_to_files
 from .column_analysis import Incomplete
-from .column_lineage import identity, static_nodes
+from .column_lineage import identity, retained_schemas, static_nodes
 from .column_references import export_inputs, local_alias, references, replace_spans
 from .components import expand
 from .execution.statements import compile_node
 from .graph import connection_references, reachable, topological
 from .node_code import code_path, find_node, template_path
+from .node_names import node_name
 from .templates import IDENTIFIER, REFERENCE, VARIABLE_REFERENCE
 from .types import Record
 from .util import Problem, digest, qi
@@ -294,7 +295,9 @@ def inspect(engine, worktree, environment, node, port, column, *, new_name=None,
                 else:
                     spans, follows = references(text, schema, active, definition=force, automatic=carried)
                 insertion = None
-                if force and steps[root]["kind"] == "carried":
+                # A column the last SELECT reads from an input, a CTE or a subquery without
+                # naming it takes its new name there, whatever computes it.
+                if force and not statement["source"]:
                     insertion = local_alias(text, column, new_name or "__impact_column__")
                     if insertion:
                         position, addition = insertion
@@ -304,7 +307,7 @@ def inspect(engine, worktree, environment, node, port, column, *, new_name=None,
                         insertions[key].append((offset + 1, addition))
                 if statement["output"]:
                     renamed[output] |= follows
-                    automatic.update(identity(*output, name) for name in carried)
+                    automatic.update(identity(*output, name).casefold() for name in carried)
                 grouped = defaultdict(set)
                 for start, end in spans:
                     owner, offset = locations[start]
@@ -391,9 +394,12 @@ def inspect(engine, worktree, environment, node, port, column, *, new_name=None,
     for id_, step in steps.items():
         if id_ not in tainted or id_ == root:
             continue
-        if id_ in automatic:
+        # SQLGlot lowercases unquoted names; DuckDB compares names without their case.
+        if id_.casefold() in automatic:
             result["follows"].append({k: step[k] for k in ("node", "port", "column", "expression")})
-        elif step["column"] not in renamed[(step["node"], step["port"])]:
+        elif step["column"].casefold() not in {
+            name.casefold() for name in renamed[(step["node"], step["port"])]
+        }:
             result["derived"].append({k: step[k] for k in ("node", "port", "column", "expression")})
         touched.add(step["node"])
     # Outputs exposed through component boundaries share their inner schema.
@@ -434,19 +440,32 @@ def inspect(engine, worktree, environment, node, port, column, *, new_name=None,
         if not names:
             continue
         descriptions = (updated.get("documentation") or {}).get("columns", {}).get(":".join(key), {})
-        for name in names:
-            if name in descriptions:
-                result["mentions"].append(
-                    {"node": key[0], "port": key[1], "column": name, "excerpt": descriptions[name]}
-                )
-                descriptions[replacement] = descriptions.pop(name)
+        followers = {name.casefold() for name in names}
+        for name in [n for n in descriptions if n.casefold() in followers]:
+            result["mentions"].append(
+                {"node": key[0], "port": key[1], "column": name, "excerpt": descriptions[name]}
+            )
+            descriptions[replacement] = descriptions.pop(name)
     if new_name is not None and new_name != column:
         for key, output in outputs.items():
+            followers = {name.casefold() for name in renamed[key]}
             if any(identity(*key, c["name"]) in tainted for c in output["columns"]) and any(
-                c["name"].casefold() == new_name.casefold() and c["name"] not in renamed[key]
+                c["name"].casefold() == new_name.casefold() and c["name"].casefold() not in followers
                 for c in output["columns"]
             ):
                 raise Problem(f"A column named {new_name} already exists in {key[0]} · {key[1]}", 409)
+        verify(
+            engine,
+            worktree,
+            environment,
+            snapshot,
+            updated,
+            outputs,
+            steps,
+            all_renamed,
+            downstream,
+            (target, column, new_name),
+        )
     result["unaffected"] = [{"node": key} for key in nodes if key in downstream and key not in touched]
     result["complete"] = not result["manual"]
     result["affected_columns"] = len(tainted) - 1
@@ -471,6 +490,68 @@ def inspect(engine, worktree, environment, node, port, column, *, new_name=None,
             [snapshot["revision"], environment, node, port, column, new_name, result["changes"]]
         )
     return result, updated
+
+
+def verify(engine, worktree, environment, snapshot, updated, outputs, steps, renamed, downstream, plan):
+    """Refuse a rename whose edited definitions would not compute the same columns.
+
+    The rewrite is checked rather than trusted: the edited project is analyzed again,
+    without reading data, and every output downstream must keep its columns, renamed
+    where announced, each computed and selected from the same inputs.
+    """
+    target, column, name = plan
+    # Retained columns stand for what the isolated database cannot describe: a source,
+    # which keeps its code, or a node using a project extension. They follow the rename,
+    # so a rewrite that missed a name still disagrees with its analysis.
+    retained = {
+        key: [
+            {**c, "name": name} if c["name"].casefold() in {n.casefold() for n in renamed.get(key, ())} else c
+            for c in columns
+        ]
+        for key, columns in retained_schemas(engine, worktree, environment).items()
+    }
+    edited, edited_steps, _ = engine.column_lineage.simulate(
+        worktree,
+        environment,
+        {**snapshot, "bundle": updated},
+        retained,
+        pinned=[target] if steps[identity(*target, column)]["kind"] == "source" else [],
+    )
+    edited_steps = {key.casefold(): step for key, step in edited_steps.items()}
+
+    def moved(node, port, column):
+        followers = {n.casefold() for n in renamed.get((node, port), ())}
+        return identity(node, port, name if column.casefold() in followers else column).casefold()
+
+    def inputs(step, moving):
+        def resolve(ref):
+            return moved(ref["node"], ref["port"], ref["column"]) if moving else ref["id"].casefold()
+
+        return (
+            {resolve(r) for r in step["inputs"]},
+            sorted((s["kind"], sorted(resolve(r) for r in s["inputs"])) for s in step["selection"]),
+        )
+
+    for key, output in outputs.items():
+        # What the analysis cannot prove is listed for a manual check instead.
+        if key[0] not in downstream or output["status"] != "complete":
+            continue
+        expected = [moved(*key, c["name"]) for c in output["columns"]]
+        after = edited.get(key)
+        if (
+            after is None
+            or after["status"] != "complete"
+            or [identity(*key, c["name"]).casefold() for c in after["columns"]] != expected
+            or any(
+                inputs(steps[c["id"]], True) != inputs(edited_steps[new], False)
+                for c, new in zip(output["columns"], expected, strict=True)
+            )
+        ):
+            raise Problem(
+                f"This rename cannot be applied automatically: {node_name(snapshot['bundle'], key[0])} · "
+                f"{key[1]} would no longer compute the same columns. Rename the column by hand in this node.",
+                409,
+            )
 
 
 def saved_references(bundle, renamed, replacement, result, review):

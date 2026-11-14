@@ -206,6 +206,225 @@ test("aggregate values paginate, change the followed row, and open contributor r
   await expect(data.locator("tbody tr")).toHaveCount(27);
 });
 
+test("the column level of the breadcrumb lists the columns to choose from", async ({
+  page,
+}) => {
+  await example(page);
+  await page.getByRole("button", { name: "Lineage", exact: true }).click();
+  const panel = page.getByRole("complementary", {
+    name: "Lineage",
+    exact: true,
+  });
+  const level = panel.locator(".lineage-crumb.chooser");
+  await expect(level).toHaveText("Choose a column");
+  await level.click();
+  const columns = panel.getByRole("menuitemradio");
+  // Opened on the node, the list covers each of its outputs and scrolls.
+  await expect(columns.filter({ hasText: "net_share" })).toContainText(
+    "Computed here",
+  );
+  await expect(columns.first()).toBeFocused();
+  const accessibility = await new AxeBuilder({ page })
+    .include(".lineage-panel")
+    .analyze();
+  expect(accessibility.violations).toEqual([]);
+  // Escape closes the list and leaves the panel open.
+  await page.keyboard.press("Escape");
+  await expect(columns).toHaveCount(0);
+  await expect(level).toBeFocused();
+  await level.click();
+  await columns.filter({ hasText: "net_share" }).click();
+  await expect(level).toHaveText("net_share");
+  await expect(panel.locator(".lineage-column-summary")).toContainText(
+    "3 calculations",
+  );
+  // Another column is one choice away, in the direction already shown.
+  const impact = panel.getByRole("button", { name: "Impact", exact: true });
+  await impact.click();
+  await level.click();
+  await expect(columns.filter({ hasText: "net_share" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  await columns.filter({ hasText: "net_revenue" }).click();
+  await expect(level).toHaveText("net_revenue");
+  await expect(impact).toHaveAttribute("aria-pressed", "true");
+  await expect(panel).toContainText("Renaming net_revenue");
+});
+
+test("the panel follows the node chosen on the canvas and Escape closes it from anywhere", async ({
+  page,
+}) => {
+  await example(page);
+  const panel = await explain(page);
+  const selection = page.locator(".react-flow__node.selected");
+  const node = (name: string) =>
+    page
+      .locator(".react-flow__node")
+      .filter({ has: page.getByText(name, { exact: true }) });
+  const fit = page.getByRole("button", { name: "Fit view", exact: true });
+  // The focus is still on the cell in Data: Escape closes the panel and keeps the node.
+  await page.keyboard.press("Escape");
+  await expect(panel).toHaveCount(0);
+  await expect(selection).toHaveCount(1);
+  await expect(page.locator("#node-inspector .inspector")).toBeVisible();
+  await page.goBack();
+  await expect(panel.locator(".lineage-step.root")).toBeVisible();
+  // Another node chosen on the canvas replaces the explanation by its own lineage.
+  const table = panel.locator(".lineage-breadcrumb button").first();
+  await fit.click();
+  await node("Net amounts").click();
+  await expect(table).toHaveText("Net amounts");
+  await expect(table).toHaveAttribute("aria-current", "page");
+  await expect(panel.locator(".lineage-sources")).toContainText("Channel fees");
+  // The direction shown is kept from one node to the next.
+  const impact = panel.getByRole("button", { name: "Impact", exact: true });
+  await impact.click();
+  await fit.click();
+  await node("Paid orders").click();
+  await expect(table).toHaveText("Paid orders");
+  await expect(impact).toHaveAttribute("aria-pressed", "true");
+  await expect(selection).toHaveAttribute("data-id", "validated");
+  // Back returns to the previous node.
+  await page.goBack();
+  await expect(table).toHaveText("Net amounts");
+  await expect(selection).toHaveAttribute("data-id", "net");
+  // On a focused node, Escape closes the panel first and clears the selection next.
+  await fit.click();
+  await node("Paid orders").click();
+  await expect(table).toHaveText("Paid orders");
+  await page.keyboard.press("Escape");
+  await expect(panel).toHaveCount(0);
+  await expect(selection).toHaveAttribute("data-id", "validated");
+  await page.keyboard.press("Escape");
+  await expect(selection).toHaveCount(0);
+});
+
+test("an export lists the columns of its input, like its results", async ({
+  page,
+}) => {
+  await example(page);
+  await page.getByRole("button", { name: "Fit view", exact: true }).click();
+  await page
+    .locator(".react-flow__node")
+    .filter({ has: page.getByText("Export revenue", { exact: true }) })
+    .click();
+  await page.getByRole("button", { name: "Lineage", exact: true }).click();
+  const panel = page.getByRole("complementary", {
+    name: "Lineage",
+    exact: true,
+  });
+  await expect(
+    panel
+      .locator(".lineage-columns .lineage-column-link")
+      .filter({ hasText: "net_share" }),
+  ).toContainText("Computed in Rank regions");
+  await expect(panel).not.toContainText("Node or output not found");
+  await panel.locator(".lineage-crumb.chooser").click();
+  await panel.getByRole("menuitemradio", { name: /net_share/ }).click();
+  await expect(panel.locator(".lineage-breadcrumb button").first()).toHaveText(
+    "Export revenue · source",
+  );
+  // The export carries the column as it is; its origin continues upstream.
+  await expect(panel.locator(".lineage-step header button").first()).toHaveText(
+    "Export revenue",
+  );
+  await expect(panel.locator(".lineage-column-summary")).toContainText(
+    "3 calculations",
+  );
+  await panel.getByRole("button", { name: "Impact", exact: true }).click();
+  await expect(panel.locator(".lineage-column-summary")).toHaveText(
+    "Export revenue is an export: nothing in the project reads net_share after it.",
+  );
+});
+
+test("forks of the table path read like branches and deep ones wait folded", async ({
+  page,
+}) => {
+  await signIn(page);
+  const tree = await (
+    await page.request.post("/api/projects", { data: { name: "Forks" } })
+  ).json();
+  const snapshot = await (
+    await page.request.get(`/api/worktrees/${tree.id}`)
+  ).json();
+  const source = (id: string) =>
+    `-- @label ${id}\n-- @output result\nSELECT 1 AS id, 2 AS ${id}_value;`;
+  const join = (id: string) =>
+    `-- @label ${id}\n-- @input left\n-- @input right\n-- @output result\nSELECT l.*, r.* EXCLUDE (id) FROM {{ left }} l JOIN {{ right }} r ON l.id = r.id;`;
+  // Each join reads the path on the left and forks on the right, three forks deep;
+  // the last fork holds two nodes.
+  const joins = [
+    ["report", "orders", "profiles"],
+    ["profiles", "customers", "geography"],
+    ["geography", "segments", "regions"],
+  ];
+  const sources = ["orders", "customers", "segments", "countries"];
+  const edge = (source: string, target: string, input: string) => ({
+    id: `${source}_${target}`,
+    source,
+    sourceHandle: "result",
+    target,
+    targetHandle: input,
+  });
+  const saved = await page.request.put(`/api/worktrees/${tree.id}`, {
+    data: {
+      revision: snapshot.revision,
+      files: {
+        ...snapshot.files,
+        "flow.json": JSON.stringify({
+          name: "Forks",
+          nodes: [...sources, "regions", ...joins.map(([id]) => id)].map(
+            (id) => ({ id, params: {} }),
+          ),
+          edges: [
+            edge("countries", "regions", "source"),
+            ...joins.flatMap(([id, left, right]) => [
+              edge(left, id, "left"),
+              edge(right, id, "right"),
+            ]),
+          ],
+        }),
+        ...Object.fromEntries([
+          ...sources.map((id) => [`nodes/${id}.sql`, source(id)]),
+          ...joins.map(([id]) => [`nodes/${id}.sql`, join(id)]),
+        ]),
+        "nodes/regions.sql":
+          "-- @label regions\n-- @input source\n-- @output result\nSELECT * FROM {{ source }};",
+      },
+    },
+  });
+  expect(saved.ok(), await saved.text()).toBeTruthy();
+  await page.goto(`/worktrees/${tree.id}/flow?node=report&lineage=report`);
+  const panel = page.getByRole("complementary", {
+    name: "Lineage",
+    exact: true,
+  });
+  const path = panel.locator(".lineage-table-path");
+  const step = (name: string) =>
+    path.locator(".lineage-table-step > .text-button", {
+      hasText: new RegExp(`^${name}$`),
+    });
+  // The path keeps its column; each fork shifts its branch by one lane.
+  const left = async (name: string) => (await step(name).boundingBox())!.x;
+  await expect(step("geography")).toBeVisible();
+  expect(await left("orders")).toBe(await left("report"));
+  expect(await left("profiles")).toBeGreaterThan(await left("report"));
+  expect(await left("geography")).toBeGreaterThan(await left("profiles"));
+  expect(await left("customers")).toBe(await left("profiles"));
+  // The third fork waits folded, naming what it holds and where it ends.
+  const folded = path.locator("details.lineage-branch > summary");
+  await expect(folded).toHaveText("2 nodes← countries");
+  await expect(step("regions")).toBeHidden();
+  await folded.click();
+  await expect(step("regions")).toBeVisible();
+  await expect(step("countries")).toBeVisible();
+  const accessibility = await new AxeBuilder({ page })
+    .include(".lineage-panel")
+    .analyze();
+  expect(accessibility.violations).toEqual([]);
+});
+
 test("table Origin and Impact work before a run and include computed variables", async ({
   page,
 }) => {
@@ -225,7 +444,24 @@ test("table Origin and Impact work before a run and include computed variables",
   });
   await expect(panel).toContainText("report_month");
   await expect(panel).toContainText("Reporting period");
+  // Its columns are those of its input: before a run, the panel says which node to run.
+  await expect(panel).not.toContainText("Node or output not found");
   await expect(panel.locator(".lineage-sources")).toContainText("Orders");
+  // The path keeps one column however long it is; a second input opens a branch beside it.
+  const steps = await panel
+    .locator(".lineage-table-step > .text-button")
+    .evaluateAll((buttons) =>
+      buttons.map(
+        (button) =>
+          [button.textContent, button.getBoundingClientRect().left] as const,
+      ),
+    );
+  const left = (name: string) => steps.find(([text]) => text === name)?.[1];
+  expect(left("Orders")).toBe(left("Net amounts"));
+  expect(left("Net amounts")).toBe(left("Export revenue"));
+  await expect(
+    panel.locator(".lineage-branch").filter({ hasText: "Channel fees" }),
+  ).toBeVisible();
   await panel.getByRole("button", { name: "Close", exact: true }).click();
   await page.getByRole("button", { name: "Fit view", exact: true }).click();
   await page

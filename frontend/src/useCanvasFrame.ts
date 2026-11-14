@@ -3,6 +3,7 @@ import {
   getViewportForBounds,
   useNodesInitialized,
   useReactFlow,
+  type Node,
 } from "@xyflow/react";
 import { useCallback, useEffect, useState, type RefObject } from "react";
 export function useCanvasFrame(
@@ -38,7 +39,7 @@ export function useCanvasFrame(
     return () => observer.disconnect();
   }, [safeAreaRef]);
   const fitGraph = useCallback(
-    (graphNodes = getNodes()) => {
+    (graphNodes = getNodes(), duration?: number) => {
       if (!initialized || !frame.width || !frame.height) return;
       // Frame the unobscured area while keeping the graph surface behind every panel.
       const viewport = getViewportForBounds(
@@ -49,32 +50,53 @@ export function useCanvasFrame(
         1,
         0.12,
       );
-      void setViewport({
-        ...viewport,
-        x: viewport.x + frame.x,
-        y: viewport.y + frame.y,
-      });
+      void setViewport(
+        {
+          ...viewport,
+          x: viewport.x + frame.x,
+          y: viewport.y + frame.y,
+        },
+        { duration },
+      );
     },
     [initialized, frame, getNodes, setViewport],
   );
-  useEffect(() => {
-    if (!focus || !initialized || !frame.width || !frame.height) return;
-    const target = getNodes().filter((node) => node.id === focus.id);
-    if (!target.length) return;
-    if (focus.reveal) {
+  /** Where these nodes lie on screen, and whether all of them are in the unobscured area. */
+  const placement = useCallback(
+    (target: Node[]) => {
       const bounds = getNodesBounds(target);
       const { x, y, zoom } = getViewport();
       const left = x + bounds.x * zoom;
       const top = y + bounds.y * zoom;
       const width = bounds.width * zoom;
       const height = bounds.height * zoom;
-      if (
+      const visible =
         left >= frame.x &&
         top >= frame.y &&
         left + width <= frame.x + frame.width &&
-        top + height <= frame.y + frame.height
-      )
-        return;
+        top + height <= frame.y + frame.height;
+      return { x, y, zoom, left, top, width, height, visible };
+    },
+    [frame, getViewport],
+  );
+  /** Frame these nodes when one of them is outside the unobscured area. */
+  const revealNodes = useCallback(
+    (ids: string[]) => {
+      const target = getNodes().filter((node) => ids.includes(node.id));
+      if (!target.length || placement(target).visible) return false;
+      fitGraph(target, 200);
+      return true;
+    },
+    [getNodes, placement, fitGraph],
+  );
+  useEffect(() => {
+    if (!focus || !initialized || !frame.width || !frame.height) return;
+    const target = getNodes().filter((node) => node.id === focus.id);
+    if (!target.length) return;
+    if (focus.reveal) {
+      const { x, y, zoom, left, top, width, height, visible } =
+        placement(target);
+      if (visible) return;
       viewportTouchedRef.current = true;
       void setViewport({
         x: x + frame.x + (frame.width - width) / 2 - left,
@@ -90,11 +112,11 @@ export function useCanvasFrame(
     initialized,
     frame,
     getNodes,
-    getViewport,
+    placement,
     setViewport,
     fitGraph,
     viewportTouchedRef,
   ]);
 
-  return { frame, fitGraph };
+  return { frame, fitGraph, revealNodes };
 }

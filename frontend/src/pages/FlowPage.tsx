@@ -250,6 +250,15 @@ export default function FlowPage() {
         ...(isWideLayout() ? {} : { palette: false }),
       });
   };
+  /** A node chosen on the canvas: an open lineage panel follows it, in the direction shown. */
+  const chooseNode = (id: string | null) => {
+    select(id);
+    if (lineageTarget && id && prefix + id !== lineageTarget.node)
+      changeLineage({
+        node: prefix + id,
+        direction: lineageTarget.direction,
+      });
+  };
   const reveal = useEffectEvent(
     (found: { path: PathPart[]; id: string | null } | null) => {
       if (!found) {
@@ -555,7 +564,12 @@ export default function FlowPage() {
             viewKey={worktree + ":" + path.map((p) => p.instance).join("/")}
             selected={selected}
             focusRequest={focusRequest}
-            onSelect={select}
+            onSelect={chooseNode}
+            onDismiss={() => {
+              if (!lineageTarget) return false;
+              closeLineage();
+              return true;
+            }}
             onMove={(nodes, insertion) =>
               reported(
                 updateGraph((g) => {
@@ -638,7 +652,10 @@ export default function FlowPage() {
               changeLineage({
                 node: value.node || fullNode,
                 port: value.port,
-                direction: "origin",
+                // Following rows one after another stays on their downstream fate.
+                direction: lineageTarget?.cell
+                  ? lineageTarget.direction
+                  : "origin",
                 cell: value,
               })
             }
@@ -679,6 +696,22 @@ export default function FlowPage() {
           onMap={setLineageMap}
           onHover={setLineageHover}
           onOpen={openLineageNode}
+          onLocate={() => {
+            const found = bundle && resolveNodePath(bundle, lineageTarget.node);
+            if (!found) return;
+            setContributingRows(null);
+            view.change({
+              path: found.path,
+              selected: found.id,
+              paletteNode: null,
+            });
+            setFocusRequest({
+              id: found.id,
+              key: String(Date.now()),
+              reveal: true,
+            });
+            showResults("data");
+          }}
           onRows={(rows) => {
             setContributingRows(rows);
             openLineageNode(rows.input.node || "");

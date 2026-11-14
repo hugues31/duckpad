@@ -45,6 +45,8 @@ export interface CanvasProps {
   selected: string | null;
   focusRequest?: FocusRequest | null;
   onSelect: (id: string | null) => void;
+  /** A panel opened over the selection takes Escape first: true when it used the key. */
+  onDismiss?: () => boolean;
   onMove: (nodes: FlowNode[], insertion?: EdgeInsertion) => Promise<void>;
   onConnect: (edge: Omit<FlowEdge, "id">) => void;
   onReconnect: (id: string, edge: Omit<FlowEdge, "id">) => void;
