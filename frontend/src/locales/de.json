@@ -835,7 +835,7 @@
   "hostKeyType": "Schlüsseltyp",
   "noTrustedHosts": "Noch kein vertrauenswürdiger Host. Projekte können nicht über SSH synchronisieren.",
   "projectExtensionsTitle": "Erweiterungen für dieses Projekt",
-  "projectExtensionsHint": "DuckDB-Funktionen direkt in SQL-Modellen aktivieren. Anforderungen und ihre Quellen werden mit diesem Branch gespeichert und beim Teilen oder Exportieren des Projekts mitgeliefert.",
+  "projectExtensionsHint": "DuckDB-Funktionen direkt in SQL-Knoten aktivieren. Anforderungen und ihre Quellen werden mit diesem Branch gespeichert und beim Teilen oder Exportieren des Projekts mitgeliefert.",
   "projectExtensionsRefresh": "Verfügbarkeit aktualisieren",
   "projectExtensionsInvalid": "Korrigieren Sie extensions.json in Code, bevor Sie hier Anforderungen bearbeiten.",
   "projectExtensionsStop": "Warten Sie, bis die aktive Ausführung abgeschlossen ist, bevor Sie Erweiterungen ändern.",

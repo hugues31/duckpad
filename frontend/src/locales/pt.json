@@ -835,7 +835,7 @@
   "hostKeyType": "Tipo de chave",
   "noTrustedHosts": "Ainda não há hosts confiáveis. Os projetos não podem sincronizar via SSH.",
   "projectExtensionsTitle": "Extensões deste projeto",
-  "projectExtensionsHint": "Ative funções DuckDB diretamente nos modelos SQL. Os requisitos e as suas origens são guardados neste ramo e incluídos ao partilhar ou exportar o projeto.",
+  "projectExtensionsHint": "Ative funções DuckDB diretamente nos nós SQL. Os requisitos e as suas origens são guardados neste ramo e incluídos ao partilhar ou exportar o projeto.",
   "projectExtensionsRefresh": "Atualizar disponibilidade",
   "projectExtensionsInvalid": "Corrija extensions.json em Código antes de editar os requisitos aqui.",
   "projectExtensionsStop": "Aguarde o fim da execução antes de alterar as extensões.",
