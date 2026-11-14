@@ -99,11 +99,12 @@ statement only when more records follow the page, for the contributions and
 again for the selection context. Records are deduplicated only when a cell can
 repeat: a step joining relations, or two branches reading the same column of one
 relation (`Cells.exact` in `src/duckpad/trace/step.py`). Otherwise a page reads
-the first rows of each branch in row order, up to `BRANCH_ROWS` rows, and a
-deeper page sorts every record. Large groups and deep OFFSETs are intentional
-stress cases. `TraceQuery` in `src/duckpad/trace/query.py` constructs the
-queries; `AggregateVisitor` in `src/duckpad/trace/aggregate.py` selects the
-group and excludes NULL amounts.
+the first rows of each branch in row order, up to `BRANCH_ROWS` rows. A deeper
+page, and any page that deduplicates, sorts cell identities only, then formats
+the values of that page. Large groups and deep OFFSETs are intentional stress
+cases. `TraceQuery` in `src/duckpad/trace/query.py` constructs the queries;
+`AggregateVisitor` in `src/duckpad/trace/aggregate.py` selects the group and
+excludes NULL amounts.
 
 A row-preserving step with captured witnesses joins the explained row once to
 its few candidate rows. Without witnesses every candidate row is compared with
@@ -111,11 +112,11 @@ one scalar subquery per column: DuckDB plans that form more slowly, but filters
 many rows faster.
 
 Candidate experiments include caching counts/candidate identities for an
-immutable dataset generation, and deduplicating the records of joined steps on
-narrow identity tuples before formatting JSON values. Invalidate any cache on
+immutable dataset generation, and selecting the rows of a joined step by
+identity so that its records need no deduplication. Invalidate any cache on
 recomputation and preserve context, NULL and duplicate semantics. Compare deep
-OFFSET with the first page before prioritizing keyset pagination: sorting every
-record dominates a deep page.
+OFFSET with the first page before prioritizing keyset pagination: sorting the
+identities dominates a deep page.
 
 For small inputs, inspect Python profiles as well as SQL: once the statements
 are short, parsing the step and building its queries take about as long as

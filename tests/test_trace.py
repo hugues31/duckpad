@@ -455,9 +455,12 @@ def test_page_counts_records_only_beyond_the_page(explain):
     assert page(result, 50, 2)[:2] == ([], 10)
 
 
-def test_deep_pages_read_the_same_records_as_branch_pages(explain, monkeypatch):
-    result = explain("SELECT SUM(value + id) FROM src")
+@pytest.mark.parametrize("query", ["SELECT SUM(value) FROM src", "SELECT SUM(value + id) FROM src"])
+def test_deep_pages_read_the_same_records_as_branch_pages(explain, monkeypatch, query):
+    result = explain(query)
     expected = [page(result, offset, 3)[:2] for offset in range(0, 12, 3)]
+    assert expected[0][1] == len(result.contributions)
+    # Beyond the rows read from each branch, a page sorts cell identities.
     monkeypatch.setattr("duckpad.lineage.BRANCH_ROWS", 0)
     assert [page(result, offset, 3)[:2] for offset in range(0, 12, 3)] == expected
 

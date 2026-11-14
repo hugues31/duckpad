@@ -17,7 +17,7 @@ from .util import Problem, clean, qi, uid
 
 PAGE_SIZE = 5
 INTERRUPTED = "Lineage interrupted by recalculation. Select a cell in the new result."
-# Up to this many rows, a page sorts the first records of each branch instead of every record.
+# Up to this many rows, a page reads the first records of each branch instead of sorting every cell.
 BRANCH_ROWS = 100_000
 
 
@@ -50,23 +50,29 @@ def page_statements(cells, offset, page_size):
     and counting every record."""
     offset, page_size = int(offset), int(page_size)
     branches = [sql(branch.query) for branch in cells.branches]
-    # A branch holds one column of one relation: its records are ordered by row alone.
-    order = "row_id" if len(branches) == 1 else "dataset, row_id, column_name"
+    records = union(branches)
+    # A cell is identified by these columns: the other columns of its record depend on them.
+    # A branch holds one column of one relation, so its own records are ordered by row alone.
+    cell = "dataset, row_id, column_name"
+    order = "row_id" if len(branches) == 1 else cell
+    distinct = "" if cells.exact else "DISTINCT "
+    rows = f"LIMIT {page_size + 1} OFFSET {offset}"
     reach = offset + page_size + 1
-    records = counted = union(branches)
-    if not cells.exact:
-        records = f"SELECT DISTINCT * FROM ({records}) contributions"
-        # The other columns of a record depend on these three.
-        counted = f"SELECT DISTINCT dataset, row_id, column_name FROM ({counted}) contributions"
-    elif reach <= BRANCH_ROWS:
+    if cells.exact and reach <= BRANCH_ROWS:
         # The first rows of the page order are among the first rows of each branch.
-        records = union(
+        first = union(
             f"(SELECT * FROM ({branch}) branch ORDER BY row_id LIMIT {reach})" for branch in branches
         )
-    return (
-        f"SELECT * FROM ({records}) contributions ORDER BY {order} LIMIT {page_size + 1} OFFSET {offset}",
-        f"SELECT COUNT(*) FROM ({counted}) counted",
-    )
+        page = f"SELECT * FROM ({first}) contributions ORDER BY {order} {rows}"
+    else:
+        # Only cell identities are deduplicated and sorted; values are formatted for the page alone.
+        identities = f"SELECT {distinct}{order} FROM ({records}) cells ORDER BY {order} {rows}"
+        page = (
+            f"SELECT {distinct}* FROM ({records}) contributions "
+            f"WHERE ({order}) IN ({identities}) ORDER BY {order}"
+        )
+    counted = records if cells.exact else f"SELECT DISTINCT {cell} FROM ({records}) cells"
+    return page, f"SELECT COUNT(*) FROM ({counted}) counted"
 
 
 def first_of_each(contributions, limit):
