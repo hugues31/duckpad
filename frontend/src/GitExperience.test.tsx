@@ -62,7 +62,7 @@ it("explains the empty branch and uses the existing run action until execution s
   expect(screen.getByRole("status").textContent).toContain(
     "No results on this branch · 1 node",
   );
-  fireEvent.click(screen.getByRole("button", { name: "Run all" }));
+  fireEvent.click(screen.getByRole("button", { name: "Run" }));
   expect(worktree.run).toHaveBeenCalledOnce();
   worktree.statuses.nodes = { filter: { execution_status: "success" } };
   view.rerender(<BranchResultsNotice />);

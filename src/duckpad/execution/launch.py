@@ -51,4 +51,5 @@ def launch_worktree(services: Services, worktree: str, data: Launch, requester: 
         if data.partition_execution
         else None,
         ancestors=data.ancestors,
+        reuse=data.reuse,
     )

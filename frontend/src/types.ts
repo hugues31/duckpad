@@ -421,6 +421,8 @@ export interface NodeRun {
   partitioned?: boolean;
   results?: ExecutionResult[];
   status: NodeRunStatus;
+  /** The run kept the node's valid result, computed by this earlier run, and did not run it. */
+  kept?: { run: string; created: string };
   label: string;
   writes_external: boolean;
   /** The node ran as a passthrough, without its code. */
@@ -503,6 +505,10 @@ export interface Run {
   scope: string;
   /** Only the upstream nodes of `scope` ran, for its preview. */
   ancestors?: boolean;
+  /** The run kept the valid results in its scope and computed the other nodes. */
+  reuse?: boolean;
+  /** How many nodes kept their result. */
+  kept_results?: number;
   scope_name: NodeName;
   trigger: string;
   entry_point: "ui" | "api" | "assistant";

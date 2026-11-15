@@ -156,7 +156,7 @@ export async function jobsFlow(page: Page) {
     ),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: en.run, exact: true }),
+    page.getByRole("button", { name: en.runFlow, exact: true }),
   ).toBeDisabled();
   const preview = await page.request.get(
     `/api/worktrees/${job.worktree}/preview/source?environment=prod`,
@@ -168,7 +168,7 @@ export async function jobsFlow(page: Page) {
     "Daily production",
   );
   await expect(
-    page.getByRole("button", { name: en.run, exact: true }),
+    page.getByRole("button", { name: en.runFlow, exact: true }),
   ).toBeDisabled();
   return { tree, job, run: runs[0] };
 }

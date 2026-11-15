@@ -57,11 +57,11 @@ test("command search runs the project and navigates project and settings destina
   const { worktree } = await fixture(page, "Commands workspace");
   await page.goto(`/worktrees/${worktree.id}/flow`);
   await expect(
-    page.getByRole("button", { name: "Run all", exact: true }),
+    page.getByRole("button", { name: "Run", exact: true }),
   ).toBeVisible();
   await page.keyboard.press("ControlOrMeta+k");
   let dialog = page.getByRole("dialog", { name: "Search instance" });
-  await dialog.getByRole("combobox").fill("Run all");
+  await dialog.getByRole("combobox").fill("Run");
   const launch = page.waitForResponse(
     (response) =>
       response.url().endsWith(`/worktrees/${worktree.id}/runs`) &&
@@ -262,7 +262,7 @@ test("reader search excludes private projects and removes results when membershi
       reader.locator('.react-flow__node[data-id="distant"]'),
     ).toHaveClass(/selected/);
     await expect(
-      reader.getByRole("button", { name: "Run all", exact: true }),
+      reader.getByRole("button", { name: "Run", exact: true }),
     ).toBeDisabled();
     await reader.getByRole("combobox", { name: "Find a node…" }).fill("first");
     await reader.getByRole("listbox").getByRole("option").click();

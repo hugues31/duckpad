@@ -132,7 +132,7 @@ class Filter(dp.Node):
   });
   expect(saved.ok(), await saved.text()).toBeTruthy();
   await page.reload();
-  await page.getByRole("button", { name: "Run all", exact: true }).click();
+  await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect
     .poll(
       async () => {

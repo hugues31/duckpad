@@ -52,7 +52,7 @@ test("readers can inspect partition settings without editing or running the proj
     .getByRole("link", { name: "Flow", exact: true })
     .click();
   await expect(
-    page.getByRole("button", { name: "Run all", exact: true }),
+    page.getByRole("button", { name: "Run", exact: true }),
   ).toBeDisabled();
   await expect(page.locator(".partition-selector")).toHaveCount(0);
 });

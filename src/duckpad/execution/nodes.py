@@ -34,6 +34,7 @@ from .journal import RunJournal
 from .messages import execute_messages, execute_test
 from .publication import Publication
 from .python_nodes import PythonNodes
+from .reuse import invalidate_results
 from .statements import compile_node, row_count, staged_dataset, statement_kind
 
 if TYPE_CHECKING:
@@ -63,6 +64,8 @@ class NodeExecutor:
 
     def execute_nodes(self, execution: Execution, order: list[str]) -> None:
         for key in order:
+            if self.keeps(execution, key):
+                continue
             state = execution.run["nodes"][key]
             skipped = self.skip_reason(execution, key)
             if skipped:
@@ -74,6 +77,37 @@ class NodeExecutor:
                 self.journal.persist(execution.run, execution.secrets)
             else:
                 self.run_node(execution, key)
+
+    def keeps(self, execution: Execution, key: str) -> bool:
+        """Whether the run still keeps a node's result, as planned, when the node's turn comes.
+
+        A value calculated by this run can change the node's definition, and an input can have
+        run after all: the node then runs too, and what reads its result turns stale.
+        """
+        outputs = execution.kept.get(key)
+        if outputs is None:
+            return False
+        context = execution.context
+        with context.lock:
+            current = context.outputs.get(key, {})
+            # A canceled run leaves what it kept as it was.
+            unchanged = (
+                all(e["source"] in execution.kept for e in execution.edges if e["target"] == key)
+                and all(data.fingerprint == execution.fingerprints[key] for data in outputs.values())
+                and {port: data.id for port, data in current.items()}
+                == {port: data.id for port, data in outputs.items()}
+            )
+        if unchanged:
+            return True
+        del execution.kept[key]
+        execution.published.pop(key, None)
+        execution.run["kept_results"] = len(execution.kept)
+        state = execution.run["nodes"][key]
+        for name in ("kept", "outputs"):
+            state.pop(name, None)
+        state["status"] = "pending"
+        invalidate_results(self.exports, context, execution.edges, {key}, set(execution.order))
+        return False
 
     @staticmethod
     def skip_reason(execution: Execution, key: str) -> Record | None:

@@ -105,3 +105,33 @@ it("shows the environment stage and retains its log after cancellation", () => {
   );
   expect(screen.queryByRole("progressbar")).toBeNull();
 });
+
+it("counts the nodes a run computes and names the results it keeps", () => {
+  const kept = {
+    status: "success",
+    label: "Kept",
+    writes_external: false,
+    kept: { run: "earlier", created: "" },
+  } as const;
+  render(
+    <RunProgress
+      run={
+        {
+          id: "run",
+          status: "running",
+          environment: "dev",
+          nodes: {
+            a: kept,
+            b: kept,
+            c: { status: "success", label: "C", writes_external: false },
+            d: { status: "pending", label: "D", writes_external: false },
+          },
+        } as unknown as Run
+      }
+    />,
+  );
+  expect(screen.getByText("1/2 Nodes · 2 results kept")).toBeTruthy();
+  expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe(
+    "50",
+  );
+});

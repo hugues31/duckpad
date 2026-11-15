@@ -17,14 +17,14 @@ async function sample(page: Page) {
   } else
     await page.getByRole("button", { name: "Open example project" }).click();
   await expect(
-    page.getByRole("button", { name: "Run all", exact: true }),
+    page.getByRole("button", { name: "Run", exact: true }),
   ).toBeVisible();
 }
 async function run(page: Page) {
   const response = page.waitForResponse(
     (r) => r.url().endsWith("/runs") && r.request().method() === "POST",
   );
-  await page.getByRole("button", { name: "Run all", exact: true }).click();
+  await page.getByRole("button", { name: "Run", exact: true }).click();
   if (
     (await page.getByLabel("Environment", { exact: true }).inputValue()) ===
     "prod"
@@ -42,7 +42,7 @@ async function run(page: Page) {
     )
     .toBe("success");
   await expect(
-    page.getByRole("button", { name: "Run all", exact: true }),
+    page.getByRole("button", { name: "Run", exact: true }),
   ).toBeVisible();
 }
 
@@ -57,7 +57,7 @@ test("theme and language persist without a project commit and environments have 
   ).json();
   await choosePreference(page, "French");
   await expect(
-    page.getByRole("button", { name: fr.run, exact: true }),
+    page.getByRole("button", { name: fr.runFlow, exact: true }),
   ).toBeVisible();
   await choosePreference(page, fr.dark);
   await page.reload();

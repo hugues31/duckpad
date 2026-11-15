@@ -34,7 +34,7 @@ test("Python preparation is visible in the workspace and retained in settings", 
   );
   await page.goto(`/worktrees/${tree.id}/flow`);
   await expect(
-    page.getByRole("button", { name: "Run all", exact: true }),
+    page.getByRole("button", { name: "Run", exact: true }),
   ).toBeVisible();
   const notice = page.getByRole("region", {
     name: "Python environment",

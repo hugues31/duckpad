@@ -154,7 +154,12 @@ Jobs own separate read-only worktrees and use the same execution machinery.
 
 Accepted runs capture the commit, graph, parameters, variables, environment and
 connection settings. Requested ancestors run once in dependency order, including
-sources with valid prior results. Computed variables and partition manifests have
+sources with valid prior results. A launch can ask to keep valid results instead
+(`reuse`), as the interface does: a node then keeps its outputs when they are
+valid for the captured definitions and were computed from the kept outputs of all
+its inputs. The requested node, nodes without outputs and partitioned flows
+always run. A kept node runs after all when a value calculated by the run changes
+its definition; what reads it then turns stale. Computed variables and partition manifests have
 a value phase before their consumers. Independent branches continue after failure;
 descendants of a failed node are blocked.
 

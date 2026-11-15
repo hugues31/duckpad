@@ -37,7 +37,7 @@ export async function projectNavigationFlow(page: Page) {
   const toolbar = page.locator(".flow-toolbar");
   // The new branch also offers its first run in the missing-results notice.
   await expect(
-    toolbar.getByRole("button", { name: en.run, exact: true }),
+    toolbar.getByRole("button", { name: en.runFlow, exact: true }),
   ).toBeVisible();
   // Opening a page focuses its toolbar for keyboard users, without a focus ring.
   await expect(toolbar).toBeFocused();
@@ -187,7 +187,7 @@ export async function projectNavigationFlow(page: Page) {
   await expect(
     page
       .locator(".flow-toolbar")
-      .getByRole("button", { name: fr.run, exact: true }),
+      .getByRole("button", { name: fr.runFlow, exact: true }),
   ).toBeInViewport();
   expect(runs).toBe(0);
   return { project, branch };

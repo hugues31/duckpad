@@ -70,7 +70,7 @@ projects on your own machine. The default mode confines pipelines to the files
 they are allowed to read, which requires Linux with Landlock; see the
 [platform requirements](docs/INSTALLATION.md#platform-requirements).
 
-Then choose **New project → Start from an example** and **Run all** to explore
+Then choose **New project → Start from an example** and **Run** to explore
 a finished pipeline, or follow **[Duckpad in 15 minutes](docs/QUICKSTART.md)**
 to build your first one from scratch.
 

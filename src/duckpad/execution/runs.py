@@ -69,9 +69,12 @@ class Runner:
         partition_selection: Record | None = None,
         partition_execution: Record | None = None,
         ancestors: bool = False,
+        reuse: bool = False,
         guard: Callable[[], None] | None = None,
     ) -> Record:
         """Admit a run and start it in a thread; its preparation happens there.
+
+        `reuse` keeps the valid results in the scope instead of computing them again.
 
         `guard` runs once the worktree is reserved, outside the engine lock, and can still refuse
         the launch. From the reservation on, changes that reset execution state, such as Python
@@ -121,6 +124,7 @@ class Runner:
                             partition_selection,
                             partition_execution,
                             ancestors,
+                            reuse,
                         ),
                         name=token["id"],
                         daemon=True,
@@ -162,9 +166,10 @@ class Runner:
         partition_selection: Record | None,
         partition_execution: Record | None,
         ancestors: bool,
+        reuse: bool = False,
     ) -> None:
         execution = self.planner.start(
-            token, pending, target, partition_selection, partition_execution, ancestors
+            token, pending, target, partition_selection, partition_execution, ancestors, reuse
         )
         if execution is None:
             return

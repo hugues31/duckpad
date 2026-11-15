@@ -236,7 +236,7 @@ the canvas marks value sources with **ƒ**. A shared upstream node runs once.
 Value sources and their upstream nodes may use ordinary variables only; computed
 value chains and dependency cycles are rejected.
 
-**Run with ancestors** in the variable editor refreshes its source using the
+**Run node** in the variable editor refreshes its source using the
 usual launch permissions and protected-environment confirmation. A launch limited
 to a consumer does not add the value source to its scope: it uses the last
 successful value retained in that worktree and environment. Without one, run the

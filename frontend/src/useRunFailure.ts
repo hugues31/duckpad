@@ -34,6 +34,12 @@ export function useRunFailure(
   const run = outcome.data || current;
   return {
     trackRun,
+    /** The run launched here, once it ended. */
+    finished:
+      outcome.data &&
+      !["preparing", "running", "canceling"].includes(outcome.data.status)
+        ? outcome.data
+        : null,
     // Node failures already have their own cards in Results.
     runFailure:
       run?.status === "failed" &&

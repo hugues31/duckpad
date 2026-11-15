@@ -1247,6 +1247,15 @@ fieldset.palette-bottom {
   flex-shrink: 0;
   color: var(--muted);
 }
+.node-action-menu .action-text {
+  display: grid;
+  gap: 2px;
+}
+.node-action-menu .action-text small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
 .node-action-menu .danger svg {
   color: inherit;
 }

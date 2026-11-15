@@ -90,10 +90,10 @@ for (const entry of ["pipeline", "inspector"] as const) {
       );
       const button =
         entry === "pipeline"
-          ? page.getByRole("button", { name: "Run all", exact: true })
+          ? page.getByRole("button", { name: "Run", exact: true })
           : page
               .locator(".inspector")
-              .getByRole("button", { name: "Run with ancestors", exact: true });
+              .getByRole("button", { name: "Run node", exact: true });
       await expect(button).toBeVisible();
       const launched = runResponse(page, endpoint);
       // Two events in one render also exercise the launch guard, before disabled updates.
@@ -129,7 +129,7 @@ test("confirmed pipeline waits for the new binding", async ({ page }) => {
   await gate.routed;
   try {
     await bindStatus(page);
-    await page.getByRole("button", { name: "Run all", exact: true }).click();
+    await page.getByRole("button", { name: "Run", exact: true }).click();
     const dialog = page.getByRole("dialog", {
       name: "Confirm execution",
       exact: true,
@@ -142,7 +142,7 @@ test("confirmed pipeline waits for the new binding", async ({ page }) => {
       dialog.getByRole("button", { name: "Loading…", exact: true }),
     ).toBeDisabled();
     await expect(
-      page.getByRole("button", { name: "Run all", exact: true }),
+      page.getByRole("button", { name: "Run", exact: true }),
     ).toHaveAttribute("aria-busy", "true");
     gate.release();
     const response = await launched;
@@ -181,7 +181,7 @@ for (const [environment, status] of [
     try {
       await bindStatus(page);
       const button = page.getByRole("button", {
-        name: "Run all",
+        name: "Run",
         exact: true,
       });
       await button.click();
@@ -228,7 +228,7 @@ test("Run persists unsaved Code edits before launching", async ({ page }) => {
     "Unsaved changes",
   );
   const launched = runResponse(page, endpoint);
-  await page.getByRole("button", { name: "Run all", exact: true }).click();
+  await page.getByRole("button", { name: "Run", exact: true }).click();
   const response = await launched;
   expect(response.ok()).toBeTruthy();
   await expectNewBinding(page, (await response.json()).id);

@@ -86,7 +86,7 @@ export async function verifyNodeCode(page: Page) {
     });
     for (const name of [
       "Edit code",
-      "Run with ancestors",
+      "Run node",
       "Duplicate node",
       "Mute node (M)",
       "Convert to template",

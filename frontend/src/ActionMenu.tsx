@@ -11,6 +11,8 @@ import type { LucideIcon } from "lucide-react";
 export interface ActionItem {
   id: string;
   label: string;
+  /** What the action does, under its label, when the label alone does not say. */
+  hint?: string;
   run: () => void;
   icon?: LucideIcon;
   disabled?: boolean;
@@ -120,7 +122,14 @@ export function ActionMenu({
           }}
         >
           {item.icon && <item.icon size={14} aria-hidden="true" />}
-          {item.label}
+          {item.hint ? (
+            <span className="action-text">
+              {item.label}
+              <small>{item.hint}</small>
+            </span>
+          ) : (
+            item.label
+          )}
         </button>
       ))}
     </div>,

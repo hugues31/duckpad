@@ -4,8 +4,15 @@ import { useLoadedWorktree } from "./worktree";
 /** Results are local to a worktree, so a new branch needs its first run. */
 export default function BranchResultsNotice() {
   const t = useT();
-  const { snapshot, statuses, statusesLoaded, canEdit, starting, run } =
-    useLoadedWorktree();
+  const {
+    snapshot,
+    environment,
+    statuses,
+    statusesLoaded,
+    canEdit,
+    starting,
+    run,
+  } = useLoadedWorktree();
   const count = snapshot.bundle?.flow.nodes.length || 0;
   if (
     !statusesLoaded ||
@@ -27,7 +34,7 @@ export default function BranchResultsNotice() {
         disabled={!canEdit || starting}
         onClick={() => void run()}
       >
-        {t("run")}
+        {t(snapshot.partitions?.[environment]?.dimension ? "run" : "runFlow")}
       </button>
     </div>
   );

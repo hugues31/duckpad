@@ -346,6 +346,8 @@ class Launch(PartitionLaunch):
     node: str | None = None
     # Run only the upstream nodes of `node`, which its preview reads.
     ancestors: StrictBool = False
+    # Keep the valid results in the scope instead of computing them again; `node` always runs.
+    reuse: StrictBool = False
     entry_point: str | None = None
     confirmed: StrictBool = False
 

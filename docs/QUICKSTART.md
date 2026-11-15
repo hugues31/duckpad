@@ -63,7 +63,7 @@ SELECT * FROM (VALUES
 ) AS sample(order_id, region, status, amount);
 ```
 
-Close the editor; your code is already saved. Choose **Run all**. Select the
+Close the editor; your code is already saved. Choose **Run**. Select the
 node: its **Data** tab under the canvas shows all four orders.
 
 `-- @output orders` names the table it publishes. The rest is DuckDB SQL, ending
