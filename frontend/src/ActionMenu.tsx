@@ -11,11 +11,16 @@ import type { LucideIcon } from "lucide-react";
 export interface ActionItem {
   id: string;
   label: string;
+  /** What the action does, under its label, when the label alone does not say. */
+  hint?: string;
   run: () => void;
   icon?: LucideIcon;
   disabled?: boolean;
   danger?: boolean;
 }
+
+/** Room kept between a menu and the edges of the window, in pixels. */
+const MARGIN = 8;
 
 /** Move focus between menu items with the arrow, Home and End keys. */
 export function moveMenuFocus(event: KeyboardEvent, items: HTMLElement[]) {
@@ -37,28 +42,33 @@ export function ActionMenu({
   label,
   items,
   position,
+  align = "start",
   onClose,
 }: {
   label: string;
   items: ActionItem[];
   position: { x: number; y: number };
+  /** Which edge of the menu `position.x` gives: its left one, or its right one. */
+  align?: "start" | "end";
   onClose: () => void;
 }) {
   const menu = useRef<HTMLDivElement>(null);
-  const [point, setPoint] = useState(position);
+  // Measured from the left edge first: beside the right one, the menu would be squeezed.
+  const [point, setPoint] = useState({ x: MARGIN, y: position.y });
   useLayoutEffect(() => {
     const bounds = menu.current!.getBoundingClientRect();
+    const left = align === "end" ? position.x - bounds.width : position.x;
     setPoint({
       x: Math.max(
-        8,
-        Math.min(position.x, window.innerWidth - bounds.width - 8),
+        MARGIN,
+        Math.min(left, window.innerWidth - bounds.width - MARGIN),
       ),
       y: Math.max(
-        8,
-        Math.min(position.y, window.innerHeight - bounds.height - 8),
+        MARGIN,
+        Math.min(position.y, window.innerHeight - bounds.height - MARGIN),
       ),
     });
-  }, [position]);
+  }, [position, align]);
   useEffect(() => {
     (
       menu.current?.querySelector<HTMLButtonElement>("button:not(:disabled)") ||
@@ -120,7 +130,14 @@ export function ActionMenu({
           }}
         >
           {item.icon && <item.icon size={14} aria-hidden="true" />}
-          {item.label}
+          {item.hint ? (
+            <span className="action-text">
+              {item.label}
+              <small>{item.hint}</small>
+            </span>
+          ) : (
+            item.label
+          )}
         </button>
       ))}
     </div>,

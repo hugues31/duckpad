@@ -310,7 +310,7 @@ for (const [language, labels] of [
     await page.goto(`/worktrees/${branch.id}/flow`);
     const run = page
       .locator(".flow-toolbar")
-      .getByRole("button", { name: labels.run, exact: true });
+      .getByRole("button", { name: labels.runFlow, exact: true });
     await expect(run).toBeEnabled();
     for (const width of [1024, 1280, 1440, 1512])
       await expectToolbarFits(page, width);

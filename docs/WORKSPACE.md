@@ -44,7 +44,7 @@ can be undone with Ctrl/Cmd+Z. Select a node for
 its parameters on the right and its [results](RESULTS.md) below. Double-click a
 SQL or Python node to edit its code; a linked node opens its shared template.
 **Edit code** at the top of the inspector does the same. The icons under it run
-the node with its ancestors, mute it, duplicate it, link it to a template or
+the node, mute it, duplicate it, link it to a template or
 remove it; point at an icon for its name, or right-click the node for the same
 actions in a menu. Removing a node can be undone with **Undo** in the
 notification or Ctrl/Cmd+Z. Double-click a [component](COMPONENTS.md) to open
@@ -114,7 +114,7 @@ it. Inside a component, this searches that component's nodes.
 nodes across projects you can read, including nested components. Results show
 their project, branch and component path; selecting one opens that location.
 Search uses saved project metadata, excluding SQL, parameter values and result rows.
-It also offers **Run all**, **New working branch**, project tabs and settings
+It also offers **Run**, **Run everything**, **New working branch**, project tabs and settings
 sections according to the current context and permissions. Actions appear before
 typing; filter by their names or settings category.
 
@@ -134,15 +134,33 @@ A save applies its project files and Git commit together: a failed save leaves
 the previous files and branch commit in place.
 
 Every run first saves pending editor changes and waits for saves already in
-progress; a failed save stops the launch. **Run all** runs the whole flow;
-a node's **Run with ancestors** runs a smaller scope. A run from the interface is
+progress; a failed save stops the launch. **Run** runs the whole flow;
+a node's **Run node** runs that node. A run from the interface is
 refused while an input in its scope has no source: the banner names the input
 and the node is selected. **Stop execution** requests cancellation of active
 SQL. A protected environment asks for confirmation.
 
+Both keep the [valid results](RESULTS.md#result-lifetime) they need instead of
+computing them again, so a source that is already loaded is not read again:
+
+- **Run** computes the nodes whose result is missing or stale, then tells how
+  many nodes ran and how many results it kept.
+- **Run node** always computes its node; its ancestors run only without a valid
+  result. What reads the new result turns stale until the next **Run**. Run a
+  source this way to read it again.
+- Nodes without an output, such as exports, run every time. A Python node with
+  outputs is kept like any other node, with its download.
+- The arrow beside **Run** offers **Run everything**, which reads every source
+  again and computes every node.
+
+Duckpad compares the saved processing configuration, not the data behind a
+source: choose **Run everything**, or run the source, when it changed. Jobs, the
+API and the command line compute every node of their scope. A
+[partitioned flow](PARTITIONS.md#launch-and-retry) keeps its results key by key.
+
 While a run is active, the strip below the project tabs, and a running Job's
 details, show its environment, completed nodes (or partitions, failed ones
-counted separately) and an approximate time remaining. The estimate uses previous
+counted separately), the results it keeps and an approximate time remaining. The estimate uses previous
 successful node durations in the same worktree and environment.
 
 On the canvas, nodes waiting in the run show **Pending**, and running nodes show

@@ -232,7 +232,7 @@ test("mute shortcuts and menu preserve the graph and bypass execution", async ({
         response.request().method() === "POST" &&
         response.url().endsWith("/runs"),
     );
-    await page.getByRole("button", { name: "Run all", exact: true }).click();
+    await page.getByRole("button", { name: "Run", exact: true }).click();
     const started = await (await response).json();
     await expect
       .poll(

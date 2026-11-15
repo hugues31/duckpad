@@ -6,6 +6,7 @@ import {
   GitBranch,
   Link,
   Link2,
+  Play,
   Trash2,
   Undo2,
   Unlink,
@@ -38,6 +39,8 @@ export function nodeActions(
     busy,
     bundle,
     open,
+    runNode,
+    running,
     lineage,
     safe,
     parent,
@@ -55,6 +58,9 @@ export function nodeActions(
     busy: boolean;
     bundle: Bundle;
     open: (target: FlowNode) => void;
+    runNode: (target: FlowNode) => void;
+    /** A run is starting or active: another one has to wait. */
+    running: boolean;
     lineage: (target: FlowNode) => void;
     safe: (action: () => Promise<unknown>) => void;
     parent: string | undefined;
@@ -92,6 +98,13 @@ export function nodeActions(
       () => open(target),
     ),
   ];
+  // The inspector has its own run button, beside the main action.
+  actions.push({
+    ...item("run", Play, t("runNode"), () => runNode(target)),
+    hint: t("runNodeHint"),
+    disabled: !canEdit || busy || running,
+    menuOnly: true,
+  });
   actions.push({
     id: "lineage",
     icon: GitBranch,

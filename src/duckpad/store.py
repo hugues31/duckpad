@@ -590,7 +590,8 @@ class Store:
             )
             for snapshot in session.exec(statement):
                 for key, state in snapshot.get("nodes", {}).items():
-                    duration = state.get("duration")
+                    # A kept result carries the timing of the run that computed it.
+                    duration = (state.get("kept") or {}).get("duration", state.get("duration"))
                     if (
                         key not in estimates
                         and state.get("status") == "success"

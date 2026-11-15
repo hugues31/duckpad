@@ -27,7 +27,7 @@ export default function BranchResultsNotice() {
         disabled={!canEdit || starting}
         onClick={() => void run()}
       >
-        {t("run")}
+        {t("runFlow")}
       </button>
     </div>
   );

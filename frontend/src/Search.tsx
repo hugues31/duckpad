@@ -294,6 +294,8 @@ export default function InstanceSearch({
               onClose();
               if (command.to) void navigate(command.to);
               else if (command.action === "run") void worktree?.run();
+              else if (command.action === "runEverything")
+                void worktree?.run(undefined, { reuse: false });
               else if (command.action === "newBranch")
                 openModal({ kind: "newBranch", worktree: currentWorktree });
               return;

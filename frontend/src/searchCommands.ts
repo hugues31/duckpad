@@ -17,7 +17,7 @@ export interface SearchCommand {
   /** What finds the command: its name and category, never the project name. */
   keywords: string;
   to?: string;
-  action?: "run" | "newBranch";
+  action?: "run" | "runEverything" | "newBranch";
 }
 
 export function searchCommands(
@@ -60,7 +60,10 @@ export function searchCommands(
     ) => add(key, label, category, to, action, project.name);
     const editable =
       ["admin", "editor"].includes(project.role) && !tree.read_only;
-    if (editable && canRun) here("run", t("run"), "", undefined, "run");
+    if (editable && canRun) {
+      here("run", t("runFlow"), "", undefined, "run");
+      here("runEverything", t("runEverything"), "", undefined, "runEverything");
+    }
     if (editable && canBranch)
       here("newBranch", t("newBranch"), "", undefined, "newBranch");
     for (const tab of workspaceTabs)

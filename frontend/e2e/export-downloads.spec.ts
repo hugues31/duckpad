@@ -80,7 +80,7 @@ test("download a full CSV export and keep project ZIP separate", async ({
     );
     await page
       .locator(".inspector")
-      .getByRole("button", { name: "Run with ancestors", exact: true })
+      .getByRole("button", { name: "Run node", exact: true })
       .click();
     const run = await (await launched).json();
     await expect(downloadButton).toBeEnabled({ timeout: 30000 });

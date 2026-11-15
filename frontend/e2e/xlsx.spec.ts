@@ -94,7 +94,7 @@ test("upload a worksheet and export it as project files through the canvas", asy
         response.url().endsWith("/runs") &&
         response.request().method() === "POST",
     );
-    await page.getByRole("button", { name: "Run all", exact: true }).click();
+    await page.getByRole("button", { name: "Run", exact: true }).click();
     const run = await (await launched).json();
     await expect
       .poll(

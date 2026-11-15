@@ -34,7 +34,8 @@ See [authoring](AUTHORING.md), [SQL](SQL.md), [components](COMPONENTS.md) and
   current fingerprints so outdated results remain stale.
 - A worktree admits one run through preparation, execution, cancellation and
   cleanup, across all environments. Busy requests are refused without queuing.
-  Requested ancestors run once per launch, including sources with valid results.
+  Requested ancestors run once per launch, including sources with valid results,
+  unless the launch asks to keep valid results, as the interface does.
 - Outputs publish together once queries succeed and no error-level test or
   message fails. A failed node retains its previous successful set as stale, but
   descendants cannot use it as fallback input. Independent branches continue

@@ -10,6 +10,7 @@ from . import partitions, variables
 from .catalog import redact
 from .components import expand_for
 from .datasets import Dataset
+from .execution.reuse import invalidate_results
 from .execution.statements import compile_node
 from .graph import reachable, topological
 from .materialize import drop_dataset
@@ -44,6 +45,13 @@ class PartitionRun:
         }
         self.preview_bytes = 0
         self.partitioned = {k for k in execution.order if execution.nodes[k].get("partitioned")}
+        # The run may keep the keys' results: none of their nodes was requested, their other
+        # inputs are kept and the launch chose no keys. Only the keys that need it then run.
+        self.keeping = (
+            bool(self.partitioned)
+            and all(k in execution.kept for k in self.partitioned)
+            and "partition_selection" not in self.root
+        )
         self.required = {
             (e["source"], e["sourceHandle"])
             for e in execution.edges
@@ -105,15 +113,54 @@ class PartitionRun:
             self.root["nodes"][key]["fingerprint"] = execution.fingerprints.get(key)
         self.runner.fingerprints.invalidate(execution.context)
         self.selected = self.select() if self.partitioned else []
+        if self.keeping and self.selected and self.chained():
+            # A later zone reads what collects these keys, which runs again.
+            self.selected = self.entries
+        if self.keeping and self.entries and not self.selected:
+            for key in self.partitioned:
+                self.root["nodes"][key].update(status="success", kept={"partitions": len(self.entries)})
+            self.root["kept_results"] = len(execution.kept)
+        else:
+            self.release_kept()
         self.root["partitions"]["selected"] = len(self.selected)
-        if self.partitioned and self.entries and not self.selected:
+        if self.partitioned and self.entries and not self.selected and not self.keeping:
             self.root["partitions"]["reason"] = "No partitions match the selection"
         self.preflight()
 
+    def release_kept(self):
+        """Keys run after all: what reads them turns stale, as after any node that runs."""
+        execution = self.execution
+        self.keeping = False
+        if not any(k in execution.kept for k in self.partitioned):
+            return
+        for key in self.partitioned:
+            execution.kept.pop(key, None)
+        invalidate_results(
+            self.runner.exports, execution.context, execution.edges, self.partitioned, set(execution.order)
+        )
+        if "kept_results" in self.root:
+            self.root["kept_results"] = len(execution.kept)
+
+    def ordinary_inputs(self, key, published):
+        """The result generation a partitioned node reads from each input outside its zone."""
+        return {
+            e["targetHandle"]: published[e["source"]][e["sourceHandle"]].id
+            for e in self.execution.edges
+            if e["target"] == key and e["source"] not in self.partitioned
+        }
+
+    def chained(self):
+        """Whether a partitioned node reads, outside its zone, a result computed from keys."""
+        after = reachable(self.partitioned, self.execution.edges, upstream=False) - self.partitioned
+        return any(e["target"] in self.partitioned and e["source"] in after for e in self.execution.edges)
+
     def select(self):
         mode = self.selection["mode"]
-        if mode == "all":
+        if mode == "all" and not self.keeping:
             return self.entries
+        kept = self.execution.kept
+        # A kept key was computed from the inputs the run keeps, not from an earlier load.
+        inputs = {k: self.ordinary_inputs(k, kept) for k in self.partitioned} if mode == "all" else {}
         if mode == "selected":
             wanted = {partitions.identity(k) for k in self.selection["keys"]}
             available = {e["key_hash"] for e in self.entries}
@@ -139,6 +186,7 @@ class PartitionRun:
                         for node, port in self.required
                         if node == k
                     )
+                    or (mode == "all" and r["success"].get("inputs") != inputs[k])
                     for k, r in results.items()
                 )
             if included:
@@ -213,6 +261,7 @@ class PartitionRun:
         try:
             self.resolve()
         except Problem as error:
+            self.release_kept()
             self.root["partitions"].update(error=str(error), phase="failed")
             for key in self.partitioned:
                 execution.nodes[key]["error"] = str(error)
@@ -243,7 +292,9 @@ class PartitionRun:
             else:
                 key = unit[0]
                 try:
-                    self.collect_inputs(execution, key)
+                    # A kept result needs no input, and its turn decides whether it is still kept.
+                    if not self.runner.nodes.keeps(execution, key):
+                        self.collect_inputs(execution, key)
                     execution.schema_only = not self.entries and key in only_empty
                     self.runner.nodes.execute_nodes(execution, unit)
                 except Problem as error:
@@ -347,7 +398,9 @@ class PartitionRun:
                             "reason": "Export already succeeded for this key and fingerprint",
                         }
                     else:
+                        generations = self.ordinary_inputs(key, execution.published)
                         self.runner.nodes.execute_nodes(execution, [key])
+                        execution.run["nodes"][key]["inputs"] = generations
                 except Problem as error:
                     execution.run["nodes"][key].update(status="blocked", error=str(error))
                 state = execution.run["nodes"][key]
@@ -639,6 +692,9 @@ class PartitionRun:
                 )
             with self.execution.context.lock:
                 for key in self.partitioned:
+                    # Kept keys stay the results of the runs that computed them.
+                    if self.keeping:
+                        continue
                     self.execution.context.result_runs[key] = self.root["id"]
                     if self.root["nodes"][key]["status"] == "success":
                         self.execution.context.errors.pop(key, None)

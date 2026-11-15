@@ -20,10 +20,11 @@ from ..python_policy import get_policy
 from ..store import Store
 from ..types import Connections, Record, RunToken, SQLCursor
 from ..util import Problem, now
-from .contexts import ContextPool, cancel_lineage
+from .contexts import ContextPool
 from .exports import Exports
 from .fingerprints import Fingerprints
 from .journal import RunJournal
+from .reuse import invalidate_results, kept_results, kept_state
 
 
 @dataclass
@@ -105,6 +106,8 @@ class Execution:
     # Parallel partition keys share one database: each connection is attached once.
     preparing: threading.Lock = field(default_factory=threading.Lock)
     published: dict[str, dict[str, Dataset]] = field(default_factory=dict)
+    # The results the run planned to keep, by node; a node leaves it once it has to run.
+    kept: dict[str, dict[str, Dataset]] = field(default_factory=dict)
     partition_plan: Record = field(default_factory=dict)
     partition: Record | None = None
     schema_only: bool = False
@@ -220,6 +223,7 @@ class LaunchPlanner:
         partition_selection: Record | None,
         partition_execution: Record | None,
         ancestors: bool,
+        reuse: bool = False,
     ) -> Execution | None:
         from ..python_environment import preparation_cancellation
         from ..python_progress import observe_preparation
@@ -245,6 +249,7 @@ class LaunchPlanner:
                     partition_selection,
                     partition_execution,
                     ancestors,
+                    reuse,
                 )
                 self.check_canceled(token)
             for key in ("started", "requester", "trigger", "job", "tag", "external_trigger", "preparation"):
@@ -303,8 +308,13 @@ class LaunchPlanner:
         partition_selection: Record | None = None,
         partition_execution: Record | None = None,
         ancestors: bool = False,
+        reuse: bool = False,
     ) -> Execution:
-        """Capture the committed definitions and connection settings the run will use."""
+        """Capture the committed definitions and connection settings the run will use.
+
+        With `reuse`, the run keeps the valid results in its scope and computes the other nodes;
+        the requested nodes always run.
+        """
         self.check_canceled(token)
         snapshot = self.projects.flush(worktree)
         self.check_canceled(token)
@@ -334,14 +344,24 @@ class LaunchPlanner:
         self.check_conflicts(snapshot["conflicts"], scope, environment)
         captured, secrets = self.capture_connections(context, nodes, scope, strict=bool(target))
         fingerprints = self.fingerprints.of(bundle, environment, captured, values)
-        affected = reachable(scope, edges, upstream=False)
-        self.exports.mark_stale(worktree, environment, affected - scope)
-        with context.lock:
-            cancel_lineage(context, affected)
-            for dataset in context.datasets.values():
-                if dataset.node in affected:
-                    dataset.status = "stale"
-                    dataset.value_stale = False
+        kept: dict[str, dict[str, Dataset]] = {}
+        if reuse:
+            forced = {key for key in scope if target and in_subtree(key, target)}
+            # Results that collect keys were fingerprinted with the retained key list.
+            planned = (
+                self.fingerprints.of(
+                    bundle,
+                    environment,
+                    captured,
+                    values,
+                    manifest=self.fingerprints.manifest(worktree, environment, bundle),
+                )
+                if partition_plan.get("dimension")
+                and any(nodes[key].get("partition_collect_inputs") for key in scope)
+                else fingerprints
+            )
+            kept = kept_results(context, nodes, edges, order, planned, forced)
+        invalidate_results(self.exports, context, edges, scope - set(kept), scope)
         execution = Execution(
             token,
             context,
@@ -358,14 +378,25 @@ class LaunchPlanner:
             value_phase=phase & scope,
             validation_errors=validation_errors,
             partition_plan=partition_plan,
+            kept=kept,
+            published={key: outputs for key, outputs in kept.items() if outputs},
         )
         execution.run = self.snapshot_run(
             execution, snapshot, admission, scope, target, entry_point, ancestors
         )
+        if reuse:
+            execution.run.update(reuse=True, kept_results=sum(1 for outputs in kept.values() if outputs))
+        for key, outputs in kept.items():
+            # A partitioned node is kept once its run finds no key to compute.
+            if outputs:
+                execution.run["nodes"][key].update(kept_state(outputs))
         estimates = self.store.node_duration_estimates(worktree, environment)
         for key, state in execution.run["nodes"].items():
             if nodes[key].get("partitioned"):
                 state["partitioned"] = True
+            elif key in estimates and "kept" in state:
+                # Carried over, so that runs keeping a node do not lose its timing.
+                state["kept"]["duration"] = estimates[key]
             elif key in estimates:
                 state["estimated_duration"] = estimates[key]
         return execution

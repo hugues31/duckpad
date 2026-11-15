@@ -14,7 +14,10 @@ const commands = (value = workspace, run = true) =>
 
 it("offers every project tab, settings sections and available working branch actions", () => {
   const items = commands();
-  expect(items.find((item) => item.key === "run")?.label).toBe("Run all");
+  expect(items.find((item) => item.key === "run")?.label).toBe("Run");
+  expect(items.find((item) => item.key === "runEverything")?.label).toBe(
+    "Run everything",
+  );
   expect(items.find((item) => item.key === "newBranch")?.label).toBe(
     "New working branch",
   );

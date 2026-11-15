@@ -91,6 +91,7 @@ class Engine:
         partition_selection: Record | None = None,
         partition_execution: Record | None = None,
         ancestors: bool = False,
+        reuse: bool = False,
         guard: Callable[[], None] | None = None,
     ) -> Record:
         return self.runs.launch(
@@ -102,6 +103,7 @@ class Engine:
             partition_selection=partition_selection,
             partition_execution=partition_execution,
             ancestors=ancestors,
+            reuse=reuse,
             guard=guard,
         )
 

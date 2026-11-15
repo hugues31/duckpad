@@ -1,5 +1,5 @@
 import { Loader2 } from "lucide-react";
-import { useT } from "./i18n";
+import { countLabel, useT } from "./i18n";
 import { preparationStages } from "./PythonEnvironmentStatus";
 import { remainingDuration, remainingSeconds } from "./runEstimate";
 import type { Run } from "./types";
@@ -19,7 +19,9 @@ export default function RunProgress({ run }: { run: Run }) {
             remainingDuration(seconds),
           )
       : "";
-  const nodes = Object.values(run.nodes);
+  // Results the run keeps are settled from its start: they are no progress.
+  const kept = Object.values(run.nodes).filter((node) => node.kept).length;
+  const nodes = Object.values(run.nodes).filter((node) => !node.kept);
   const partitions = run.partitions;
   const total = partitions ? partitions.selected : nodes.length;
   const completed = partitions
@@ -36,7 +38,11 @@ export default function RunProgress({ run }: { run: Run }) {
   const count = total
     ? `${completed}/${total} ${t(partitions ? "partitions" : "nodes")}`
     : "";
-  const outcome = [count, failed ? `${failed} ${t("failed")}` : ""]
+  const outcome = [
+    count,
+    kept ? countLabel(t, kept, "keptResultOne", "keptResultCount") : "",
+    failed ? `${failed} ${t("failed")}` : "",
+  ]
     .filter(Boolean)
     .join(" · ");
   const phase = run.phase || partitions?.phase;

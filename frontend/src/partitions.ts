@@ -67,6 +67,8 @@ export interface PartitionPage extends PartitionDescription {
 export interface PartitionLaunchOptions {
   /** Run only the upstream nodes of the target, which its preview reads. */
   ancestors?: boolean;
+  /** Keep valid results instead of computing them again, as runs do unless this is false. */
+  reuse?: boolean;
   partitions?: {
     mode: "all" | "failed" | "missing" | "selected";
     keys?: PartitionEntry["key"][];

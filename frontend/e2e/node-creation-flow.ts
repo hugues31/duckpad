@@ -65,7 +65,7 @@ export async function verifyNodeCreation(page: Page) {
   await expect(page.locator(".banner.error")).toHaveCount(0);
   await page
     .locator(".flow-toolbar")
-    .getByRole("button", { name: en.run, exact: true })
+    .getByRole("button", { name: en.runFlow, exact: true })
     .click();
   await expect(page.locator(".banner.error")).toContainText(
     "Connect input 'source'",

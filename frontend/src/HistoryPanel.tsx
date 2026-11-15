@@ -9,7 +9,7 @@ import ExecutionMessages, {
   warningCount,
 } from "./ExecutionMessages";
 import type { GitTag } from "./gitTypes";
-import { useT } from "./i18n";
+import { countLabel, useT } from "./i18n";
 import { Modal } from "./modals";
 import { worktreeUrl } from "./navigation";
 import NewTagModal from "./NewTagModal";
@@ -158,6 +158,16 @@ export default function HistoryPanel({
                     : ""}
                 </small>
               </span>
+              {!!run.kept_results && (
+                <span className="badge neutral">
+                  {countLabel(
+                    t,
+                    run.kept_results,
+                    "keptResultOne",
+                    "keptResultCount",
+                  )}
+                </span>
+              )}
               <span className={`badge ${run.status}`}>{t(run.status)}</span>
               <WarningBadge count={run.warning_count || 0} />
               <span>{run.duration?.toFixed(2)} s</span>
@@ -392,7 +402,13 @@ function RunDetailsContent({
       {Object.entries(run.nodes).map(([key, state]) => (
         <details className="run-step" key={key}>
           <summary>
-            <span className={`badge ${state.status}`}>{t(state.status)}</span>
+            {state.kept ? (
+              <span className="badge neutral" title={t("keptResultHint")}>
+                {t("keptResult")}
+              </span>
+            ) : (
+              <span className={`badge ${state.status}`}>{t(state.status)}</span>
+            )}
             <strong>{state.label}</strong>
             <WarningBadge count={warningCount(state.results)} />
             {state.duration != null && (

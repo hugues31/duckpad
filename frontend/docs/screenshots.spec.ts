@@ -164,7 +164,7 @@ async function run(page: Page, timeout = 30000) {
   const response = page.waitForResponse(
     (r) => r.url().endsWith("/runs") && r.request().method() === "POST",
   );
-  await page.getByRole("button", { name: "Run all", exact: true }).click();
+  await page.getByRole("button", { name: "Run", exact: true }).click();
   const result = await response;
   expect(result.ok()).toBeTruthy();
   const execution = await result.json();
@@ -179,7 +179,7 @@ async function run(page: Page, timeout = 30000) {
   // The page learns the outcome from its own poll: no capture may show the
   // run still in progress.
   await expect(
-    page.getByRole("button", { name: "Run all", exact: true }),
+    page.getByRole("button", { name: "Run", exact: true }),
   ).toBeVisible();
 }
 
@@ -620,6 +620,11 @@ test("capture the docked code editor and its preview", async ({ page }) => {
   const suggestions = page.locator(".suggest-widget.visible .monaco-list-row");
   await expect(suggestions.first()).toBeVisible();
   await expect(panel.locator(".monaco-editor")).toContainText("recent_web");
+  // The typed text is saved after a pause: the capture shows the settled editor.
+  await expect(page.locator(".save-status-label")).toHaveText(
+    "All changes saved",
+  );
+  await expect(suggestions.first()).toBeVisible();
   await capture(
     page,
     "code-completion",
@@ -714,7 +719,7 @@ test("capture project variables, a parameter binding and a run confirmation", as
   ).toBeVisible();
 
   await page.getByLabel("Environment", { exact: true }).selectOption("prod");
-  await page.getByRole("button", { name: "Run all", exact: true }).click();
+  await page.getByRole("button", { name: "Run", exact: true }).click();
   const confirmation = page.getByRole("dialog", { name: "Confirm execution" });
   await expect(
     confirmation.getByRole("row").filter({ hasText: "order_status" }),

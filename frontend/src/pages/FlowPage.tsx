@@ -82,6 +82,7 @@ export default function FlowPage() {
     statuses,
     runDiagnostics,
     canEdit,
+    starting,
     save,
     run,
   } = useLoadedWorktree();
@@ -439,6 +440,8 @@ export default function FlowPage() {
       busy,
       bundle,
       open: openNode,
+      runNode: (target) => void run(prefix + target.id),
+      running: starting || !!statuses.active,
       lineage: (target) => {
         select(target.id);
         changeLineage({ node: prefix + target.id, direction: "origin" });

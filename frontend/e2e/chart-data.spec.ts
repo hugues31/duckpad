@@ -137,9 +137,7 @@ test("the Chart tab shows the Data tab's Run hint, Stale badge and failed run", 
 
   const panel = await chartTab(page, id, "points");
   const empty = panel.locator(".preview-empty");
-  await empty
-    .getByRole("button", { name: "Run with ancestors", exact: true })
-    .click();
+  await empty.getByRole("button", { name: "Run node", exact: true }).click();
   const symbols = panel.locator(".chart-view .mark-symbol path");
   await expect(symbols).toHaveCount(3, { timeout: 45000 });
   await expect(panel.locator(".results-header .badge")).toHaveText("Valid");

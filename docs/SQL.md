@@ -63,14 +63,14 @@ it points to, then preview again.
 A preview keeps nothing: it records no run in History, publishes no result,
 leaves **Valid** and **Stale** unchanged and skips tests, messages and exports.
 Its inputs need results: otherwise it lists the missing ones and offers **Run
-ancestors**, which runs only the upstream nodes, then previews again. It says
+ancestors**, which runs the upstream nodes without a valid result, then previews again. It says
 when an input result is stale. Previews need edit access, wait for an active run
 of the branch to finish, compute SQL nodes only, not Python or partitioned ones,
 and stop after 30 seconds.
 
 The inspector's **SQL** tab compiles the current configuration without running
 it. After a run, **Results → Log → Executed SQL** shows what actually ran.
-Saving code makes affected results stale; choose **Run all** to recompute.
+Saving code makes affected results stale; choose **Run** to recompute them.
 
 ## Declarations
 

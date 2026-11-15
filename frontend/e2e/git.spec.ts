@@ -95,7 +95,7 @@ test("new branch explains missing results and reviews a parameter change into it
   await page.locator('.react-flow__node[data-id="revenue"]').click();
   await page.getByLabel("minimum", { exact: true }).fill("10");
   await page.getByLabel("minimum", { exact: true }).blur();
-  await banner.getByRole("button", { name: "Run all" }).click();
+  await banner.getByRole("button", { name: "Run", exact: true }).click();
   await expect(banner).toBeHidden();
   await expect(
     page.locator('.react-flow__node[data-id="revenue"]'),

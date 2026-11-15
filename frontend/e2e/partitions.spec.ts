@@ -31,7 +31,7 @@ test("inspect retained keys, unavailable previews and global collectors without 
   await expect(panel).toContainText(
     "The partition key list is not calculated yet.",
   );
-  await page.getByRole("button", { name: "Run all", exact: true }).click();
+  await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect
     .poll(
       async () =>
@@ -117,8 +117,9 @@ test("inspect retained keys, unavailable previews and global collectors without 
   ]);
   await expect(page).toHaveURL(/node=transform/);
   await expect(panel.locator(".data-table tbody tr")).toHaveCount(2);
+  await page.getByRole("button", { name: "Run options", exact: true }).click();
   await page
-    .getByRole("button", { name: "Run with options…", exact: true })
+    .getByRole("menuitem", { name: "Run with options…", exact: true })
     .click();
   const options = page.getByRole("dialog", {
     name: "Run with options…",
@@ -262,7 +263,7 @@ test("partition controls preserve selection and explain failed keys", async ({
   await page.goto(
     `/worktrees/${created.id}/flow?environment=dev&node=transform`,
   );
-  const run = page.getByRole("button", { name: "Run all", exact: true });
+  const run = page.getByRole("button", { name: "Run", exact: true });
   await run.click();
   await expect
     .poll(

@@ -1,6 +1,6 @@
-import { PartitionRunMenu } from "./PartitionRunMenu";
 import { PartitionSelector } from "./PartitionControls";
 import ProjectTabs from "./ProjectTabs";
+import { RunMenu } from "./RunMenu";
 import RunProgress from "./RunProgress";
 import {
   AlertCircle,
@@ -134,6 +134,7 @@ export function FlowToolbar() {
               className="button primary"
               disabled={!canEdit || starting || !snapshot.bundle}
               aria-busy={starting}
+              title={t("runFlowHint")}
               onClick={() => run()}
             >
               {starting ? (
@@ -141,9 +142,9 @@ export function FlowToolbar() {
               ) : (
                 <Play size={14} fill="currentColor" />
               )}
-              {t("run")}
+              {t("runFlow")}
             </button>
-            <PartitionRunMenu />
+            <RunMenu />
           </div>
         )}
       </div>

@@ -35,7 +35,7 @@ export async function verifyDataTests(page: Page) {
     const response = page.waitForResponse(
       (r) => r.url().endsWith(`${url}/runs`) && r.request().method() === "POST",
     );
-    await page.getByRole("button", { name: "Run all", exact: true }).click();
+    await page.getByRole("button", { name: "Run", exact: true }).click();
     const started = await (await response).json();
     let run: Run;
     await expect

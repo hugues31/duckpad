@@ -232,6 +232,24 @@ describe("nodeProgress", () => {
     ).toBe(true);
   });
 
+  it("leaves out the results a run keeps", () => {
+    const kept = node({
+      status: "success",
+      kept: { run: "earlier", created: "" },
+    });
+    const current = run({
+      kept,
+      "group::kept": kept,
+      "group::waiting": node({ estimated_duration: 5 }),
+    });
+    // A kept result is no work of the run, alone or beside a node that waits.
+    expect(nodeProgress(current, "kept")).toBeUndefined();
+    expect(nodeProgress(current, "group")).toMatchObject({
+      phase: "queued",
+      total: 5,
+    });
+  });
+
   it("combines the nodes of a component and stays unknown without every estimate", () => {
     const nested = {
       box: node({ status: "pending" }),

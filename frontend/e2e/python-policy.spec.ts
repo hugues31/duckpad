@@ -40,7 +40,7 @@ test("explains disabled Python for direct and confirmed pipeline runs", async ({
     ).ok(),
   ).toBeTruthy();
   await page.goto(`/worktrees/${tree.id}/flow?env=dev`);
-  const run = page.getByRole("button", { name: labels.run, exact: true });
+  const run = page.getByRole("button", { name: labels.runFlow, exact: true });
   await run.click();
   await expect(page.getByRole("alert")).toContainText(
     labels.pythonExecutionDisabled,

@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -26,6 +27,7 @@ import type {
   PartitionPage,
 } from "./partitions";
 import { useShell } from "./shell";
+import { keptSummary } from "./runSummary";
 import type {
   Bundle,
   Diagnostic,
@@ -191,11 +193,11 @@ export function WorktreeProvider({
       return refreshWorkspace();
     },
   });
-  const { runFailure, trackRun } = useRunFailure(
-    id,
-    environment,
-    statuses.active,
-  );
+  const {
+    runFailure,
+    trackRun,
+    finished: finishedRun,
+  } = useRunFailure(id, environment, statuses.active);
   // Once connected, an input is only reported again by the next refused run.
   const unresolved = snapshot
     ? validation.diagnostics.filter((item) =>
@@ -420,7 +422,15 @@ export function WorktreeProvider({
         await settle();
         const run = await api<Run>(
           `/worktrees/${id}/runs`,
-          send({ environment, node, entry_point: "ui", confirmed, ...options }),
+          send({
+            environment,
+            node,
+            entry_point: "ui",
+            confirmed,
+            // Valid results are kept; the requested node always runs.
+            reuse: true,
+            ...options,
+          }),
         );
         setActive(id, run);
         trackRun(run);
@@ -574,6 +584,19 @@ export function WorktreeProvider({
     gitChanged,
     partition,
   ]);
+  // A run of the flow that kept results says so once, with the way to compute them again.
+  const reported = useRef("");
+  const runEverything = value?.run;
+  useEffect(() => {
+    if (!finishedRun || reported.current === finishedRun.id) return;
+    reported.current = finishedRun.id;
+    const summary = keptSummary(finishedRun, t);
+    if (summary && runEverything)
+      notify(summary, false, {
+        label: t("runEverything"),
+        run: () => void runEverything(undefined, { reuse: false }),
+      });
+  }, [finishedRun, runEverything, notify, t]);
   return (
     <WorktreeContext.Provider value={value}>
       {children}

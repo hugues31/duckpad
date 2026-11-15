@@ -368,7 +368,7 @@ test("project administrators manage their project and password without instance 
     await member.getByRole("link", { name: "Pipelines", exact: true }).click();
     await expect(member.getByLabel("Branch", { exact: true })).toBeVisible();
     await expect(
-      member.getByRole("button", { name: "Run all", exact: true }),
+      member.getByRole("button", { name: "Run", exact: true }),
     ).toBeEnabled();
   } finally {
     await context.close();

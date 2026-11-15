@@ -27,7 +27,7 @@ test("muting enrichment explains blocked components and downstream nodes directl
         r.url().endsWith(`/worktrees/${id}/runs`) &&
         r.request().method() === "POST",
     );
-    await page.getByRole("button", { name: "Run all", exact: true }).click();
+    await page.getByRole("button", { name: "Run", exact: true }).click();
     const started = await (await response).json();
     await expect
       .poll(
@@ -121,7 +121,7 @@ test("a missing extension shows the run failure on Flow with settings and histor
       (r) =>
         r.url().endsWith(`${endpoint}/runs`) && r.request().method() === "POST",
     );
-    await page.getByRole("button", { name: "Run all", exact: true }).click();
+    await page.getByRole("button", { name: "Run", exact: true }).click();
     return (await response).json();
   };
   await launch();

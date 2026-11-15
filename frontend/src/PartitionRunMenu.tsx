@@ -1,5 +1,3 @@
-import { ChevronDown } from "lucide-react";
-import { createPortal } from "react-dom";
 import { useState } from "react";
 import { withQuery } from "./api";
 import { useT, useTranslateValue } from "./i18n";
@@ -71,33 +69,8 @@ export function PartitionRunSummary({
   );
 }
 
-export function PartitionRunMenu() {
-  const t = useT();
-  const worktree = useOptionalWorktree();
-  const [open, setOpen] = useState(false);
-  if (!worktree?.snapshot?.partitions?.[worktree.environment]?.dimension)
-    return null;
-  return (
-    <>
-      <button
-        className="button primary run-options-trigger"
-        aria-label={t("partitionRunOptions")}
-        title={t("partitionRunOptions")}
-        disabled={!worktree.canEdit || worktree.starting}
-        onClick={() => setOpen(true)}
-      >
-        <ChevronDown size={15} />
-      </button>
-      {open &&
-        createPortal(
-          <RunOptions onClose={() => setOpen(false)} />,
-          document.body,
-        )}
-    </>
-  );
-}
-
-function RunOptions({ onClose }: { onClose: () => void }) {
+/** The keys and the execution policy of a run of a partitioned flow. */
+export function PartitionRunOptions({ onClose }: { onClose: () => void }) {
   const t = useT();
   const worktree = useOptionalWorktree()!;
   const defaults =
@@ -238,7 +211,8 @@ function RunOptions({ onClose }: { onClose: () => void }) {
           }
           onClick={() => {
             onClose();
-            void worktree.run(undefined, options);
+            // Chosen keys run with every other node, as this dialog describes.
+            void worktree.run(undefined, { ...options, reuse: false });
           }}
         >
           {t(partitionRunLabels[mode])}

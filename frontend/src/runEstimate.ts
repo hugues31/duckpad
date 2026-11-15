@@ -123,6 +123,8 @@ export function nodeProgress(
   if (!run || !ACTIVE_RUN.includes(run.status)) return undefined;
   const states = Object.entries(run.nodes || {})
     .filter(([key]) => key === id || key.startsWith(id + "::"))
+    // A result the run keeps is not part of its work.
+    .filter(([, state]) => !state.kept)
     .map(([, state]) => partitionedState(state, run));
   if (!states.length) return undefined;
   const open = (state: NodeRun) =>

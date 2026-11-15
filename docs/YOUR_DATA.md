@@ -41,7 +41,7 @@ header settings. For this example, set the `order_id` column's data type to
 `VARCHAR` to keep leading zeros. **Auto** uses DuckDB's detected type. Changing
 the delimiter or header clears type overrides, so review them afterward.
 
-Choose **Run all**, then select the node. **Results → Data** should show three
+Choose **Run**, then select the node. **Results → Data** should show three
 orders, with IDs `001`, `002` and `003`. A source preview in the inspector does
 not publish a result; a run does.
 
@@ -57,7 +57,7 @@ selector. The upstream run makes column choices available.
 
 Choose **Use all columns** to add `order_id`, `region` and `amount`. In the
 `amount` row, change **Output name** to `revenue`.
-Choose **Run with ancestors** on this node. Its Data tab should show
+Choose **Run node** on this node. Its Data tab should show
 the same three orders with the new column name. For other operations, use
 [Clean values](DATA_PREPARATION.md) or [write SQL](SQL.md).
 
@@ -71,8 +71,8 @@ turn a sample filter into a node with **Add as a Filter node**.
 2. Connect the transformation's output to the export's `source` input.
 3. Keep **Location → Project files**, set `destination` to `revenue.csv`, and
    choose the delimiter and header settings you want.
-4. Choose **Run with ancestors** on the export. This reruns its upstream nodes
-   and writes the full input table.
+4. Choose **Run node** on the export. This runs its upstream nodes that have no
+   valid result and writes the full input table.
 5. Open the export node's **Log** and choose **Download exported data**.
 
 The download contains all three rows, including the `revenue` column. An export

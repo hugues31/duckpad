@@ -51,7 +51,7 @@ test("display names follow SQL and templates through messages, lineage, usages a
     .click();
   await page
     .locator(".inspector")
-    .getByRole("button", { name: "Run with ancestors", exact: true })
+    .getByRole("button", { name: "Run node", exact: true })
     .click();
   await expect(page.locator(".banner.error")).toContainText(
     "flow.json: Connect input 'source' on Filter",
