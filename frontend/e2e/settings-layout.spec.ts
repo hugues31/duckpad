@@ -1,5 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
-import { openInstanceSettings, openUserSettings, signIn } from "./helpers";
+import {
+  deferred,
+  openInstanceSettings,
+  openUserSettings,
+  signIn,
+} from "./helpers";
 import fr from "../src/locales/fr.json" with { type: "json" };
 
 async function noPageOverflow(page: Page) {
@@ -11,6 +16,78 @@ async function noPageOverflow(page: Page) {
     ).toBe(true);
   }
 }
+
+test("project settings keep their heading and navigation steady while sections load", async ({
+  page,
+}) => {
+  await signIn(page);
+  const created = await page.request.post("/api/projects", {
+    data: { name: "Stable project settings" },
+  });
+  expect(created.ok()).toBeTruthy();
+  const project = await created.json();
+  const settingsPath = `/api/projects/${project.project}/settings`;
+  const panel = page.getByRole("region", {
+    name: "Project settings",
+    exact: true,
+  });
+  const heading = panel.locator(".settings-heading");
+  const navigation = panel.getByRole("navigation", {
+    name: "Settings sections",
+    exact: true,
+  });
+  try {
+    await page.goto(`/projects/${project.project}/settings`);
+    await expect(heading.locator(".access-badge")).toBeVisible();
+    for (const width of [1512, 800, 390]) {
+      await page.setViewportSize({ width, height: 982 });
+      for (const section of [
+        "Connections",
+        "Python execution",
+        "Partitions",
+        "Extensions",
+        "General",
+        "Users",
+      ]) {
+        const before = {
+          text: await heading.innerText(),
+          bounds: await navigation.boundingBox(),
+        };
+        const release = deferred();
+        await page.route(`**${settingsPath}`, async (route) => {
+          await release.promise;
+          await route.continue();
+        });
+        const request = page.waitForRequest(
+          (request) => new URL(request.url()).pathname === settingsPath,
+        );
+        const response = page.waitForResponse(
+          (response) => new URL(response.url()).pathname === settingsPath,
+        );
+        try {
+          const link = navigation.getByRole("link", {
+            name: section,
+            exact: true,
+          });
+          await link.click();
+          await request;
+          await expect(link).toHaveAttribute("aria-current", "page");
+          expect(await heading.innerText()).toBe(before.text);
+          expect(await navigation.boundingBox()).toEqual(before.bounds);
+        } finally {
+          release.resolve();
+          await response;
+          await page.unroute(`**${settingsPath}`);
+        }
+        await expect(heading.locator(".access-badge")).toBeVisible();
+        expect(await navigation.boundingBox()).toEqual(before.bounds);
+        await noPageOverflow(page);
+      }
+    }
+  } finally {
+    await page.request.delete(`/api/projects/${project.project}`);
+  }
+});
 
 test("settings remain usable on narrow screens in both languages", async ({
   page,
