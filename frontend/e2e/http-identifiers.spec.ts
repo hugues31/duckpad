@@ -54,10 +54,13 @@ test("nodes and connections persist in a plain HTTP context", async ({
 
   const worktree = new URL(page.url()).pathname.split("/")[2];
   const endpoint = `/api/worktrees/${worktree}`;
+  // A node-creation save can still be in flight when its node appears.
+  // Wait for the write containing the connection, not that earlier response.
   const saved = page.waitForResponse(
     (response) =>
       response.url().endsWith(endpoint) &&
-      response.request().method() === "PUT",
+      response.request().method() === "PUT" &&
+      response.request().postDataJSON()?.bundle?.flow?.edges?.length === 1,
   );
   await page
     .locator(".inspector")

@@ -76,6 +76,8 @@ test("maximized results preserve the view and restore the previous workspace", a
 
   await panel.getByRole("button", { name: "Next", exact: true }).click();
   await expect(panel.locator(".preview-footer")).toContainText("101–107 / 107");
+  // The pager updates before the new rows replace the previous page.
+  await expect(panel.locator("tbody tr")).toHaveCount(7);
   const rows = await panel.locator("tbody").textContent();
   await maximize.click();
   await expect(panel.locator("tbody")).toHaveText(rows!);

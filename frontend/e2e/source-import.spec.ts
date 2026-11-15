@@ -96,7 +96,12 @@ test("drop CSV and JSON, preview before a run, edit types and reuse a project fi
           (await (await page.request.get(`/api/runs/${run.id}`)).json()).status,
       )
       .toBe("success");
+    // The UI polls separately from the API above. Wait for its result and
+    // the progress banner to disappear before measuring the palette drop.
+    await expect(page.locator(".results-header .badge")).toHaveText("Valid");
+    await expect(page.locator(".run-progress")).toHaveCount(0);
     await dragPaletteNode(page, "Load CSV");
+    await expect(page.locator(".react-flow__node")).toHaveCount(3);
     const file = inspector.getByRole("combobox", { name: /^file/ });
     await expect(file).toHaveValue("");
     await expect(inspector).toContainText("drop files onto the canvas");
