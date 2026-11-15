@@ -474,6 +474,8 @@
   "hideNodes": "Hide node library",
   "togglePreview": "Toggle results",
   "hidePreview": "Hide results",
+  "maximizeResults": "Maximize results",
+  "restoreResults": "Restore results size",
   "toggleInspector": "Toggle inspector",
   "accountMenu": "Account menu",
   "resizeNodes": "Resize node library",

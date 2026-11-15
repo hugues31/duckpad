@@ -474,6 +474,8 @@
   "hideNodes": "Masquer les nœuds",
   "togglePreview": "Afficher ou masquer les résultats",
   "hidePreview": "Masquer les résultats",
+  "maximizeResults": "Agrandir les résultats",
+  "restoreResults": "Rétablir la taille des résultats",
   "toggleInspector": "Afficher ou masquer l’inspecteur",
   "accountMenu": "Menu du compte",
   "resizeNodes": "Redimensionner la bibliothèque de nœuds",

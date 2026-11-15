@@ -3,6 +3,23 @@
 .results-panel {
   overflow: visible;
 }
+/* Keep the mounted panels and their dimensions while results fill the workspace. */
+.results-maximized > :not(.canvas-column),
+.results-maximized > .canvas-column > :not(.results-panel) {
+  visibility: hidden;
+}
+.results-maximized .results-panel {
+  inset: var(--stage-top) 0 0;
+  height: auto;
+  min-height: 0;
+  background: var(--surface);
+}
+/* The toolbar is now at the top of the workspace, so its popover opens below. */
+.results-maximized .sample-popover {
+  top: calc(100% + 8px);
+  bottom: auto;
+  max-height: min(560px, calc(100dvh - var(--stage-top) - 180px));
+}
 .results-header {
   min-height: 42px;
   padding: 6px 14px;

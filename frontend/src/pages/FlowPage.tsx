@@ -109,7 +109,9 @@ export default function FlowPage() {
   const [lineageHover, setLineageHover] = useState<string | null>(null);
   const [contributingRows, setContributingRows] =
     useState<ContributingRows | null>(null);
+  const [resultsMaximized, setResultsMaximized] = useState(false);
   const changeLineage = (target: LineageTarget | null) => {
+    if (target) setResultsMaximized(false);
     view.change({ cell: null });
     setContributingRows(null);
     const next = writeLineageTarget(params, target);
@@ -230,6 +232,7 @@ export default function FlowPage() {
     nextPath?: PathPart[],
     revealed?: string,
   ) => {
+    setResultsMaximized(false);
     setFocusRequest(null);
     if (prefix + (id || "") !== fullNode || nextPath) {
       // A preview belongs to the node it computed.
@@ -387,7 +390,9 @@ export default function FlowPage() {
     preview: panels.open.preview && !!node,
     code: panels.open.inspector && codeShown,
   };
+  const maximized = resultsMaximized && shown.preview;
   const editCode = (line?: number, target = fullNode) => {
+    setResultsMaximized(false);
     // The code of a node of this graph docks beside the canvas, in the inspector's place.
     const shown = graph.nodes.find((item) => prefix + item.id === target);
     if (shown && !shown.component) {
@@ -459,7 +464,7 @@ export default function FlowPage() {
     });
   return (
     <div
-      className={`flow-layout ${shown.palette ? "palette-open" : ""} ${shown.inspector || shown.code || shown.lineage ? "inspector-open" : ""} ${shown.preview ? "preview-open" : ""} ${path.length ? "nested-flow" : ""}`}
+      className={`flow-layout ${shown.palette ? "palette-open" : ""} ${shown.inspector || shown.code || shown.lineage ? "inspector-open" : ""} ${shown.preview ? "preview-open" : ""} ${path.length ? "nested-flow" : ""} ${maximized ? "results-maximized" : ""}`}
       style={
         {
           "--notice-height": `${NOTICE_HEIGHT * noticeCount(snapshot, statuses.active, runDiagnostics)}px`,
@@ -554,7 +559,7 @@ export default function FlowPage() {
             lineage={lineageTarget ? lineageMap : null}
             lineageHover={lineageHover}
             // Its delete keys listen on the document, which inert does not cover.
-            readOnly={!canEdit || busy}
+            readOnly={!canEdit || busy || maximized}
             nodes={graph.nodes}
             edges={graph.edges}
             parsed={snapshot.parsed_templates}
@@ -644,8 +649,20 @@ export default function FlowPage() {
             statuses={statuses}
             tab={resultsTab}
             hidden={!panels.open.preview}
+            maximized={maximized}
+            onMaximize={setResultsMaximized}
             onTab={setResultsTab}
-            onClose={() => panels.set({ preview: false })}
+            onClose={() => {
+              setResultsMaximized(false);
+              panels.set({ preview: false });
+              requestAnimationFrame(() =>
+                document
+                  .querySelector<HTMLButtonElement>(
+                    '.canvas-breadcrumb [aria-controls="data-preview"]',
+                  )
+                  ?.focus(),
+              );
+            }}
             onRun={(options) => run(fullNode, options)}
             selectedCell={lineageTarget?.cell}
             onColumnLineage={(node, port, column) =>
