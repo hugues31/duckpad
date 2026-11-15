@@ -347,7 +347,7 @@
   "runRequester": "Requested by",
   "jobs": "Jobs",
   "job": "Job",
-  "jobsHint": "Run a reviewed version in a dedicated environment and inspect its results.",
+  "jobsHint": "Run a specific version of the project in a dedicated environment and inspect its results.",
   "newJob": "New Job",
   "editJob": "Edit Job",
   "noJobs": "No Jobs yet. A project admin can create one.",

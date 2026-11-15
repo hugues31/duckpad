@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import {
   Check,
   ChevronDown,
@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useT } from "./i18n";
 import { displayNodeName, type NodeNames } from "./nodeNames";
+import { useActiveOption } from "./Search";
 
 export type ScopeMode = "project" | "node";
 
@@ -52,7 +53,7 @@ export default function JobScopeField({
       <legend>{t("jobScope")}</legend>
       <div className="scope-choices">
         {choices.map(({ value, Icon, label, hint }) => (
-          <label className="scope-choice" key={value}>
+          <label className="branch-revision" key={value}>
             <input
               type="radio"
               name="job-scope-mode"
@@ -96,7 +97,6 @@ function NodePicker({
   const t = useT();
   const id = useId();
   const input = useRef<HTMLInputElement>(null);
-  const list = useRef<HTMLDivElement>(null);
   // Nothing chosen yet: the list is what the user came for.
   const [open, setOpen] = useState(!value);
   const [query, setQuery] = useState("");
@@ -113,17 +113,7 @@ function NodePicker({
     option.label.toLocaleLowerCase().includes(words),
   );
   const index = Math.min(active, Math.max(0, shown.length - 1));
-  useEffect(() => {
-    // Scroll the list only: scrollIntoView would also scroll the dialog.
-    const box = list.current;
-    const item = box?.children[index] as HTMLElement | undefined;
-    if (!box || !item) return;
-    // Both offsets are measured from the same positioned ancestor.
-    const top = item.offsetTop - box.offsetTop;
-    if (top < box.scrollTop) box.scrollTop = top;
-    else if (top + item.offsetHeight > box.scrollTop + box.clientHeight)
-      box.scrollTop = top + item.offsetHeight - box.clientHeight;
-  }, [index, open]);
+  const list = useActiveOption(index, open);
   const show = (next: boolean) => {
     setOpen(next);
     setQuery("");

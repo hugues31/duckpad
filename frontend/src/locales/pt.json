@@ -347,7 +347,7 @@
   "runRequester": "Pedido por",
   "jobs": "Jobs",
   "job": "Job",
-  "jobsHint": "Execute uma versão validada num ambiente dedicado e consulte os resultados.",
+  "jobsHint": "Execute uma versão específica do projeto num ambiente dedicado e consulte os resultados.",
   "newJob": "Novo Job",
   "editJob": "Editar Job",
   "noJobs": "Ainda não há Jobs. Um administrador do projeto pode criar um.",

@@ -162,53 +162,16 @@
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 8px;
 }
-.scope-choice {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  padding: 11px 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-  cursor: pointer;
+/* The scope choices reuse the revision cards of New working branch. */
+.job-scope .branch-revision input {
+  width: 16px;
 }
-.scope-choice:has(:checked) {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
-.scope-choice:has(:focus-visible) {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-.job-scope .scope-choice input {
+.scope-choices .branch-revision > svg {
   flex-shrink: 0;
-  width: 15px;
-  height: 15px;
-  margin: 1px 0 0;
-  accent-color: var(--accent);
+  margin-top: 2px;
 }
-.scope-choice input:focus-visible {
-  outline: none;
-}
-.scope-choice > svg {
-  flex-shrink: 0;
-  margin-top: 1px;
-}
-.scope-choice:has(:checked) > svg {
+.scope-choices .branch-revision:has(:checked) > svg {
   color: var(--accent);
-}
-.scope-choice span {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-}
-.scope-choice strong {
-  font-size: 12px;
-}
-.scope-choice small {
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.4;
 }
 .node-picker {
   display: grid;

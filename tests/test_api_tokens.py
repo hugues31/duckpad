@@ -295,7 +295,12 @@ def test_run_requester_survives_revocation_and_ignores_caller_supplied_identity(
         )
         assert response.status_code == 200
         run = wait_run(store, response.json())
-        assert run["requester"] == {"id": "admin", "username": "admin", "token_name": token_name}
+        assert run["requester"] == {
+            "id": "admin",
+            "username": "admin",
+            "token_name": token_name,
+            "service": False,
+        }
     assert client.delete(f"/api/api-tokens/{token['id']}").status_code == 200
     assert store.get("run", run["id"])["requester"]["token_name"] == "Scheduled reports"
     assert token["token"] not in json.dumps(store.runs({"id": "admin", "role": "admin"}))

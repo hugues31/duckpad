@@ -347,7 +347,7 @@
   "runRequester": "Angefordert von",
   "jobs": "Jobs",
   "job": "Job",
-  "jobsHint": "Eine geprüfte Version in einer eigenen Umgebung ausführen und ihre Ergebnisse untersuchen.",
+  "jobsHint": "Eine bestimmte Version des Projekts in einer eigenen Umgebung ausführen und ihre Ergebnisse untersuchen.",
   "newJob": "Neuer Job",
   "editJob": "Job bearbeiten",
   "noJobs": "Noch keine Jobs. Ein Projektadministrator kann einen erstellen.",

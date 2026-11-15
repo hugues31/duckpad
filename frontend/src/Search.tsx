@@ -18,6 +18,23 @@ export interface SearchOption {
   detail: string;
 }
 
+/** A listbox ref that keeps its keyboard-active option visible. */
+export function useActiveOption(index: number, open: boolean) {
+  const list = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    // Scroll the list only: scrollIntoView would also scroll a dialog.
+    const box = list.current;
+    const item = box?.children[index] as HTMLElement | undefined;
+    if (!open || !box || !item) return;
+    // Both offsets are measured from the same positioned ancestor.
+    const top = item.offsetTop - box.offsetTop;
+    if (top < box.scrollTop) box.scrollTop = top;
+    else if (top + item.offsetHeight > box.scrollTop + box.clientHeight)
+      box.scrollTop = top + item.offsetHeight - box.clientHeight;
+  }, [index, open]);
+  return list;
+}
+
 /** Keyboard navigation stays in the input; result selection never edits a graph. */
 export function SearchField({
   label,
@@ -54,19 +71,9 @@ export function SearchField({
     setOpen(true);
   }, []);
   useSearchShortcut(shortcut, focusSearch);
-  const list = useRef<HTMLDivElement>(null);
   const expanded = inline || (open && !!query.trim());
   const index = Math.min(active, Math.max(0, options.length - 1));
-  useEffect(() => {
-    // Scroll the list only: scrollIntoView would also scroll a dialog.
-    const box = list.current;
-    const item = box?.children[index] as HTMLElement | undefined;
-    if (!box || !item) return;
-    const top = item.offsetTop - box.offsetTop;
-    if (top < box.scrollTop) box.scrollTop = top;
-    else if (top + item.offsetHeight > box.scrollTop + box.clientHeight)
-      box.scrollTop = top + item.offsetHeight - box.clientHeight;
-  }, [index]);
+  const list = useActiveOption(index, expanded);
   const choose = (index: number) => {
     onSelect(index);
     setOpen(false);
