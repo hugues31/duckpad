@@ -70,9 +70,176 @@
   margin: 0;
 }
 
+/* Who asked for a run, in history rows and run details. */
+.run-requester {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  vertical-align: top;
+}
+.run-requester svg {
+  flex-shrink: 0;
+}
+.run-requester-kind {
+  margin-left: 3px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--surface-alt);
+  font-size: 0.85em;
+  font-weight: 600;
+}
+
+/* Tagged commits stand out in Git history and run details. */
+.history-icon.tag {
+  color: var(--tag);
+  background: var(--tag-soft);
+}
+.history-row.tagged {
+  border-color: var(--tag-border);
+}
+.commit-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  min-width: 0;
+}
+.commit-title strong {
+  overflow-wrap: anywhere;
+}
+.tag-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tag-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 2px 6px;
+  border: 1px solid var(--tag-border);
+  border-radius: 999px;
+  background: var(--tag-soft);
+  color: var(--tag);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+}
+.tag-description {
+  display: -webkit-box;
+  margin: 9px 0 0;
+  padding-left: 9px;
+  overflow: hidden;
+  border-left: 2px solid var(--tag-border);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+.history-row .tag-description strong {
+  display: inline;
+  margin-right: 6px;
+  font-size: 11px;
+}
+
 /* Jobs share the execution log and settings card surfaces. */
-.job-scope .search-dropdown [role="listbox"] {
-  max-height: 180px;
+.job-scope {
+  padding: 0;
+  border: 0;
+}
+.job-scope legend {
+  padding: 0;
+  margin-bottom: 7px;
+  font-size: 12px;
+  font-weight: 550;
+}
+.scope-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 8px;
+}
+/* The scope choices reuse the revision cards of New working branch. */
+.job-scope .branch-revision input {
+  width: 16px;
+}
+.scope-choices .branch-revision > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.scope-choices .branch-revision:has(:checked) > svg {
+  color: var(--accent);
+}
+.node-picker {
+  display: grid;
+  gap: 6px;
+  margin-top: 4px;
+}
+.node-picker .search {
+  margin: 0;
+  cursor: pointer;
+}
+.node-picker .search input {
+  font-size: 12px;
+  cursor: text;
+}
+.node-picker-chevron {
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+.node-picker.open .node-picker-chevron {
+  transform: rotate(180deg);
+}
+.node-picker-list {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.node-picker-list [role="listbox"] {
+  max-height: 210px;
+  overflow-y: auto;
+}
+.node-picker-list [role="listbox"]:empty {
+  display: none;
+}
+.node-picker-list [role="option"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+.node-picker-list [role="option"].active {
+  background: var(--surface-alt);
+}
+.node-picker-list [role="option"] > svg {
+  flex-shrink: 0;
+  color: var(--accent);
+  visibility: hidden;
+}
+.node-picker-list [role="option"][aria-selected="true"] > svg {
+  visibility: visible;
+}
+.node-picker-list [role="option"] span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.node-picker-list [role="option"] strong {
+  font-size: 12px;
+  font-weight: 500;
+}
+.node-picker-list [role="option"][aria-selected="true"] strong {
+  font-weight: 650;
+}
+.node-picker-list [role="option"] small {
+  color: var(--muted);
+  font-size: 10px;
 }
 .jobs-page .job-details {
   margin-top: 24px;

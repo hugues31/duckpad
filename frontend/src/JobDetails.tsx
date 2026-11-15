@@ -10,6 +10,7 @@ import { ConfirmModal, Modal } from "./modals";
 import { worktreeUrl } from "./navigation";
 import { displayNodeName, type NodeNames } from "./nodeNames";
 import RunProgress from "./RunProgress";
+import RunRequester from "./RunRequester";
 import { useWorkspace } from "./shell";
 import type { Environment, Project, Run } from "./types";
 import { useApiResource } from "./useApiResource";
@@ -215,7 +216,13 @@ export function JobDetails({
         >
           <span className={`badge ${run.status}`}>{t(run.status)}</span>
           <span className="grow">
-            {new Date(run.started).toLocaleString()} · {run.requester?.username}
+            {new Date(run.started).toLocaleString()}
+            {run.requester && (
+              <>
+                {" · "}
+                <RunRequester requester={run.requester} />
+              </>
+            )}
           </span>
           <span>{run.tag || run.job?.branch}</span>
           <code>{run.commit.slice(0, 8)}</code>

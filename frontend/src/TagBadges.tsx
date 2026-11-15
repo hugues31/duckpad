@@ -1,13 +1,22 @@
 import { Tag } from "lucide-react";
+import type { GitTag } from "./gitTypes";
 import { useT } from "./i18n";
 
-export default function TagBadges({ names = [] }: { names?: string[] }) {
+/** A tag name, with its description when the caller has it. */
+export type TagLabel = Pick<GitTag, "name"> & Partial<Pick<GitTag, "message">>;
+
+export default function TagBadges({ tags = [] }: { tags?: TagLabel[] }) {
   const t = useT();
-  return names.length ? (
-    <span className="row gap" aria-label={t("tags")}>
-      {names.map((name) => (
-        <span className="badge" key={name}>
-          <Tag size={12} aria-hidden="true" /> {name}
+  return tags.length ? (
+    <span className="tag-badges" aria-label={t("tags")}>
+      {tags.map((tag) => (
+        <span
+          className="tag-badge"
+          key={tag.name}
+          title={tag.message || undefined}
+        >
+          <Tag size={12} aria-hidden="true" />
+          {tag.name}
         </span>
       ))}
     </span>

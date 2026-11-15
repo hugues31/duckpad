@@ -502,6 +502,8 @@ export interface Run {
     id: string;
     username: string;
     token_name: string | null;
+    /** A service account asked for the run. */
+    service: boolean;
   } | null;
   warning_count?: number;
   id: string;

@@ -44,6 +44,10 @@
   --node-purple: light-dark(#7748cf, #c0a4ff);
   --node-pink: light-dark(#bf2d79, #ff8dc5);
   --node-gray: light-dark(#5c6170, #b9bdc8);
+  /* Git tags, distinct from run statuses that use the accent. */
+  --tag: var(--node-purple);
+  --tag-soft: color-mix(in srgb, var(--tag) 12%, var(--surface));
+  --tag-border: color-mix(in srgb, var(--tag) 40%, transparent);
   color-scheme: light;
   font-size: 13px;
 }

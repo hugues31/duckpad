@@ -24,22 +24,23 @@ them to whichever account happened to make the next request.
 
 ## Tags
 
-Tags mark the exact version that passed acceptance testing. Editors and project
-admins can select **Create tag** beside any commit in **History → Git history**;
-use **Load more** to reach older commits. In an execution's details, **Tag this
-run's commit** selects the commit recorded by that run, even if the branch has
-changed since it ran. Creating a tag does not save working files or start a run.
+A tag names an exact version of the project, such as one that passed acceptance
+testing or was delivered. Editors and project admins can select **Create tag**
+beside any commit in **History → Git history**; use **Load more** to reach older
+commits. In an execution's details, **Tag this run's commit** selects the commit
+recorded by that run, even if the branch has changed since it ran. Creating a tag
+does not save working files or start a run.
 
-Enter a Git tag name, such as `sales/2026.10.31` or `v1.4`, and acceptance notes.
-Duckpad creates an annotated tag with the authenticated user's commit identity
-as tagger. The commit must be reachable from a project branch, a fetched origin
-branch or an existing tag. An unknown or unreachable commit is refused. An
-existing tag name returns a conflict (409), as does a name nested with an
-existing tag: Git cannot store both `v1` and `v1/rc`. Tags cannot be moved or
-deleted in Duckpad; create a new tag to correct a version.
+Enter a Git tag name, such as `sales/2026.10.31` or `v1.4`, and an optional
+description. Duckpad creates an annotated tag with the authenticated user's commit
+identity as tagger, even without a description. The commit must be reachable from a
+project branch, a fetched origin branch or an existing tag. An unknown or
+unreachable commit is refused. An existing tag name returns a conflict (409), as
+does a name nested with an existing tag: Git cannot store both `v1` and `v1/rc`.
+Tags cannot be moved or deleted in Duckpad; create a new tag to correct a version.
 
-History displays tags beside their commits, for readers too. **Compare
-versions** suggests tags for either side, using their explicit
+History marks tagged commits and shows their tags and descriptions, for readers too.
+**Compare versions** suggests tags for either side, using their explicit
 `refs/tags/<name>` references to avoid ambiguity with branch names. The advanced
 starting revision in **New working branch** also accepts tags. Tags stay local:
 fetch retrieves only origin branches, and publication pushes only the reviewed

@@ -24,7 +24,7 @@ export default function NewTagModal({
       onClose={onClose}
       submitLabel={t("createTag")}
       pendingLabel="loading"
-      disabled={!name || !message.trim()}
+      disabled={!name}
       onSubmit={async () => {
         const tag = await api<GitTag>(
           `/worktrees/${worktree}/git/tags`,
@@ -49,9 +49,8 @@ export default function NewTagModal({
         />
       </label>
       <label className="field">
-        <span>{t("tagMessage")}</span>
+        <span>{t("tagDescription")}</span>
         <textarea
-          required
           maxLength={10000}
           rows={4}
           value={message}

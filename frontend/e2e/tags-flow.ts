@@ -77,10 +77,10 @@ export async function historyTags(page: Page, paginate = false) {
   await expect(dialog).toContainText("cannot be moved or deleted");
   await dialog.getByLabel("Tag name", { exact: true }).fill("sales/");
   const notes = "Revenue totals verified.\nReady for production.";
-  await dialog.getByLabel("Acceptance notes").fill(notes);
+  await dialog.getByLabel("Description (optional)").fill(notes);
   expect((await submitTag(page)).status()).toBe(422);
   await expect(dialog.getByRole("alert")).toContainText("valid tag name");
-  await expect(dialog.getByLabel("Acceptance notes")).toHaveValue(notes);
+  await expect(dialog.getByLabel("Description (optional)")).toHaveValue(notes);
   await dialog.getByLabel("Tag name", { exact: true }).fill("sales/2026.10.31");
   const created = await submitTag(page);
   expect(created.status()).toBe(201);
@@ -89,6 +89,8 @@ export async function historyTags(page: Page, paginate = false) {
   await expect(row.getByLabel("Tags", { exact: true })).toContainText(
     "sales/2026.10.31",
   );
+  // The description stays visible beside the tagged commit.
+  await expect(row.locator(".tag-description")).toHaveText(notes);
   const tags: GitTag[] = await (
     await page.request.get(`/api/worktrees/${tree.id}/git/tags`)
   ).json();
@@ -102,7 +104,7 @@ export async function historyTags(page: Page, paginate = false) {
     .click();
   await dialog.getByLabel("Tag name", { exact: true }).fill("sales/2026.10.31");
   await dialog
-    .getByLabel("Acceptance notes")
+    .getByLabel("Description (optional)")
     .fill("Must not replace acceptance");
   expect((await submitTag(page)).status()).toBe(409);
   await expect(dialog.getByRole("alert")).toContainText("already exists");
@@ -185,13 +187,13 @@ export async function runTags(page: Page) {
     .click();
   const dialog = page.getByRole("dialog", { name: "Create tag", exact: true });
   await expect(dialog).toContainText(accepted.commit);
+  // The description is optional.
   await dialog.getByLabel("Tag name", { exact: true }).fill("tested/v1");
-  await dialog
-    .getByLabel("Acceptance notes")
-    .fill("Run completed successfully with revenue 42.");
+  await expect(dialog.getByLabel("Description (optional)")).toHaveValue("");
   const response = await submitTag(page);
   expect(response.status()).toBe(201);
   expect((await response.json()).commit).toBe(accepted.commit);
+  expect((await response.json()).message).toBe("");
   await expect(dialog).toBeHidden();
   await expect(execution.getByLabel("Tags", { exact: true })).toContainText(
     "tested/v1",

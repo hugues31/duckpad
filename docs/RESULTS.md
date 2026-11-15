@@ -63,8 +63,9 @@ external source file does not refresh an existing result: a run from the
 interface [keeps valid results](WORKSPACE.md#save-and-run), so run the source
 node, or choose **Run everything**, to read it.
 
-History keeps execution records, SQL and outcomes after a restart; it is not a
-stored copy of every historical result table. Use an export when you need a
+History keeps execution records, SQL and outcomes after a restart, and each
+execution names who requested it: a person, or a service account marked as such.
+It is not a stored copy of every historical result table. Use an export when you need a
 result file to keep or share. Job results follow the same context lifetime;
 see [Jobs](JOBS.md#results-and-history).
 

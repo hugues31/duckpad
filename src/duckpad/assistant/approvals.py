@@ -146,7 +146,12 @@ class Approvals:
                 approved["environment"],
                 node or None,
                 "assistant",
-                requester={"id": user["id"], "username": user["username"], "token_name": None},
+                requester={
+                    "id": user["id"],
+                    "username": user["username"],
+                    "token_name": None,
+                    "service": user.get("auth_method") == "service",
+                },
                 guard=unchanged,
             )
             card["run"] = run_summary(result)

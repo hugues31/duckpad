@@ -15,9 +15,9 @@ retrying it. Different Jobs can run in parallel.
 
 Project admins choose **New Job**, then enter a name. Duckpad suggests a permanent
 instance-wide slug (lowercase letters, digits and hyphens), which can be edited.
-Choose the environment and version, then search the version's nodes in **Scope**.
-Keep **Whole project** to run everything, or select a node to run its launch scope,
-including upstream dependencies. Projects without tags start with **Branch** and
+Choose the environment and version, then the **Scope**: **Whole project** runs
+every node, while **One node** opens a searchable list of the version's nodes and
+runs the chosen one with the nodes it depends on. Projects without tags start with **Branch** and
 the main branch, so a Job can be created without leaving the form.
 Choose a tag to pin its current commit, or a branch for acceptance runs that should
 resolve the branch head at each launch. Uncommitted edits are never a Job target.

@@ -27,8 +27,11 @@ class PartitionQuery:
 
 
 def requester(request: Request) -> Record:
+    """Who asked for a run; `service` tells service accounts from people in history."""
+    user = request.state.user
     return {
-        "id": request.state.user["id"],
-        "username": request.state.user["username"],
+        "id": user["id"],
+        "username": user["username"],
         "token_name": request.state.token_name,
+        "service": user.get("auth_method") == "service",
     }

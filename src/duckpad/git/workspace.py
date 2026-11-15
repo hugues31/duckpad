@@ -406,8 +406,10 @@ class GitWorkspace:
                 or self.git(path, "check-ref-format", "--normalize", ref, check=False) != ref
             ):
                 raise Problem("Enter a valid tag name, such as sales/2026.10.31 or v1.4.", 422)
-            if not message.strip() or "\0" in message:
-                raise Problem("Enter acceptance notes for this tag without null characters.", 422)
+            if "\0" in message:
+                raise Problem("Enter a tag description without null characters.", 422)
+            # The description is optional: a blank one is stored empty, still as an annotated tag with its tagger.
+            message = message if message.strip() else ""
             if self.git(path, "rev-parse", "--verify", "--quiet", ref, check=False):
                 raise Problem("A tag with this name already exists. Choose another name.", 409)
             # Git stores `a` and `a/b` as a file and a directory, so neither can be added beside the other.

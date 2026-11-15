@@ -140,6 +140,9 @@ export async function jobsFlow(page: Page) {
   await expect(
     page.locator(".job-details button.history-row").first(),
   ).toContainText(en.success);
+  await expect(
+    page.locator(".job-details button.history-row").first(),
+  ).toContainText(username);
   const runs = await (await page.request.get(`/api/jobs/${slug}/runs`)).json();
   expect(runs[0].commit).toBe(second);
   expect(runs[0].requester.username).toBe(username);
@@ -167,6 +170,10 @@ export async function jobsFlow(page: Page) {
   await expect(page.locator("button.history-row").first()).toContainText(
     "Daily production",
   );
+  // Execution history names who asked for each run.
+  await expect(
+    page.locator("button.history-row").first().locator(".run-requester"),
+  ).toHaveText(username);
   await expect(
     page.getByRole("button", { name: en.runFlow, exact: true }),
   ).toBeDisabled();
