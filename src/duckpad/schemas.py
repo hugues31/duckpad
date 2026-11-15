@@ -240,7 +240,7 @@ class NewTag(BaseModel):
 
     name: str = Field(min_length=1, max_length=200)
     commit: str = Field(pattern=r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
-    message: str = Field(min_length=1, max_length=10000)
+    message: str = Field(default="", max_length=10000)
 
 
 class NewBranch(BaseModel):

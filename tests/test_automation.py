@@ -157,6 +157,11 @@ def test_authentication_service_token_revocation_and_session(api):
     run = launch(call, actor="service")
     join_run(app.state.services.store, run["id"])
     assert run["requester"] == {"id": service["id"], "username": "scheduler", "token_name": "Schedule"}
+    # History tells service accounts from people; the versioned contract is unchanged.
+    stored = app.state.services.store
+    assert stored.get("run", run["id"])["requester"]["service"] is True
+    summaries = stored.runs({"id": "admin", "role": "admin"}, summary=True)
+    assert next(item for item in summaries if item["id"] == run["id"])["requester"]["service"] is True
     assert call("GET", "/jobs", actor="admin").status_code == 200
     app.state.access.member(tree["project"], service["id"], "reader")
     error(call("POST", "/jobs/daily/runs", {}, actor="service"), 403, "forbidden")

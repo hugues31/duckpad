@@ -17,6 +17,7 @@ import { displayNodeName } from "./nodeNames";
 import { PartitionHistory } from "./PartitionHistory";
 import { partitionMessage } from "./partitions";
 import { RunPreparation } from "./PythonEnvironmentStatus";
+import RunRequester from "./RunRequester";
 import TagBadges from "./TagBadges";
 import type { Run } from "./types";
 import { useApiResource } from "./useApiResource";
@@ -78,10 +79,8 @@ export default function HistoryPanel({
   const commits = gitHistory.data?.items || [];
   // A `?run=` link to a run that no longer exists opens nothing, as before.
   const error = runHistory.error || gitHistory.error || tags.error;
-  const tagNames = (commit: string) =>
-    (tags.data || [])
-      .filter((tag) => tag.commit === commit)
-      .map((tag) => tag.name);
+  const commitTags = (commit: string) =>
+    (tags.data || []).filter((tag) => tag.commit === commit);
   return (
     <section className="full-panel">
       <div className="page-heading">
@@ -156,6 +155,12 @@ export default function HistoryPanel({
                   {run.entry_point === "assistant"
                     ? ` · ${t("assistant")}`
                     : ""}
+                  {run.requester && (
+                    <>
+                      {" · "}
+                      <RunRequester requester={run.requester} />
+                    </>
+                  )}
                 </small>
               </span>
               {!!run.kept_results && (
@@ -190,7 +195,7 @@ export default function HistoryPanel({
             <CommitRow
               key={commit.commit}
               commit={commit}
-              tags={tagNames(commit.commit)}
+              tags={commitTags(commit.commit)}
             >
               {!readOnly && (
                 <button
@@ -240,7 +245,7 @@ export default function HistoryPanel({
                 {selected.environment} · {selected.commit.slice(0, 8)}
               </span>
             </div>
-            <TagBadges names={tagNames(selected.commit)} />
+            <TagBadges tags={commitTags(selected.commit)} />
             {!readOnly && selected.commit && (
               <button
                 className="button secondary"
@@ -353,7 +358,10 @@ function RunDetailsContent({
       )}
       {run.requester && (
         <p>
-          {t("runRequester")}: <strong>{run.requester.username}</strong>
+          {t("runRequester")}:{" "}
+          <strong>
+            <RunRequester requester={run.requester} />
+          </strong>
           {run.requester.token_name && (
             <>
               {" "}

@@ -87,10 +87,22 @@ test("creates a scoped Job without tags and shows external scheduling examples",
   await expect(dialog.getByLabel("Version", { exact: true })).toHaveValue(
     "main",
   );
-  await dialog
-    .getByRole("combobox", { name: "Scope", exact: true })
-    .fill("Orders");
+  // The whole project is the default; one node is a separate choice.
+  await expect(
+    dialog.getByRole("radio", { name: "Whole project", exact: true }),
+  ).toBeChecked();
+  await dialog.getByRole("radio", { name: "One node", exact: true }).check();
+  const node = dialog.getByRole("combobox", { name: "Node", exact: true });
+  await expect(node).toBeFocused();
+  await expect(node).toHaveAttribute("aria-expanded", "true");
+  await expect(
+    dialog.getByRole("button", { name: "Create", exact: true }),
+  ).toBeDisabled();
+  await node.fill("Orders");
   await dialog.getByRole("option", { name: "Orders", exact: true }).click();
+  // Choosing collapses the list and shows the node.
+  await expect(node).toHaveAttribute("aria-expanded", "false");
+  await expect(node).toHaveValue("Orders");
   await dialog.getByRole("button", { name: "Create", exact: true }).click();
   await expect(dialog).toHaveCount(0);
   await expect(page.locator(".job-details")).toContainText("Scope: Orders");

@@ -77,9 +77,20 @@ def test_invalid_tag_names_are_rejected(instance, name):
     assert instance[0].versioning.tags(instance[3]["id"]) == []
 
 
-@pytest.mark.parametrize("message", ["", "  \n", "notes\0hidden"])
-def test_acceptance_notes_are_required(instance, message):
-    assert create(instance, message=message).status_code == 422
+def test_tag_description_is_optional_but_refuses_null_characters(instance):
+    projects, client, users, worktree = instance
+    assert create(instance, message="notes\0hidden").status_code == 422
+    for name, body in (("empty", {"message": ""}), ("blank", {"message": "  \n"}), ("omitted", {})):
+        response = client.post(
+            f"/api/worktrees/{worktree['id']}/git/tags",
+            headers=users["editor"][1],
+            json={"name": name, "commit": projects.git(worktree["path"], "rev-parse", "HEAD"), **body},
+        )
+        assert response.status_code == 201, response.text
+        tag = response.json()
+        # Still an annotated tag, which records who created it and when.
+        assert tag["message"] == "" and tag["tagger"] and tag["date"]
+        assert projects.git(worktree["path"], "cat-file", "-t", tag["ref"]) == "tag"
 
 
 def test_duplicate_and_concurrent_creation_never_move_a_tag(instance):

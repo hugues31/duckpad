@@ -5,11 +5,11 @@ import type { Branch, GitTag } from "./gitTypes";
 import { useT } from "./i18n";
 import { jobSlug } from "./jobs";
 import { Job, Review } from "./jobTypes";
+import JobScopeField, { type ScopeMode } from "./JobScopeField";
 import JobVersionFields from "./JobVersionFields";
 import { ModalForm } from "./modals";
-import { displayNodeName, type NodeNames } from "./nodeNames";
+import type { NodeNames } from "./nodeNames";
 import { PageLoading } from "./pages/PageStates";
-import { SearchField } from "./Search";
 import Select from "./Select";
 import { useWorkspace } from "./shell";
 import type { Project } from "./types";
@@ -32,8 +32,10 @@ export function JobForm({
   const [chosenRef, setRef] = useState<string | null>(null);
   const [name, setName] = useState(job?.name || "");
   const [slug, setSlug] = useState<string | null>(null);
+  const [scopeMode, setScopeMode] = useState<ScopeMode>(
+    job?.scope ? "node" : "project",
+  );
   const [scope, setScope] = useState(job?.scope || "");
-  const [scopeQuery, setScopeQuery] = useState("");
   const tags = useApiResource<GitTag[]>(`/worktrees/${project.main}/git/tags`);
   const branches = useApiResource<Branch[]>(
     `/worktrees/${project.main}/git/branches`,
@@ -53,17 +55,8 @@ export function JobForm({
         ? withQuery(`/projects/${project.id}/job-nodes`, { kind, ref })
         : null,
   );
-  const scopeOptions = [
-    { key: "", label: t("jobWholeProject"), detail: "" },
-    ...Object.entries(nodes.data || {}).map(([key, parts]) => ({
-      key,
-      label: displayNodeName(parts, t("node"), t),
-      detail: "",
-    })),
-  ].filter((item) =>
-    item.label.toLocaleLowerCase().includes(scopeQuery.toLocaleLowerCase()),
-  );
-  const scopeValid = !scope || !!nodes.data?.[scope];
+  const scopeValid =
+    scopeMode === "project" || (!!scope && !!nodes.data?.[scope]);
   return (
     <ModalForm
       title={t(job ? "editJob" : "newJob")}
@@ -80,7 +73,7 @@ export function JobForm({
           name: data.get("name"),
           description: data.get("description"),
           environment: data.get("environment"),
-          scope: scope || null,
+          scope: scopeMode === "node" ? scope : null,
         };
 
         const saved = await api<Job>(
@@ -168,27 +161,14 @@ export function JobForm({
           }}
         />
       )}
-      <div className="field job-scope">
-        <span>{t("jobScope")}</span>
-        <p title={scope}>
-          {scope
-            ? displayNodeName(nodes.data?.[scope], t("node"), t)
-            : t("jobWholeProject")}
-        </p>
-        <SearchField
-          label={t("jobScope")}
-          query={scopeQuery}
-          onQuery={setScopeQuery}
-          options={scopeOptions}
-          inline
-          pending={nodes.pending}
-          onSelect={(index) => {
-            setScope(scopeOptions[index].key);
-            setScopeQuery("");
-          }}
-        />
-        <small className="muted">{t("jobScopeSelectHint")}</small>
-      </div>
+      <JobScopeField
+        mode={scopeMode}
+        node={scope}
+        nodes={nodes.data}
+        pending={nodes.pending}
+        onMode={setScopeMode}
+        onNode={setScope}
+      />
       {(tags.error || branches.error || nodes.error) && (
         <p className="notice error" role="alert">
           {tags.error || branches.error || nodes.error}
