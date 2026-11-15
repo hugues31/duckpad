@@ -28,7 +28,7 @@ and see the data at every step. Powered by [DuckDB](https://duckdb.org/).
 </picture>
 
 <p align="center">
-  <a href="https://hugues31.github.io/duckpad/#demo"><b>▶ Watch Duckpad in one minute</b></a>
+  <a href="https://hugues31.github.io/duckpad/#demo"><b>▶ Watch Duckpad in action</b></a>
 </p>
 
 ## What is Duckpad?
