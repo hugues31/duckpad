@@ -19,6 +19,10 @@ export async function editOverview(page: Page) {
 
 /** Drop a palette definition into the uncovered canvas, including narrow layouts. */
 export async function dragPaletteNode(page: Page, label: string) {
+  // A previous node addition keeps the canvas inert until its save refreshes,
+  // and the poll can render that node first. Inert elements are not
+  // hit-testable, so the free-area search below would find no pane.
+  await expect(page.locator(".canvas-column[inert]")).toHaveCount(0);
   const pane = page.locator(".react-flow__pane");
   const bounds = (await pane.boundingBox())!;
   const point = await page.locator(".canvas-safe-area").evaluate((element) => {
