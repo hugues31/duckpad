@@ -421,8 +421,11 @@ export interface NodeRun {
   partitioned?: boolean;
   results?: ExecutionResult[];
   status: NodeRunStatus;
-  /** The run kept the node's valid result, computed by this earlier run, and did not run it. */
-  kept?: { run: string; created: string };
+  /**
+   * The run kept the node's valid result and did not run it: the earlier run that computed
+   * it, or the number of keys of a partitioned node, each with its own result.
+   */
+  kept?: { run?: string; created?: string; partitions?: number };
   label: string;
   writes_external: boolean;
   /** The node ran as a passthrough, without its code. */

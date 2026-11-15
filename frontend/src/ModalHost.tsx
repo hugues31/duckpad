@@ -291,7 +291,13 @@ function WorktreeDialog({
             {modal.node && modal.options?.ancestors
               ? t("ancestorsOf").replace("{node}", modal.node)
               : modal.node ||
-                t(partitionRunLabels[modal.options?.partitions?.mode || "all"])}
+                t(
+                  modal.options?.partitions
+                    ? partitionRunLabels[modal.options.partitions.mode]
+                    : modal.options?.reuse === false
+                      ? "runEverything"
+                      : "runFlow",
+                )}
           </p>
           <PartitionRunSummary options={modal.options} node={modal.node} />
           <ScopeVariables

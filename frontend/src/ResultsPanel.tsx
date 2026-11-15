@@ -257,7 +257,7 @@ export default function ResultsPanel({
   );
   const retryFailed = !!failedKeys.data?.entries.length;
   const runLabel = t(
-    !collector ? "runNode" : retryFailed ? "partitionRunFailed" : "run",
+    !collector ? "runNode" : retryFailed ? "partitionRunFailed" : "runFlow",
   );
   const runResult =
     collector && worktree

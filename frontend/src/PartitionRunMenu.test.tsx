@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { PartitionRunMenu } from "./PartitionRunMenu";
+import { PartitionRunOptions } from "./PartitionRunMenu";
 
 const run = vi.hoisted(() => vi.fn());
 vi.mock("./worktree", () => ({
@@ -34,8 +34,7 @@ vi.mock("./useApiResource", () => ({
 }));
 
 it("submits only typed key values when the initial selection includes provenance", () => {
-  render(<PartitionRunMenu />);
-  fireEvent.click(screen.getByRole("button", { name: "Run with options…" }));
+  render(<PartitionRunOptions onClose={() => {}} />);
   fireEvent.change(
     screen.getByLabelText("Key selection", { selector: "select" }),
     { target: { value: "selected" } },

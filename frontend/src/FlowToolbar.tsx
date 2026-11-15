@@ -78,8 +78,6 @@ export function FlowToolbar() {
     settle,
   } = useLoadedWorktree();
   const dirty = drafts.dirty();
-  // A partitioned flow computes every node of its scope, as its label says.
-  const partitioned = !!snapshot.partitions?.[environment]?.dimension;
   const saveState = t(saving ? "saving" : dirty ? "unsavedChanges" : "saved");
   const { toolbar, stacked } = useStackedToolbar();
   return (
@@ -136,7 +134,7 @@ export function FlowToolbar() {
               className="button primary"
               disabled={!canEdit || starting || !snapshot.bundle}
               aria-busy={starting}
-              title={partitioned ? undefined : t("runFlowHint")}
+              title={t("runFlowHint")}
               onClick={() => run()}
             >
               {starting ? (
@@ -144,7 +142,7 @@ export function FlowToolbar() {
               ) : (
                 <Play size={14} fill="currentColor" />
               )}
-              {t(partitioned ? "run" : "runFlow")}
+              {t("runFlow")}
             </button>
             <RunMenu />
           </div>
