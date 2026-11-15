@@ -136,6 +136,16 @@ for (const width of [820, 390]) {
     const expanded = (await panel.boundingBox())!;
     expect(expanded.width).toBe(width);
     expect(expanded.height).toBeGreaterThan(original!.height);
+    // The covered canvas takes neither focus nor shortcuts, and Escape
+    // restores the panel even when nothing inside it has the focus.
+    await expect(page.locator(".canvas")).toHaveAttribute("inert");
+    await page.evaluate(() => (document.activeElement as HTMLElement).blur());
+    await page.keyboard.press("m");
+    await page.keyboard.press("Escape");
+    await expect(maximize).toBeVisible();
+    expect(await panel.boundingBox()).toEqual(original);
+    await expect(page.locator(".pipeline-node.is-muted")).toHaveCount(0);
+    await maximize.click();
     await panel.getByRole("tab", { name: "Log", exact: true }).click();
     await panel.getByRole("button", { name: "Hide results" }).click();
     await expect(panel).toBeHidden();

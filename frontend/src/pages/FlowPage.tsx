@@ -152,6 +152,8 @@ export default function FlowPage() {
   const parent = path.at(-1)?.definition;
   const local = localDefinitions(snapshot, parent);
   const node = graph?.nodes.find((n) => n.id === selected);
+  // Maximized results cover the canvas and the side panels.
+  const maximized = resultsMaximized && panels.open.preview && !!node;
   const fullNode = prefix + (selected || "");
   const {
     preview,
@@ -323,6 +325,7 @@ export default function FlowPage() {
     select,
     setFocusRequest,
     safe,
+    canvasHidden: maximized,
   });
   const componentPart = (instance: FlowNode & { component: string }) => ({
     instance: instance.id,
@@ -390,7 +393,6 @@ export default function FlowPage() {
     preview: panels.open.preview && !!node,
     code: panels.open.inspector && codeShown,
   };
-  const maximized = resultsMaximized && shown.preview;
   const editCode = (line?: number, target = fullNode) => {
     setResultsMaximized(false);
     // The code of a node of this graph docks beside the canvas, in the inspector's place.
@@ -552,7 +554,7 @@ export default function FlowPage() {
             })
           }
         />
-        <div className="canvas">
+        <div className="canvas" inert={maximized}>
           <Canvas
             ref={canvas}
             valueProducers={valueProducers}
@@ -574,6 +576,10 @@ export default function FlowPage() {
             focusRequest={focusRequest}
             onSelect={chooseNode}
             onDismiss={() => {
+              if (maximized) {
+                setResultsMaximized(false);
+                return true;
+              }
               if (!lineageTarget) return false;
               closeLineage();
               return true;
