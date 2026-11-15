@@ -148,7 +148,8 @@ computing them again, so a source that is already loaded is not read again:
 - **Run node** always computes its node; its ancestors run only without a valid
   result. What reads the new result turns stale until the next **Run**. Run a
   source this way to read it again.
-- Nodes that write outside Duckpad, such as exports, run every time.
+- Nodes without an output, such as exports, run every time. A Python node with
+  outputs is kept like any other node, with its download.
 - The arrow beside **Run** offers **Run everything**, which reads every source
   again and computes every node.
 

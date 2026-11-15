@@ -427,7 +427,7 @@ export function WorktreeProvider({
             node,
             entry_point: "ui",
             confirmed,
-            // The requested node always runs; partitioned flows compute their whole scope.
+            // Valid results are kept; the requested node always runs.
             reuse: true,
             ...options,
           }),

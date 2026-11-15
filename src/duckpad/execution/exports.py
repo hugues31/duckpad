@@ -90,7 +90,8 @@ class Exports:
         """
         replaced: list[str] = []
         for key, state in run["nodes"].items():
-            if not state.get("writes_external") or state.get("partitioned"):
+            # A kept node, such as a Python node, still has the download of the run that computed it.
+            if not state.get("writes_external") or state.get("partitioned") or state.get("kept"):
                 continue
             identity = digest([run["worktree"], run["environment"], key])
             previous = self.store.get("export_result", identity)

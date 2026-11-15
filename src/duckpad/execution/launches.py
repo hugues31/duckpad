@@ -357,6 +357,7 @@ class LaunchPlanner:
                     manifest=self.fingerprints.manifest(worktree, environment, bundle),
                 )
                 if partition_plan.get("dimension")
+                and any(nodes[key].get("partition_collect_inputs") for key in scope)
                 else fingerprints
             )
             kept = kept_results(context, nodes, edges, order, planned, forced)
@@ -393,7 +394,10 @@ class LaunchPlanner:
         for key, state in execution.run["nodes"].items():
             if nodes[key].get("partitioned"):
                 state["partitioned"] = True
-            elif key in estimates and key not in kept:
+            elif key in estimates and "kept" in state:
+                # Carried over, so that runs keeping a node do not lose its timing.
+                state["kept"]["duration"] = estimates[key]
+            elif key in estimates:
                 state["estimated_duration"] = estimates[key]
         return execution
 

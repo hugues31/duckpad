@@ -7,6 +7,8 @@ from fastapi.testclient import TestClient
 from helpers import example_bundle, wait_run
 from test_computed_variables import bundle as control_bundle
 from test_partitions import bundle as partitioned_bundle
+from test_python_nodes import SPLIT
+from test_python_nodes import flow as python_flow
 
 from duckpad.app import create_app
 from duckpad.bundle import bundle_to_files
@@ -181,6 +183,35 @@ def test_nodes_that_write_outside_duckpad_always_run(services, tmp_path):
     assert run["status"] == "success", run
     assert computed(run) == {"export"}
     assert destination.exists()
+
+
+def test_a_kept_python_node_keeps_its_download(services):
+    store, _, _, engine = services
+    code = SPLIT.replace(
+        '        print("processing orders")', '        self.artifact("out.txt").write_text("rows")'
+    )
+    worktree = python_flow(services, code)["id"]
+    first = launch(services, worktree)
+    assert first["status"] == "success", first
+    run = launch(services, worktree, reuse=True)
+    assert "python" not in computed(run)
+    result = engine.exports.result(worktree, "dev", "python")
+    assert result["status"] == "available" and result["run"] == first["id"]
+    assert store.get("artifact", first["nodes"]["python"]["artifact"])
+
+
+def test_runs_that_keep_results_keep_their_timings(services, flow):
+    store, _, _, _ = services
+    worktree, _, _ = flow
+    estimates = store.node_duration_estimates(worktree, "dev")
+    assert set(estimates) == {"source", "filter", "total"}
+    # More runs than the estimates read, each keeping every result.
+    for _ in range(21):
+        run = launch(services, worktree, reuse=True)
+        assert computed(run) == set()
+    assert store.node_duration_estimates(worktree, "dev") == estimates
+    run = launch(services, worktree, "source", reuse=True)
+    assert run["nodes"]["source"]["estimated_duration"] == estimates["source"]
 
 
 def test_a_value_calculated_again_runs_the_nodes_that_use_it(services):

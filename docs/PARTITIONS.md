@@ -103,7 +103,8 @@ the next run.
 
 **Run** [keeps valid results](WORKSPACE.md#save-and-run), key by key: it runs the
 keys whose result is missing, failed or stale, or was computed from an input that
-ran again since, and it keeps what collects the keys when none of them ran. The
+ran again since, and it keeps what collects the keys when none of them ran. An
+export in the zone follows its key: it is not written again for a kept key. The
 arrow beside it offers **Run everything**, which recalculates the list and runs
 every key, and **Run with options…**, which runs every other node again and
 offers **Failed**, **Missing** and **Selected keys**, plus a parallelism limit and

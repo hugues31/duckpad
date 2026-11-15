@@ -20,8 +20,8 @@ def kept_results(
     """The results a run keeps instead of computing them again, by node.
 
     A node keeps its result when it was computed from the same definitions and from the kept
-    results of all its inputs. Requested nodes always run, as do nodes without a result: those
-    that write outside Duckpad, whose destination cannot be compared.
+    results of all its inputs. Requested nodes always run, as do nodes without outputs, such as
+    exports, whose destination cannot be compared.
 
     A partitioned node has one result per key, which its run compares once it knows the keys:
     here it only stands for results that may be kept, without any.

@@ -425,7 +425,13 @@ export interface NodeRun {
    * The run kept the node's valid result and did not run it: the earlier run that computed
    * it, or the number of keys of a partitioned node, each with its own result.
    */
-  kept?: { run?: string; created?: string; partitions?: number };
+  kept?: {
+    run?: string;
+    created?: string;
+    partitions?: number;
+    /** The duration of the node, kept for estimates. */
+    duration?: number;
+  };
   label: string;
   writes_external: boolean;
   /** The node ran as a passthrough, without its code. */

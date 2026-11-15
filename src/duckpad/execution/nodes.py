@@ -103,8 +103,9 @@ class NodeExecutor:
         execution.published.pop(key, None)
         execution.run["kept_results"] = len(execution.kept)
         state = execution.run["nodes"][key]
-        for name in ("kept", "outputs"):
-            state.pop(name, None)
+        state.pop("outputs", None)
+        if duration := state.pop("kept", {}).get("duration"):
+            state["estimated_duration"] = duration
         state["status"] = "pending"
         invalidate_results(self.exports, context, execution.edges, {key}, set(execution.order))
         return False
