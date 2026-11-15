@@ -1,0 +1,161 @@
+/* Workspace banners, run progress, and the layout of full-page tabs. */
+.banner {
+  position: relative;
+  z-index: 35;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 36px;
+  margin-top: 0;
+  padding: 9px 20px;
+  border-radius: 0;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.banner span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.banner.error {
+  background: var(--surface);
+  color: light-dark(#9c3d36, #f6b1a8);
+  border: 1px solid #c5787166;
+}
+.banner.warning {
+  background: var(--surface);
+  color: light-dark(#79551d, #efcc8d);
+  border: 1px solid #ad813766;
+}
+.banner button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: inherit;
+  white-space: nowrap;
+}
+.run-progress {
+  position: relative;
+  z-index: 29;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  min-width: 0;
+  margin-top: 0;
+  padding: 4px 20px 10px;
+  border-radius: 0;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.run-progress > svg,
+.run-progress-count,
+.run-progress-remaining {
+  flex-shrink: 0;
+}
+.run-progress-details {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.run-progress-count {
+  margin-left: auto;
+}
+.run-progress-count,
+.run-progress-remaining {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.run-progress-details + .run-progress-remaining {
+  margin-left: auto;
+}
+.progress-track {
+  position: absolute;
+  inset: auto 20px 4px;
+  height: 4px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border-radius: 4px;
+}
+.progress-track > div {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(
+    100deg,
+    var(--accent) 20%,
+    color-mix(in srgb, var(--accent) 55%, var(--surface)) 50%,
+    var(--accent) 80%
+  );
+  background-size: 200% 100%;
+  animation: run-progress-shimmer 2.4s linear infinite;
+  transition: width 0.3s ease;
+}
+.progress-track[data-indeterminate="true"] > div {
+  width: 30%;
+  animation: run-progress-indeterminate 2s ease-in-out infinite alternate;
+}
+.run-progress[data-paused="true"] :is(svg, .progress-track > div) {
+  animation-play-state: paused;
+}
+@keyframes run-progress-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+@keyframes run-progress-indeterminate {
+  to {
+    transform: translateX(233%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .run-progress :is(svg, .progress-track > div) {
+    animation: none;
+    transition: none;
+  }
+}
+.full-panel {
+  --full-panel-padding: 37px;
+  padding: var(--full-panel-padding) 44px;
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+  background: var(--bg);
+}
+.workspace-shell > .full-panel {
+  margin-top: 0;
+  border-radius: 0;
+  background: var(--glass);
+}
+.page-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+  gap: 20px;
+}
+.page-heading h1 {
+  margin: 9px 0 10px;
+}
+.page-heading p {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0;
+}
+.page-heading .segmented {
+  align-self: flex-start;
+  margin-top: 10px;
+}
+@media (max-width: 600px) {
+  .full-panel {
+    --full-panel-padding: 20px;
+    padding: 20px;
+  }
+  .page-heading {
+    flex-wrap: wrap;
+  }
+}
