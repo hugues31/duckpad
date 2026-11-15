@@ -14,7 +14,7 @@ export default function ProjectSettingsPage() {
   if (!project) return <RouteError />;
   return (
     <ProjectSettings
-      key={`${project.id}:${section}`}
+      key={project.id}
       section={section}
       project={project.id}
       workspace={workspace}

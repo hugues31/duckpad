@@ -40,32 +40,91 @@ const NO_CONNECTIONS: string[] = [];
 const sameConnections = (a: string[], b: string[]) =>
   a.length === b.length && a.every((id) => b.includes(id));
 
-/** Project access, runtime policies, branch partitions and general settings. */
-export default function ProjectSettings({
-  project,
-  section = "participants",
-  workspace,
-  refresh,
-  onDeleted,
-  onGit,
-}: {
+interface ProjectSettingsProps {
   project: string;
   section?: string;
   workspace: Workspace;
   refresh: () => Promise<unknown>;
   onDeleted: () => void;
   onGit?: () => void;
-}) {
+}
+
+/** Keep project metadata in place while each section starts with fresh forms. */
+export default function ProjectSettings({
+  project,
+  section = "participants",
+  ...props
+}: ProjectSettingsProps) {
   const t = useT();
   const { search } = useLocation();
   const {
     data: settings,
     setData: setSettings,
-    error: loadError,
-  } = useApiResource<Settings>(`/projects/${project}/settings`);
+    error,
+  } = useApiResource<Settings>(`/projects/${project}/settings`, {
+    refresh: section,
+  });
+  return (
+    <SettingsLayout
+      className="project-settings"
+      title={t("projectSettings")}
+      eyebrow={settings?.project.name || t("project")}
+      description={t("projectAccessHint")}
+      contentKey={section}
+      badge={
+        settings && (
+          <span className="access-badge active">
+            {t(`role_${settings.role}`)}
+          </span>
+        )
+      }
+      navigation={projectSettingsSections.map(([slug, label]) => {
+        const Icon = sectionIcons[slug];
+        return (
+          <NavLink
+            key={slug}
+            to={`${projectSettingsUrl(project, slug)}${search}`}
+            end
+          >
+            <Icon size={18} aria-hidden="true" />
+            <span>{t(label)}</span>
+          </NavLink>
+        );
+      })}
+    >
+      {error && (
+        <div className="notice error" role="alert">
+          {error}
+        </div>
+      )}
+      <ProjectSettingsSection
+        {...props}
+        project={project}
+        section={section}
+        settings={settings}
+        setSettings={setSettings}
+      />
+    </SettingsLayout>
+  );
+}
+
+/** Project access, runtime policies, branch partitions and general settings. */
+function ProjectSettingsSection({
+  project,
+  section,
+  workspace,
+  refresh,
+  onDeleted,
+  onGit,
+  settings,
+  setSettings,
+}: ProjectSettingsProps & {
+  settings: Settings | null;
+  setSettings: (settings: Settings) => void;
+}) {
+  const t = useT();
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
-  const { pending, error: actionError, run } = useAsyncAction();
-  const error = actionError || loadError;
+  const { pending, error, run } = useAsyncAction();
   const read = useCallback(
     () => api<Settings>(`/projects/${project}/settings`),
     [project],
@@ -124,78 +183,52 @@ export default function ProjectSettings({
     ) || [];
   return (
     <>
-      <SettingsLayout
-        className="project-settings"
-        title={t("projectSettings")}
-        eyebrow={settings?.project.name || t("project")}
-        description={t("projectAccessHint")}
-        badge={
-          settings && (
-            <span className="access-badge active">
-              {t(`role_${settings.role}`)}
-            </span>
-          )
-        }
-        navigation={projectSettingsSections.map(([slug, label]) => {
-          const Icon = sectionIcons[slug];
-          return (
-            <NavLink
-              key={slug}
-              to={`${projectSettingsUrl(project, slug)}${search}`}
-              end
-            >
-              <Icon size={18} aria-hidden="true" />
-              <span>{t(label)}</span>
-            </NavLink>
-          );
-        })}
-      >
-        {error && (
-          <div className="notice error" role="alert">
-            {error}
-          </div>
-        )}
-        {section === "partitions" && <PartitionSettings />}
-        {section === "extensions" && <ProjectExtensions />}
-        {section === "participants" && (
-          <ProjectParticipants
-            admin={admin}
-            act={act}
-            project={project}
-            available={available}
-            pending={pending}
-            settings={settings}
-            setConfirmation={setConfirmation}
-          />
-        )}
-        {/* Drafts start from the loaded settings, so an early edit cannot drop saved values. */}
-        {section === "connections" && settings && (
-          <ProjectConnections
-            instanceAdmin={instanceAdmin}
-            workspace={workspace}
-            grants={grants}
-            pending={pending}
-            onSave={() => saveSection(grants.persist)}
-          />
-        )}
-        {section === "python" && settings && (
-          <ProjectPythonSettings
-            instanceAdmin={instanceAdmin}
-            python={python}
-            pending={pending}
-            onSave={() => saveSection(python.persist)}
-            project={project}
-          />
-        )}
-        {section === "general" && (
-          <ProjectGeneralSettings
-            onGit={onGit}
-            settings={settings}
-            admin={admin}
-            setConfirmation={setConfirmation}
-          />
-        )}
-      </SettingsLayout>
+      {error && (
+        <div className="notice error" role="alert">
+          {error}
+        </div>
+      )}
+      {section === "partitions" && <PartitionSettings />}
+      {section === "extensions" && <ProjectExtensions />}
+      {section === "participants" && (
+        <ProjectParticipants
+          admin={admin}
+          act={act}
+          project={project}
+          available={available}
+          pending={pending}
+          settings={settings}
+          setConfirmation={setConfirmation}
+        />
+      )}
+      {/* Drafts start from the loaded settings, so an early edit cannot drop saved values. */}
+      {section === "connections" && settings && (
+        <ProjectConnections
+          instanceAdmin={instanceAdmin}
+          workspace={workspace}
+          grants={grants}
+          pending={pending}
+          onSave={() => saveSection(grants.persist)}
+        />
+      )}
+      {section === "python" && settings && (
+        <ProjectPythonSettings
+          instanceAdmin={instanceAdmin}
+          python={python}
+          pending={pending}
+          onSave={() => saveSection(python.persist)}
+          project={project}
+        />
+      )}
+      {section === "general" && (
+        <ProjectGeneralSettings
+          onGit={onGit}
+          settings={settings}
+          admin={admin}
+          setConfirmation={setConfirmation}
+        />
+      )}
+
       {confirmation && (
         <ConfirmModal
           title={t(
