@@ -1,5 +1,7 @@
 """Runs that keep valid results compute only the nodes that changed or were requested."""
 
+from collections import Counter
+
 import pytest
 from fastapi.testclient import TestClient
 from helpers import example_bundle, wait_run
@@ -8,6 +10,7 @@ from test_partitions import bundle as partitioned_bundle
 
 from duckpad.app import create_app
 from duckpad.bundle import bundle_to_files
+from duckpad.util import Problem
 
 
 def change(projects, worktree, update):
@@ -264,10 +267,115 @@ def test_a_canceled_run_leaves_the_results_it_kept_valid(services, flow, monkeyp
     assert computed(launch(services, worktree, reuse=True)) == {"total"}
 
 
-def test_a_partitioned_flow_computes_its_whole_scope(services):
-    _, projects, _, _ = services
-    worktree = projects.create("Partitions", partitioned_bundle())["id"]
-    assert launch(services, worktree)["status"] == "success"
+@pytest.fixture
+def partitioned(services, monkeypatch):
+    """A flow whose keys ran once, counting what runs afterwards by node and key."""
+    _, projects, _, engine = services
+    project = partitioned_bundle()
+    project["flow"]["partitions"]["batch"]["execution"] = {"on_error": "continue"}
+    worktree = projects.create("Partitions", project)["id"]
+    calls = Counter()
+    compute = engine.runs.nodes.compute
+
+    def counted(execution, key, tables):
+        calls[key, (execution.partition or {}).get("key", {}).get("value")] += 1
+        return compute(execution, key, tables)
+
+    monkeypatch.setattr(engine.runs.nodes, "compute", counted)
+    first = launch(services, worktree)
+    assert first["status"] == "success", first
+    assert computed(first) == {"keys", "source", "lookup", "transform", "collect"}
+    calls.clear()
+    return worktree, calls
+
+
+def test_a_partitioned_flow_keeps_valid_keys_and_what_collects_them(services, partitioned):
+    _, _, _, engine = services
+    worktree, calls = partitioned
+    collected = engine.preview(worktree, "dev", "collect")["id"]
     run = launch(services, worktree, reuse=True)
     assert run["status"] == "success", run
-    assert "reuse" not in run and computed(run) == set(run["nodes"])
+    assert not calls and computed(run) == set()
+    assert run["kept_results"] == 5 and run["partitions"]["selected"] == 0
+    assert run["nodes"]["transform"]["kept"] == {"partitions": 2}
+    assert engine.preview(worktree, "dev", "collect")["id"] == collected
+    # Every key runs again on request, from the kept results of the other nodes.
+    run = launch(services, worktree, reuse=True, partition_selection={"mode": "all"})
+    assert computed(run) == {"source", "transform", "collect"}
+    assert calls == Counter({(node, key): 1 for node in ("source", "transform") for key in "ab"}) + Counter(
+        {("collect", None): 1}
+    )
+
+
+def test_changed_keys_run_with_what_collects_them(services, partitioned):
+    _, projects, _, engine = services
+    worktree, calls = partitioned
+    change(
+        projects, worktree, lambda bundle: bundle["flow"]["nodes"][3].update(params={"value": "'changed'"})
+    )
+    run = launch(services, worktree, reuse=True)
+    assert run["status"] == "success", run
+    assert computed(run) == {"source", "transform", "collect"}
+    assert run["partitions"]["selected"] == 2 and calls["transform", "a"] == calls["transform", "b"] == 1
+    assert {row["values"][1] for row in engine.preview(worktree, "dev", "collect")["rows"]} == {"changed"}
+    # A new key runs alone; the other keys are kept, and what collects them all runs again.
+    calls.clear()
+    change(
+        projects,
+        worktree,
+        lambda bundle: bundle["templates"].update(
+            keys=bundle["templates"]["keys"].replace(";", " UNION ALL SELECT 'c', 'three';")
+        ),
+    )
+    run = launch(services, worktree, reuse=True)
+    assert run["status"] == "success", run
+    assert computed(run) == {"keys", "source", "transform", "collect"}
+    assert run["partitions"]["total"] == 3 and run["partitions"]["selected"] == 1
+    assert {key for (node, key) in calls if node == "transform"} == {"c"}
+
+
+def test_only_the_keys_that_failed_run_again(services, partitioned, monkeypatch):
+    _, projects, _, engine = services
+    worktree, calls = partitioned
+    counted = engine.runs.nodes.compute
+
+    def failing(execution, key, tables):
+        if key == "transform" and execution.partition["key"]["value"] == "b":
+            raise Problem("Temporary failure")
+        return counted(execution, key, tables)
+
+    change(
+        projects, worktree, lambda bundle: bundle["flow"]["nodes"][3].update(params={"value": "'changed'"})
+    )
+    with monkeypatch.context() as patch:
+        patch.setattr(engine.runs.nodes, "compute", failing)
+        failed = launch(services, worktree, reuse=True)
+    assert failed["status"] == "partial_failure", failed
+    assert failed["nodes"]["collect"]["status"] == "blocked"
+    calls.clear()
+    run = launch(services, worktree, reuse=True)
+    assert run["status"] == "success", run
+    assert computed(run) == {"source", "transform", "collect"}
+    assert run["partitions"]["selected"] == 1
+    assert calls == Counter({("source", "b"): 1, ("transform", "b"): 1, ("collect", None): 1})
+
+
+def test_keys_follow_an_input_that_ran_again_and_a_requested_partitioned_node(services, partitioned):
+    worktree, calls = partitioned
+    assert computed(launch(services, worktree, "lookup", reuse=True)) == {"lookup"}
+    calls.clear()
+    # The keys were computed from the previous result of the input: they all run again.
+    run = launch(services, worktree, reuse=True)
+    assert run["status"] == "success", run
+    assert computed(run) == {"source", "transform", "collect"}
+    assert run["partitions"]["selected"] == 2 and calls["transform", "a"] == calls["transform", "b"] == 1
+    assert computed(launch(services, worktree, reuse=True)) == set()
+    # A requested partitioned node runs every key, from the kept result of its other input.
+    calls.clear()
+    run = launch(services, worktree, "transform", reuse=True)
+    assert computed(run) == {"source", "transform"}
+    assert calls["transform", "a"] == calls["transform", "b"] == 1 and not calls["lookup", None]
+    # What collects the keys turned stale, and runs alone next.
+    calls.clear()
+    assert computed(launch(services, worktree, reuse=True)) == {"collect"}
+    assert calls == Counter({("collect", None): 1})

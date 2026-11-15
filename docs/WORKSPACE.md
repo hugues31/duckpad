@@ -154,8 +154,8 @@ computing them again, so a source that is already loaded is not read again:
 
 Duckpad compares the saved processing configuration, not the data behind a
 source: choose **Run everything**, or run the source, when it changed. Jobs, the
-API and the command line compute every node of their scope, as does a
-[partitioned flow](PARTITIONS.md), whose button stays **Run all**.
+API and the command line compute every node of their scope. A
+[partitioned flow](PARTITIONS.md#launch-and-retry) keeps its results key by key.
 
 While a run is active, the strip below the project tabs, and a running Job's
 details, show its environment, completed nodes (or partitions, failed ones

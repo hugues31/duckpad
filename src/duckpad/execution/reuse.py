@@ -22,6 +22,9 @@ def kept_results(
     A node keeps its result when it was computed from the same definitions and from the kept
     results of all its inputs. Requested nodes always run, as do nodes without a result: those
     that write outside Duckpad, whose destination cannot be compared.
+
+    A partitioned node has one result per key, which its run compares once it knows the keys:
+    here it only stands for results that may be kept, without any.
     """
     inputs: dict[str, list[Record]] = {key: [] for key in order}
     for edge in edges:
@@ -31,13 +34,13 @@ def kept_results(
     with context.lock:
         for key in order:
             node, outputs = nodes[key], context.outputs.get(key, {})
-            if (
-                key in forced
-                or node.get("error")
-                or not outputs
-                or set(outputs) != set(node["parsed"]["outputs"])
-                or any(edge["source"] not in kept for edge in inputs[key])
-            ):
+            if key in forced or any(edge["source"] not in kept for edge in inputs[key]):
+                continue
+            if node.get("partitioned"):
+                # Its definition, and any error in it, is resolved for each key.
+                kept[key] = {}
+                continue
+            if node.get("error") or not outputs or set(outputs) != set(node["parsed"]["outputs"]):
                 continue
             read = {parent for data in outputs.values() for parent in data.dependencies.values()}
             if all(
@@ -46,7 +49,12 @@ def kept_results(
                 and not data.partition
                 and not data.incomplete
                 for data in outputs.values()
-            ) and all(kept[edge["source"]][edge["sourceHandle"]].id in read for edge in inputs[key]):
+            ) and all(
+                kept[edge["source"]][edge["sourceHandle"]].id in read
+                for edge in inputs[key]
+                # The keys a node collects are compared by its fingerprint and by their run.
+                if not nodes[edge["source"]].get("partitioned")
+            ):
                 kept[key] = dict(outputs)
     return kept
 

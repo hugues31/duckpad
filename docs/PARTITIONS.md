@@ -101,7 +101,11 @@ the next run.
 
 ## Launch and retry
 
-**Run all** recalculates the list and runs every key. The arrow beside it opens **Run with options…**, which
+**Run** [keeps valid results](WORKSPACE.md#save-and-run), key by key: it runs the
+keys whose result is missing, failed or stale, or was computed from an input that
+ran again since, and it keeps what collects the keys when none of them ran. The
+arrow beside it offers **Run everything**, which recalculates the list and runs
+every key, and **Run with options…**, which runs every other node again and
 offers **Failed**, **Missing** and **Selected keys**, plus a parallelism limit and
 failure policy for this run. Targeted node runs reuse the retained list, or calculate
 it first when none exists yet; selecting a key before running a node limits that

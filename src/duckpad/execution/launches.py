@@ -345,11 +345,21 @@ class LaunchPlanner:
         captured, secrets = self.capture_connections(context, nodes, scope, strict=bool(target))
         fingerprints = self.fingerprints.of(bundle, environment, captured, values)
         kept: dict[str, dict[str, Dataset]] = {}
-        # Partitioned flows publish per key: their runs keep computing every node in scope.
-        reuse = reuse and not partition_plan.get("dimension")
         if reuse:
             forced = {key for key in scope if target and in_subtree(key, target)}
-            kept = kept_results(context, nodes, edges, order, fingerprints, forced)
+            # Results that collect keys were fingerprinted with the retained key list.
+            planned = (
+                self.fingerprints.of(
+                    bundle,
+                    environment,
+                    captured,
+                    values,
+                    manifest=self.fingerprints.manifest(worktree, environment, bundle),
+                )
+                if partition_plan.get("dimension")
+                else fingerprints
+            )
+            kept = kept_results(context, nodes, edges, order, planned, forced)
         invalidate_results(self.exports, context, edges, scope - set(kept), scope)
         execution = Execution(
             token,
@@ -368,15 +378,17 @@ class LaunchPlanner:
             validation_errors=validation_errors,
             partition_plan=partition_plan,
             kept=kept,
-            published=dict(kept),
+            published={key: outputs for key, outputs in kept.items() if outputs},
         )
         execution.run = self.snapshot_run(
             execution, snapshot, admission, scope, target, entry_point, ancestors
         )
         if reuse:
-            execution.run.update(reuse=True, kept_results=len(kept))
+            execution.run.update(reuse=True, kept_results=sum(1 for outputs in kept.values() if outputs))
         for key, outputs in kept.items():
-            execution.run["nodes"][key].update(kept_state(outputs))
+            # A partitioned node is kept once its run finds no key to compute.
+            if outputs:
+                execution.run["nodes"][key].update(kept_state(outputs))
         estimates = self.store.node_duration_estimates(worktree, environment)
         for key, state in execution.run["nodes"].items():
             if nodes[key].get("partitioned"):
