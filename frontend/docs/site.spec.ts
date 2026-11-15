@@ -202,7 +202,14 @@ test("custom video controls support keyboard playback, seeking, audio, captions 
       video.evaluate((element: HTMLVideoElement) => element.currentTime),
     )
     .toBeCloseTo(25, 1);
-  await expect(progress).toHaveAttribute("aria-valuetext", "0:25 of 1:00");
+  const duration = await video.evaluate(
+    (element: HTMLVideoElement) => element.duration,
+  );
+  const durationText = `${Math.floor(duration / 60)}:${String(Math.floor(duration % 60)).padStart(2, "0")}`;
+  await expect(progress).toHaveAttribute(
+    "aria-valuetext",
+    `0:25 of ${durationText}`,
+  );
   await progress.focus();
   await page.keyboard.press("ArrowRight");
   await expect
@@ -275,7 +282,7 @@ test("custom video controls support keyboard playback, seeking, audio, captions 
     ).violations,
   ).toEqual([]);
 
-  await progress.fill("59.7");
+  await progress.fill((duration - 0.3).toFixed(1));
   await player.getByRole("button", { name: "Play video", exact: true }).click();
   await expect(
     player.getByRole("button", { name: /Watch again/ }),

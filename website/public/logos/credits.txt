@@ -4,6 +4,7 @@ original artwork and colors and are not covered by Duckpad's MIT license.
 DuckDB
 Copyright DuckDB Foundation. DuckDB is a registered trademark.
 Source: https://github.com/duckdb/duckdb-web/blob/main/images/designmanual/DuckDB_icon-lightmode.svg
+Product film icon (dark mode): https://github.com/duckdb/duckdb-web/blob/main/images/designmanual/DuckDB_icon-darkmode.svg
 Brand assets: https://duckdb.org/design/
 Guidelines: https://duckdb.org/trademark_guidelines
 
