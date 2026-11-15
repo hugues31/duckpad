@@ -130,15 +130,21 @@ export async function verifyPalette(
   await page.goto(`/worktrees/${destination}/flow`);
   await actions.getByRole("button", { name: "Import from a project" }).click();
   const library = page.getByRole("dialog", { name: "Import from a project" });
+  const importedResponse = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname ===
+        `/api/worktrees/${destination}/import`,
+  );
   await library
     .locator(".history-row")
     .filter({ has: page.getByText(name, { exact: true }) })
     .filter({ hasText: sourceName })
     .getByRole("button", { name: "Import independent copy", exact: true })
     .click();
-  await expect(page.locator(".toast")).toContainText(
-    "Independent copy imported",
-  );
+  // Import success is durable; a notification can disappear while a large
+  // project library rerenders during the full browser suite.
+  expect((await importedResponse).ok()).toBe(true);
   await page.keyboard.press("Escape");
   await expect(template).toBeVisible();
   const imported = await read(destination);
