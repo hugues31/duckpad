@@ -620,6 +620,11 @@ test("capture the docked code editor and its preview", async ({ page }) => {
   const suggestions = page.locator(".suggest-widget.visible .monaco-list-row");
   await expect(suggestions.first()).toBeVisible();
   await expect(panel.locator(".monaco-editor")).toContainText("recent_web");
+  // The typed text is saved after a pause: the capture shows the settled editor.
+  await expect(page.locator(".save-status-label")).toHaveText(
+    "All changes saved",
+  );
+  await expect(suggestions.first()).toBeVisible();
   await capture(
     page,
     "code-completion",
