@@ -46,6 +46,7 @@ export function useFlowEditing({
   select,
   setFocusRequest,
   safe,
+  canvasHidden,
 }: {
   path: PathPart[];
   selected: string | null;
@@ -55,6 +56,8 @@ export function useFlowEditing({
   select: (id: string | null) => void;
   setFocusRequest: Dispatch<SetStateAction<FocusRequest | null>>;
   safe: (action: () => Promise<unknown>) => void;
+  /** The canvas is covered: shortcuts that change its nodes would act out of sight. */
+  canvasHidden: boolean;
 }) {
   const t = useT();
   const { notify, drafts } = useShell();
@@ -293,7 +296,7 @@ export function useFlowEditing({
     graph,
     selection,
     selected,
-    busy,
+    busy: busy || canvasHidden,
     revert,
     safe,
     copy,

@@ -82,7 +82,11 @@ export function SamplePopover({
       role="dialog"
       aria-label={t("sample")}
       onKeyDown={(event) => {
-        if (event.key === "Escape") onClose();
+        if (event.key === "Escape") {
+          event.preventDefault();
+          event.stopPropagation();
+          onClose();
+        }
       }}
     >
       <header>

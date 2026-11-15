@@ -34,6 +34,132 @@ async function runProject(page: Page, worktree: string) {
   return run!;
 }
 
+test("maximized results preserve the view and restore the previous workspace", async ({
+  page,
+}) => {
+  const { panel } = await openPaidOrders(page);
+  const maximize = panel.getByRole("button", { name: "Maximize results" });
+  const restore = panel.getByRole("button", { name: "Restore results size" });
+  const resizer = page.getByRole("separator", { name: "Resize data preview" });
+  await resizer.focus();
+  await resizer.press("ArrowUp");
+  const original = await panel.boundingBox();
+  const sizes = await page.evaluate(() =>
+    localStorage.getItem("duckpad-panel-sizes"),
+  );
+  await expect(panel.locator(".preview-footer")).toContainText("1–100 / 107");
+  const scroll = panel.locator(".data-scroll");
+  await scroll.evaluate((element) => {
+    element.scrollTop = 200;
+    element.scrollLeft = 100;
+  });
+  const scrollTop = await scroll.evaluate((element) => element.scrollTop);
+  expect(scrollTop).toBeGreaterThan(0);
+  await maximize.focus();
+  await maximize.press("Enter");
+  await expect(restore).toBeFocused();
+  await expect(restore).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".canvas")).toBeHidden();
+  await expect(page.locator(".inspector")).toBeHidden();
+  await expect(resizer).toBeHidden();
+  const expanded = (await panel.boundingBox())!;
+  expect(expanded.width).toBe(page.viewportSize()!.width);
+  expect(expanded.height).toBeGreaterThan(original!.height);
+  await restore.click();
+  await expect.poll(() => panel.boundingBox()).toEqual(original);
+  expect(await scroll.evaluate((element) => element.scrollTop)).toBe(scrollTop);
+  await expect(page.locator(".canvas")).toBeVisible();
+  await expect(page.locator(".inspector")).toBeVisible();
+  expect(
+    await page.evaluate(() => localStorage.getItem("duckpad-panel-sizes")),
+  ).toBe(sizes);
+
+  await panel.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(panel.locator(".preview-footer")).toContainText("101–107 / 107");
+  const rows = await panel.locator("tbody").textContent();
+  await maximize.click();
+  await expect(panel.locator("tbody")).toHaveText(rows!);
+  await expect(panel.locator(".preview-footer")).toContainText("101–107 / 107");
+
+  // Escape first closes a nested popover, then restores the results panel.
+  await panel.getByRole("button", { name: /^Sample:/ }).click();
+  const sample = page.getByRole("dialog", { name: "Sample", exact: true });
+  await expect(sample).toBeInViewport();
+  await sample
+    .getByRole("textbox", { name: "Filter", exact: true })
+    .press("Escape");
+  await expect(sample).toHaveCount(0);
+  await expect(restore).toBeVisible();
+  await expect(panel.getByRole("button", { name: /^Sample:/ })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(maximize).toBeFocused();
+  await expect(panel.locator(".preview-footer")).toContainText("101–107 / 107");
+
+  await panel.getByRole("tab", { name: "Columns" }).click();
+  await maximize.click();
+  await restore.click();
+  await expect(panel.getByRole("tab", { name: "Columns" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await panel.getByRole("tab", { name: "Data", exact: true }).click();
+  await maximize.click();
+  await panel
+    .getByRole("button", { name: /^Explain this value:/ })
+    .first()
+    .click();
+  await expect(
+    page.getByRole("complementary", { name: "Lineage", exact: true }),
+  ).toBeVisible();
+  await expect(maximize).toBeVisible();
+});
+
+for (const width of [820, 390]) {
+  test(`empty results maximize and reopen docked at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await signIn(page);
+    const example = await (
+      await page.request.post("/api/example", { data: {} })
+    ).json();
+    await page.goto(`/worktrees/${example.id}/flow?node=validated`);
+    // On phones the inspector covers the workspace until it is put away.
+    if (width <= 600)
+      await page.getByRole("button", { name: "Toggle inspector" }).click();
+    const panel = page.getByRole("region", { name: "Results", exact: true });
+    const maximize = panel.getByRole("button", { name: "Maximize results" });
+    const original = await panel.boundingBox();
+    await maximize.click();
+    const restore = panel.getByRole("button", { name: "Restore results size" });
+    await expect(restore).toBeInViewport();
+    const expanded = (await panel.boundingBox())!;
+    expect(expanded.width).toBe(width);
+    expect(expanded.height).toBeGreaterThan(original!.height);
+    // The covered canvas takes neither focus nor shortcuts, and Escape
+    // restores the panel even when nothing inside it has the focus.
+    await expect(page.locator(".canvas")).toHaveAttribute("inert");
+    await page.evaluate(() => (document.activeElement as HTMLElement).blur());
+    await page.keyboard.press("m");
+    await page.keyboard.press("Escape");
+    await expect(maximize).toBeVisible();
+    expect(await panel.boundingBox()).toEqual(original);
+    await expect(page.locator(".pipeline-node.is-muted")).toHaveCount(0);
+    await maximize.click();
+    await panel.getByRole("tab", { name: "Log", exact: true }).click();
+    await panel.getByRole("button", { name: "Hide results" }).click();
+    await expect(panel).toBeHidden();
+    const toggle = page.getByRole("button", { name: "Toggle results" });
+    await expect(toggle).toBeFocused();
+    await toggle.press("Enter");
+    await expect(maximize).toBeVisible();
+    expect(await panel.boundingBox()).toEqual(original);
+    await expect(
+      panel.getByRole("tab", { name: "Log", exact: true }),
+    ).toHaveAttribute("aria-selected", "true");
+  });
+}
+
 test("a sample filters, sorts and limits displayed rows without changing the result", async ({
   page,
 }) => {

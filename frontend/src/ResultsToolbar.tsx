@@ -6,7 +6,7 @@ import {
   SlidersHorizontal,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useT } from "./i18n";
 import {
   outputKey,
@@ -60,6 +60,7 @@ export default function ResultsToolbar({
 }) {
   const t = useT();
   const [editing, setEditing] = useState(false);
+  const sampleButton = useRef<HTMLButtonElement>(null);
   const order = sample.order || [];
   const sampleLabel = sample.rows
     ? t(
@@ -85,6 +86,7 @@ export default function ResultsToolbar({
         <>
           <div className="sample-anchor">
             <button
+              ref={sampleButton}
               className={`sample-button ${editing ? "active" : ""}`}
               aria-expanded={editing}
               onClick={() => setEditing(!editing)}
@@ -110,7 +112,10 @@ export default function ResultsToolbar({
                   change(next);
                   setEditing(false);
                 }}
-                onClose={() => setEditing(false)}
+                onClose={() => {
+                  setEditing(false);
+                  sampleButton.current?.focus();
+                }}
                 onSaveView={(next) => {
                   change(next);
                   setEditing(false);

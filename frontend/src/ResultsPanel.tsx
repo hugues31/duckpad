@@ -5,13 +5,15 @@ import {
   Eye,
   GitCommitHorizontal,
   Loader2,
+  Maximize2,
+  Minimize2,
   Play,
   ScrollText,
   ShieldCheck,
   Table2,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { withQuery } from "./api";
 import { DatasetPicker } from "./DatasetPicker";
 import type { PreviewState } from "./draftPreview";
@@ -81,6 +83,8 @@ export default function ResultsPanel({
   statuses,
   tab,
   hidden,
+  maximized,
+  onMaximize,
   onTab,
   onClose,
   onRun,
@@ -116,6 +120,8 @@ export default function ResultsPanel({
   statuses: Statuses;
   tab: ResultsTab;
   hidden: boolean;
+  maximized: boolean;
+  onMaximize: (maximized: boolean) => void;
   onTab: (tab: ResultsTab) => void;
   onClose: () => void;
   /** Run the node with its ancestors, or only the ancestors its inputs come from. */
@@ -133,6 +139,7 @@ export default function ResultsPanel({
   onRunAncestors: () => void;
 }) {
   const t = useT();
+  const maximizeButton = useRef<HTMLButtonElement>(null);
   const ports = signature.outputs;
   const exportNode = signature.kind === "export";
   const local = localDefinitions(snapshot, parent);
@@ -409,6 +416,22 @@ export default function ResultsPanel({
       id="data-preview"
       aria-label={t("results")}
       hidden={hidden}
+      onKeyDown={(event) => {
+        if (
+          !maximized ||
+          event.key !== "Escape" ||
+          event.defaultPrevented ||
+          // Popovers and menus handle their own dismissal first.
+          (event.target as HTMLElement).closest(
+            '[role="dialog"], [role="menu"], [role="listbox"]',
+          )
+        )
+          return;
+        event.preventDefault();
+        event.stopPropagation();
+        onMaximize(false);
+        maximizeButton.current?.focus();
+      }}
     >
       <header className="preview-header results-header">
         <div className="results-identity">
@@ -500,6 +523,22 @@ export default function ResultsPanel({
               <Loader2 size={15} className="spin" />
             ) : (
               <Play size={15} />
+            )}
+          </button>
+          <button
+            ref={maximizeButton}
+            className="icon"
+            title={
+              maximized ? `${t("restoreResults")} (Esc)` : t("maximizeResults")
+            }
+            aria-label={t(maximized ? "restoreResults" : "maximizeResults")}
+            aria-pressed={maximized}
+            onClick={() => onMaximize(!maximized)}
+          >
+            {maximized ? (
+              <Minimize2 size={15} aria-hidden="true" />
+            ) : (
+              <Maximize2 size={15} aria-hidden="true" />
             )}
           </button>
           <button

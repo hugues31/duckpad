@@ -474,6 +474,8 @@
   "hideNodes": "Knotenbibliothek ausblenden",
   "togglePreview": "Ergebnisse ein-/ausblenden",
   "hidePreview": "Ergebnisse ausblenden",
+  "maximizeResults": "Ergebnisse maximieren",
+  "restoreResults": "Ergebnisgröße wiederherstellen",
   "toggleInspector": "Inspektor ein-/ausblenden",
   "accountMenu": "Kontomenü",
   "resizeNodes": "Größe der Knotenbibliothek ändern",

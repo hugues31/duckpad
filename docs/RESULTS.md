@@ -5,6 +5,12 @@ node: its parameters, compiled SQL, documentation and change history. Resolved
 variables and compiled SQL follow the selected environment. The **results panel**
 under the canvas shows the data, charts, tests and logs for that environment.
 
+Use **Maximize results** beside the header's close button to fill the workspace.
+**Restore results size** or **Escape** returns to the previous panel layout.
+The selected tab, sample, search and page stay in place while resizing.
+Opening lineage or node code restores the layout to show that panel;
+closing Results also leaves maximized mode.
+
 ![The results panel of Paid orders on a sample of partner orders above 300, sorted by amount](images/results-data.png)
 
 The header names the node and the dataset shown, its **Valid** or **Stale**
