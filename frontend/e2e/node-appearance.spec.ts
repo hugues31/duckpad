@@ -30,7 +30,7 @@ test("the inspector saves an icon and a color in the node's code, and Undo rever
     "data-icon",
     "filter",
   );
-  await expect(library).toHaveText("Default");
+  await expect(library).toHaveText("filter");
 
   // A linked node styles its shared template: its palette entry follows.
   await library.click();
@@ -58,9 +58,10 @@ test("the inspector saves an icon and a color in the node's code, and Undo rever
     "data-icon",
     "sort",
   );
-  expect((await read()).files["templates/filter.sql"]).toMatch(
-    /^-- @label Filter\n-- @description [^\n]+\n-- @icon sort\n-- @color green\n-- @input source\n/,
-  );
+  const styled = (await read()).files["templates/filter.sql"];
+  expect(styled).toContain("-- @icon sort\n");
+  expect(styled).toContain("-- @color green\n");
+  expect(styled).toContain("-- @input source\n");
   // Styling a node never makes its results stale.
   expect((await read()).files["templates/filter.sql"]).toContain(
     "SELECT * FROM {{ source }} WHERE {{ condition }};",

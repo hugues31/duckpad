@@ -74,6 +74,16 @@ const builtinLabels = {
   export_xlsx: "Export XLSX",
   export_table: "Export table",
   export_oracle: "Export Oracle",
+  union: "Union",
+  sort: "Sort",
+  deduplicate: "Deduplicate",
+  calculate: "Calculated columns",
+  pivot: "Pivot",
+  unpivot: "Unpivot",
+  sample: "Sample",
+  rank: "Rank",
+  running_total: "Running total",
+  export_parquet: "Export Parquet",
   sql: "SQL transform",
 } satisfies Partial<Record<TranslationKey, string>>;
 export const isBuiltinTemplate = (

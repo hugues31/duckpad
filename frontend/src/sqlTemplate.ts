@@ -60,6 +60,13 @@ export const PARAMETER_TYPES = {
   list: "item",
   column_selection: "input",
   value_cleaning: "input",
+  conditions: "input",
+  join_keys: "input",
+  joined_columns: "input",
+  group_columns: "input",
+  measures: "input",
+  ordering: "input",
+  columns: "input",
 } as const;
 export type ParameterType = keyof typeof PARAMETER_TYPES;
 /** Whether a name is a parameter type, not an inherited object key such as `constructor`. */
@@ -359,9 +366,20 @@ export function lintTemplate(text: string): TemplateProblem[] {
     const type = parameter.type!;
     const kind = baseType(type);
     const argument = typeArgument(type);
-    const valid =
-      kind === "column_selection" || kind === "value_cleaning"
-        ? argument !== null && inputs.includes(argument)
+    const valid = [
+      "column_selection",
+      "value_cleaning",
+      "conditions",
+      "group_columns",
+      "measures",
+      "ordering",
+      "columns",
+    ].includes(kind)
+      ? argument !== null && inputs.includes(argument)
+      : kind === "join_keys" || kind === "joined_columns"
+        ? argument !== null &&
+          argument.split(",").length === 2 &&
+          argument.split(",").every((p) => inputs.includes(p.trim()))
         : kind === "table_name"
           ? argument !== null &&
             baseType(parameters.get(argument)?.type ?? "") === "schema_name"

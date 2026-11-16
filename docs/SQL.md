@@ -258,3 +258,12 @@ template defaults. Expose a component parameter and bind it on the instance.
 
 Inspect the current compiled SQL for configuration errors and the
 [execution log](RESULTS.md#log) for the statements and values of a particular run.
+
+## Guided transformation parameters
+
+The default palette uses public `conditions(input)`, `join_keys(left,right)`,
+`joined_columns(left,right)`, `group_columns(input)`, `measures(input)`,
+`ordering(input)` and `columns(input)` types. Declare them in your own templates
+to get the same schema-aware forms. They also accept editable SQL strings. See
+[data preparation](DATA_PREPARATION.md#existing-projects-and-reusable-forms) for
+the value formats and examples; no special template identifier is required.

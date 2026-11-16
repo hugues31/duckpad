@@ -26,6 +26,16 @@ class Login(BaseModel):
     password: str
 
 
+class Revision(BaseModel):
+    revision: str
+
+
+class RenderParameter(BaseModel):
+    type: str
+    value: Any
+    schemas: dict[str, list[dict[str, str]]] = Field(default_factory=dict)
+
+
 class Setup(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

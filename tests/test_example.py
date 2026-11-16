@@ -72,3 +72,23 @@ def test_missing_channel_fee_fails_the_join_before_reports_are_exported(services
     assert run["nodes"]["net"]["status"] == "failed"
     assert run["nodes"]["reach"]["status"] == "success"
     assert not list(store.paths.exports(tree["id"], "dev").glob("*.csv"))
+
+
+@pytest.mark.parametrize("environment", ["dev", "prod"])
+def test_preparation_tour_runs_as_a_self_contained_palette_component(services, environment):
+    store, projects, catalog, engine = services
+    worktree = create_example(projects, catalog)["id"]
+    snapshot = projects.snapshot(worktree)
+
+    def add_tour(bundle):
+        bundle["flow"]["nodes"].append({"id": "preparation", "component": "preparation_tour"})
+        return bundle, {}
+
+    projects.transform(worktree, snapshot["revision"], add_tour, "Reload the example")
+    run = wait_run(store, engine.launch(worktree, environment))
+    assert run["status"] == "success", run
+    assert engine.preview(worktree, environment, "preparation::append")["count"] == 240
+    assert engine.preview(worktree, environment, "preparation::unique")["count"] == 120
+    assert engine.preview(worktree, environment, "preparation", "orders")["count"] == 120
+    assert engine.preview(worktree, environment, "preparation", "channels")["count"] == 12
+    assert engine.preview(worktree, environment, "preparation", "summary")["count"] == 4

@@ -1,4 +1,5 @@
 import { useId, type ReactNode } from "react";
+import GuidedParameter, { GUIDED_TYPES } from "./GuidedParameter";
 import ColumnPreparation from "./ColumnPreparation";
 import { useT } from "./i18n";
 import ListInput from "./ListInput";
@@ -26,6 +27,7 @@ export default function ParameterField({
   csv,
   schemas,
   columns,
+  inputColumns,
   objects,
   worktree,
   variable,
@@ -47,6 +49,7 @@ export default function ParameterField({
   csv?: boolean;
   schemas?: string[];
   columns?: Column[];
+  inputColumns?: Record<string, Column[]>;
   /** Schema or table names listed from the database connection, for name parameters. */
   objects?: {
     names: string[];
@@ -74,6 +77,19 @@ export default function ParameterField({
     (c) => (c.family === "storage") === !!location,
   );
   if (base === "secret") return null;
+  if (GUIDED_TYPES.includes(base))
+    return (
+      <GuidedParameter
+        type={type}
+        name={name}
+        value={value}
+        schemas={inputColumns || {}}
+        worktree={worktree}
+        expressionVariables={expressionVariables}
+        onChange={onChange}
+        onBlur={onBlur}
+      />
+    );
   if (["column_selection", "value_cleaning"].includes(base))
     return (
       <ColumnPreparation

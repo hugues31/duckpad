@@ -93,6 +93,12 @@ SQL, with the input columns one click away, and you can
 [preview](docs/SQL.md#preview-while-you-edit) the query you are typing on real
 rows.
 
+The [default palette](docs/DATA_PREPARATION.md) also includes union, sorting,
+deduplication, calculated columns, pivot/unpivot, reproducible sampling, ranking,
+running totals and Parquet export. Every default has its own icon, and its SQL
+and form parameter types are available to user-created nodes too. Existing
+projects can import the current defaults without overwriting customized code.
+
 ![A SQL node edited beside the canvas, with its input columns and a preview of the result](docs/images/readme-code-preview.png)
 
 ### Review changes before they run

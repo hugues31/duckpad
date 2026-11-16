@@ -46,6 +46,9 @@ test("file filtering reveals nested matches and keeps the current draft", async 
   );
   await filter.press("Escape");
   await tree.getByRole("treeitem", { name: "README.md", exact: true }).click();
+  // Monaco renders only visible lines; the example's last line may be offscreen.
+  await page.locator(".code-workspace .monaco-editor textarea").focus();
+  await page.keyboard.press("ControlOrMeta+End");
   await expect(page.locator(".code-editor-body")).toContainText(
     "Filtered draft",
   );

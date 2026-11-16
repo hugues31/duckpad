@@ -22,6 +22,14 @@ A complete example of a documented, tested and reusable sales pipeline.
    aggregate and Net amounts, branching to Orders.amount and Channel fees.fee_rate.
    Also explain distinct customers, extrema, windows and set operations.
 5. Export both reports as CSV, named after the reporting month.
+6. Add Preparation tour from the palette for the new default transformations: append 120 orders
+   twice, deduplicate back to 120, add gross amounts, sample (100% initially),
+   rank and accumulate within regions, sort, and export preparation-tour.parquet.
+   Sales by channel produces four regional rows; Channel rows retains all 12
+   region/channel pairs, including null cells. Guided regional totals uses
+   column and measure forms. Edit any template to create your own version.
+   Pivot/unpivot, deduplication and BY NAME union previews work; their cell
+   lineage reports incomplete coverage.
 
 ## Checks
 
@@ -123,6 +131,7 @@ def create_example(projects, catalog, name=None, record=None):
     )
     templates = BUILTINS.copy()
     templates["validated_orders"] = """-- @label Validated orders
+-- @icon filter
 -- @description Keep paid orders, check them and publish a summary from the same execution.
 -- @input source
 -- @param status: text = "paid"
@@ -143,6 +152,7 @@ SELECT 'info' AS level,
 FROM {{ orders }};
 """
     templates["reporting_period"] = """-- @label Reporting period
+-- @icon date
 -- @description The month covered by the orders. The report_month variable reads it to name the exported reports.
 -- @input source
 -- @output result
@@ -153,6 +163,7 @@ FROM {{ source }};
 SELECT * FROM {{ result }} WHERE strftime(last_order, '%Y-%m') <> month;
 """
     templates["net_amounts"] = """-- @label Net amounts
+-- @icon formula
 -- @description Deduct the sales channel fee from each order.
 -- @input orders
 -- @input fees
@@ -163,6 +174,7 @@ FROM {{ orders }} AS o JOIN {{ fees }} AS f ON o.channel = f.channel;
 SELECT o.* FROM {{ orders }} AS o ANTI JOIN {{ fees }} AS f ON o.channel = f.channel;
 """
     templates["regional_metrics"] = """-- @label Regional metrics
+-- @icon aggregate
 -- @input source
 -- @output result
 SELECT region, SUM(amount) AS revenue, AVG(amount) AS average_order,
@@ -172,6 +184,7 @@ SELECT region, SUM(amount) AS revenue, AVG(amount) AS average_order,
 FROM {{ source }} GROUP BY region;
 """
     templates["rank_regions"] = """-- @label Rank regions
+-- @icon window
 -- @input source
 -- @output result
 SELECT *, DENSE_RANK() OVER (ORDER BY revenue DESC) AS revenue_rank,
@@ -184,6 +197,7 @@ SELECT 'info' AS level,
 FROM {{ result }} WHERE revenue_rank = 1;
 """
     templates["channel_sets"] = """-- @label Customer reach
+-- @icon union
 -- @description Distinct customer coverage, overlap and exclusive channels.
 -- @input source
 -- @output web
@@ -199,6 +213,7 @@ SELECT customer_id FROM {{ source }} WHERE channel = 'Web'
 EXCEPT SELECT customer_id FROM {{ source }} WHERE amount > 400;
 """
     templates["export_report"] = """-- @label Export report
+-- @icon export
 -- @description Write a report as CSV, after checking that it has rows.
 -- @input source
 -- @param connection: connection = ""
@@ -276,6 +291,97 @@ SELECT 'The report has no rows' AS problem FROM {{ source }} HAVING COUNT(*) = 0
             }
         },
     }
+    order = [{"column": "order_id", "direction": "asc", "nulls": "last"}]
+    tour_nodes = [
+        node("orders", "load_csv", "Tour orders", -520, 0, connection=connection_id, file="orders.csv"),
+        node(
+            "customers",
+            "load_parquet",
+            "Tour customers",
+            -520,
+            260,
+            connection=connection_id,
+            file="customers.parquet",
+        ),
+        node(
+            "join",
+            "join",
+            "Join customer regions",
+            -260,
+            0,
+            condition=[{"left": "customer_id", "right": "customer_id"}],
+            columns="l.*, r.customer_name, r.region, r.segment",
+        ),
+        node("entry", "filter", "All orders", 0, 0),
+        node("append", "union", "Append twice", 260, 0),
+        node("unique", "deduplicate", "Keep one order", 520, 0, keys=["order_id"], order=order),
+        node("gross", "calculate", "Add gross amount", 780, 0),
+        node("sample", "sample", "Repeatable sample", 1040, 0, percent=100),
+        node(
+            "rank",
+            "rank",
+            "Rank orders",
+            1300,
+            0,
+            order=[{"column": "amount", "direction": "desc"}],
+            name="amount_rank",
+        ),
+        node("running", "running_total", "Cumulative sales", 1560, 0, order=order),
+        node("sort", "sort", "Order by identifier", 1820, 0, order=order),
+        node(
+            "parquet",
+            "export_parquet",
+            "Export preparation tour",
+            2080,
+            0,
+            destination="preparation-tour.parquet",
+        ),
+        node("pivot", "pivot", "Sales by channel", 780, 260),
+        node("unpivot", "unpivot", "Channel rows", 1040, 260, columns=["Web", "Retail", "Partner"]),
+        node(
+            "summary",
+            "aggregate",
+            "Guided regional totals",
+            1300,
+            260,
+            groups=["region"],
+            measures=[
+                {"function": "SUM", "column": "amount", "alias": "revenue"},
+                {"function": "COUNT", "column": "*", "alias": "orders"},
+            ],
+        ),
+    ]
+    tour = {
+        "id": "preparation_tour",
+        "name": "Preparation tour",
+        "description": "Public SQL templates: append, deduplicate, calculate, sample, rank, accumulate, sort, reshape, aggregate and export Parquet. Open any node to edit its parameters or code.",
+        "nodes": tour_nodes,
+        "edges": [
+            edge("orders", "join", input_name="left"),
+            edge("customers", "join", input_name="right"),
+            edge("join", "entry"),
+            edge("entry", "append", input_name="left"),
+            edge("entry", "append", input_name="right"),
+            *[
+                edge(a, b)
+                for a, b in zip(
+                    ["append", "unique", "gross", "sample", "rank", "running", "sort"],
+                    ["unique", "gross", "sample", "rank", "running", "sort", "parquet"],
+                    strict=True,
+                )
+            ],
+            edge("unique", "pivot"),
+            edge("pivot", "unpivot"),
+            edge("sample", "summary"),
+        ],
+        "inputs": {},
+        "outputs": {
+            "orders": {"node": "sort", "port": "result"},
+            "channels": {"node": "unpivot", "port": "result"},
+            "summary": {"node": "summary", "port": "result"},
+        },
+        "parameters": {},
+    }
     # Start with the positions produced by the canvas's automatic layout.
     nodes = [
         node("orders", "load_csv", "Orders", 0, 67, connection=connection_id, file="orders.csv"),
@@ -295,7 +401,7 @@ SELECT 'The report has no rows' AS problem FROM {{ source }} HAVING COUNT(*) = 0
             "Enrich orders",
             260,
             215,
-            condition="l.customer_id = r.customer_id",
+            condition=[{"left": "customer_id", "right": "customer_id"}],
             columns="l.*, r.customer_name, r.region, r.segment",
         ),
         node("period", "reporting_period", "Reporting period", 260, 0),
@@ -412,7 +518,7 @@ SELECT 'The report has no rows' AS problem FROM {{ source }} HAVING COUNT(*) = 0
             "edges": edges,
         },
         "templates": templates,
-        "components": {"regional_summary": metrics, "regional_report": report},
+        "components": {"regional_summary": metrics, "regional_report": report, "preparation_tour": tour},
         "documentation": documentation,
         "variables": {
             "high_value_threshold": {

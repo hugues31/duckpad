@@ -12,7 +12,7 @@ import sqlglot
 from sqlglot import exp
 from sqlglot.optimizer.qualify import qualify
 
-from .sqlast import has_filtering_join, has_grouping_sets, is_volatile, sql
+from .sqlast import expand_group_by_all, has_filtering_join, has_grouping_sets, is_volatile, sql
 from .util import qi, uid
 
 
@@ -37,7 +37,7 @@ def plan_materialization(cursor, statement, dependencies, instrument=True):
     if eligible:
         schema = {name: {c["name"]: c["type"] for c in data.columns} for name, data in dependencies.items()}
         try:
-            augmented = qualify(tree.copy(), dialect="duckdb", schema=schema)
+            augmented = expand_group_by_all(qualify(tree.copy(), dialect="duckdb", schema=schema))
             # Qualification may synthesize aliases; retain DuckDB's own names.
             augmented.set(
                 "expressions",

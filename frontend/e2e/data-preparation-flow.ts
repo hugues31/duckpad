@@ -199,9 +199,14 @@ export async function verifyDataPreparation(page: Page) {
     rows().nth(2).getByLabel("Replacement value", { exact: true }),
   ).toHaveValue("2000-01-01");
   await add("Filter", selection);
-  await save(() =>
-    inspector.getByRole("textbox", { name: /condition/ }).fill('"total" >= 0'),
-  );
+  await save(async () => {
+    await inspector
+      .getByRole("button", { name: "Advanced SQL", exact: true })
+      .click();
+    await inspector
+      .getByRole("textbox", { name: /condition/ })
+      .fill('"total" >= 0');
+  });
   await run();
   const filtered = await nodeId("filter");
   const result = await (

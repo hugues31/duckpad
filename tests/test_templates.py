@@ -330,7 +330,7 @@ def test_downloadable_exports_are_recognized_by_their_sql():
 @pytest.mark.parametrize(
     "body",
     [
-        "COPY {{ rows }} TO {{ target }} (FORMAT PARQUET);",
+        "COPY {{ rows }} TO {{ target }} (FORMAT JSON);",
         "COPY {{ rows }} TO {{ target }} (FORMAT {{ format }});",
         "COPY {{ rows }} TO {{ target }} (FORMAT CSV, COMPRESSION gzip);",
         "COPY {{ rows }} TO 'fixed.csv' (FORMAT CSV);",
@@ -338,7 +338,7 @@ def test_downloadable_exports_are_recognized_by_their_sql():
         "COPY {{ rows }} TO {{ target }} (FORMAT CSV);\nCOPY {{ rows }} TO {{ target }} (FORMAT CSV);",
     ],
 )
-def test_exports_without_a_single_local_csv_or_xlsx_file_are_not_downloadable(body):
+def test_exports_without_a_single_supported_local_file_are_not_downloadable(body):
     parameters = (
         '-- @param target: destination(connection) = "out.csv"\n-- @param format: keyword(csv|parquet)\n'
     )

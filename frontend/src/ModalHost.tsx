@@ -6,7 +6,7 @@ import { CombinedResolutionDialog, ConflictDialog } from "./ConflictDialog";
 import ConvertNodeDialog from "./ConvertNodeDialog";
 import DuckMark from "./DuckMark";
 import GitWorkspace from "./GitWorkspace";
-import { useT } from "./i18n";
+import { countLabel, useT } from "./i18n";
 import { ConfirmModal, EditorModal, FormModal, Modal } from "./modals";
 import { usePageRoute } from "./navigation";
 import NewBranchModal from "./NewBranchModal";
@@ -674,6 +674,39 @@ function LibraryDialog({
     <Modal title={t("library")} onClose={onClose} wide>
       <div className="modal-content">
         <p className="muted">{t("importHint")}</p>
+        <p className="muted">{t("importBuiltinsHint")}</p>
+        <button
+          className="button secondary"
+          disabled={
+            pending || !["admin", "editor"].includes(snapshot.role || "")
+          }
+          onClick={async () => {
+            let added = 0;
+            const imported = await run(() =>
+              commit(async (base) => {
+                const result = await api<Snapshot & { imported: string[] }>(
+                  `/worktrees/${id}/templates/builtins`,
+                  send({ revision: base.revision }),
+                );
+                added = result.imported.length;
+                return result;
+              }),
+            );
+            if (imported)
+              notify(
+                added
+                  ? countLabel(
+                      t,
+                      added,
+                      "builtinsImportedOne",
+                      "builtinsImportedMany",
+                    )
+                  : t("builtinsUpToDate"),
+              );
+          }}
+        >
+          {t("importBuiltins")}
+        </button>
         {library.pending ? (
           <p>{t("loading")}</p>
         ) : library.error ? (

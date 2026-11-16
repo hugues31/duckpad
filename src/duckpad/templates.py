@@ -11,6 +11,7 @@ from sqlglot import exp
 from sqlglot.tokens import TokenType
 
 from .data_preparation import PREPARATION_TYPES, render_preparation
+from .guided_parameters import GUIDED_TYPES, column, input_ports, render_guided
 from .python_contract import APPEARANCE, parse_python
 from .sql_errors import SqlSourceError, source_context
 from .util import Problem, literal, qi
@@ -43,6 +44,7 @@ PARAMETER_TYPES = {
     "schema",
     "list",
     *PREPARATION_TYPES,
+    *GUIDED_TYPES,
 }
 # Types whose argument names the connection parameter that resolves them.
 CONNECTION_BOUND = {"file", "destination", "secret", "schema_name"}
@@ -180,6 +182,10 @@ def validate_interface(template):
         kind, argument = base_type(parameter["type"]), type_argument(parameter["type"])
         if kind in PREPARATION_TYPES and argument not in template["inputs"]:
             raise Problem(f"Parameter {parameter['name']} must reference a declared input port")
+        if kind in GUIDED_TYPES and any(
+            port not in template["inputs"] for port in input_ports(kind, argument)
+        ):
+            raise Problem(f"Parameter {parameter['name']} must reference declared input ports")
         if kind == "table_name" and (
             argument is None or base_type(parameters.get(argument, {}).get("type", "")) != "schema_name"
         ):
@@ -466,6 +472,16 @@ def render_parameter(
         )
     if kind in PREPARATION_TYPES:
         return render_preparation(kind, value, (input_schemas or {}).get(argument))
+    if kind in GUIDED_TYPES:
+        if isinstance(value, str):
+            value = bind_variables(name, value, variables or {}, placeholders or {})
+        try:
+            return render_guided(
+                kind, value, [(input_schemas or {}).get(port) for port in input_ports(kind, argument)]
+            )
+        except Problem as error:
+            # Name the setting: a node has several forms and the message alone is ambiguous.
+            raise Problem(f"{name}: {error}", error.status, error.detail) from error
     if kind == "connection":
         if is_project_files(value):
             # Only file and destination parameters can resolve project files.
@@ -512,6 +528,11 @@ def render_parameter(
         return literal(
             authorize_path(template, path, root or str(project_files[kind]), kind, connections, reference)
         )
+    if kind == "column" and argument in template["inputs"]:
+        try:
+            return column(value, (input_schemas or {}).get(argument))
+        except Problem as error:
+            raise Problem(f"{name}: {error}", error.status, error.detail) from error
     if kind in ("column", "identifier"):
         return ".".join(qi(part) for part in str(value).split("."))
     if kind in OBJECT_NAMES:
@@ -774,7 +795,7 @@ def compile_template(
 
 
 def file_export(tree, resources):
-    """Recognize a single local CSV/XLSX COPY to a declared destination."""
+    """Recognize a single local CSV/XLSX/Parquet COPY to a declared destination."""
     if not isinstance(tree, exp.Copy) or tree.args.get("kind"):
         return {}
     files = tree.args.get("files", [])
@@ -782,13 +803,18 @@ def file_export(tree, resources):
     format_name = options.get("FORMAT")
     format_name = format_name.name.lower() if format_name is not None else ""
     if (
-        format_name not in ("csv", "xlsx")
+        format_name not in ("csv", "xlsx", "parquet")
         or len(files) != 1
         or not isinstance(files[0], exp.Literal)
         or not files[0].is_string
         or files[0].sql(dialect="duckdb") not in resources
         or URI.match(files[0].this)
-        or set(options) - {"FORMAT", "HEADER", "DELIMITER", "SHEET"}
+        or set(options)
+        - (
+            {"FORMAT", "COMPRESSION"}
+            if format_name == "parquet"
+            else {"FORMAT", "HEADER", "DELIMITER", "SHEET"}
+        )
     ):
         return {}
     return {"export_file": {"path": files[0].this, "format": format_name}}

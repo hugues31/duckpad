@@ -46,6 +46,10 @@ def upstream():
         ("SELECT * REPLACE (a + 10 AS a), b AS e FROM up ORDER BY a", True),
         ("SELECT a, b + c AS total FROM up ORDER BY a", True),
         ("SELECT a, SUM(c) AS total FROM up GROUP BY a ORDER BY a", True),
+        ("SELECT a, SUM(c) AS total FROM up GROUP BY ALL ORDER BY a", True),
+        ("SELECT a % 2 AS bucket, SUM(c) AS total FROM up GROUP BY ALL ORDER BY bucket", True),
+        ("SELECT 1 AS constant, SUM(c) AS total FROM up GROUP BY ALL", False),
+        ("SELECT 1 AS constant, COUNT(*) AS total FROM up WHERE FALSE GROUP BY ALL", False),
     ],
 )
 def test_instrumentation_never_shifts_published_columns(upstream, query, instrumented):

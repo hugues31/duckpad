@@ -53,7 +53,12 @@ def test_inner_join_missing_key_and_duplicate_rows(context):
 
 
 @pytest.mark.parametrize(
-    "query", ["SELECT grp, sum(value) AS total FROM src GROUP BY grp", "SELECT sum(value) FROM src"]
+    "query",
+    [
+        "SELECT grp, sum(value) AS total FROM src GROUP BY grp",
+        "SELECT grp, sum(value) AS total FROM src GROUP BY ALL",
+        "SELECT sum(value) FROM src",
+    ],
 )
 def test_group_membership(context, query):
     matcher, rows, _ = matched(context, query)
@@ -160,8 +165,6 @@ def test_duplicate_pages_and_selected_row_control_the_continuation(services):
         "SELECT DISTINCT ON (grp) grp, category FROM src ORDER BY grp, id",
         "WITH a AS (SELECT * FROM src) SELECT * FROM a",
         "SELECT random(), id FROM src",
-        # No captured keys: an empty key list must not match every group.
-        "SELECT grp, sum(value) AS total FROM src GROUP BY ALL",
     ],
 )
 def test_unsupported_does_not_guess(context, query):

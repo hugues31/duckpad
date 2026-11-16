@@ -5,7 +5,7 @@ from sqlglot import exp
 from sqlglot.optimizer.qualify import qualify
 from sqlglot.optimizer.scope import Scope, build_scope
 
-from .sqlast import sql
+from .sqlast import expand_group_by_all, sql
 
 
 class Incomplete(ValueError):
@@ -57,7 +57,7 @@ def analyze(query, schema, labels=None, bindings=None):
         for item in tree.walk()
     ):
         raise Incomplete("unsupported_construct")
-    tree = qualify(tree, dialect="duckdb", schema=schema)
+    tree = expand_group_by_all(qualify(tree, dialect="duckdb", schema=schema))
     root = build_scope(tree)
     if root is None:
         raise Incomplete("scope")
