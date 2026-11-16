@@ -475,9 +475,13 @@ def render_parameter(
     if kind in GUIDED_TYPES:
         if isinstance(value, str):
             value = bind_variables(name, value, variables or {}, placeholders or {})
-        return render_guided(
-            kind, value, [(input_schemas or {}).get(port) for port in input_ports(kind, argument)]
-        )
+        try:
+            return render_guided(
+                kind, value, [(input_schemas or {}).get(port) for port in input_ports(kind, argument)]
+            )
+        except Problem as error:
+            # Name the setting: a node has several forms and the message alone is ambiguous.
+            raise Problem(f"{name}: {error}", error.status, error.detail) from error
     if kind == "connection":
         if is_project_files(value):
             # Only file and destination parameters can resolve project files.
@@ -525,7 +529,10 @@ def render_parameter(
             authorize_path(template, path, root or str(project_files[kind]), kind, connections, reference)
         )
     if kind == "column" and argument in template["inputs"]:
-        return column(value, (input_schemas or {}).get(argument))
+        try:
+            return column(value, (input_schemas or {}).get(argument))
+        except Problem as error:
+            raise Problem(f"{name}: {error}", error.status, error.detail) from error
     if kind in ("column", "identifier"):
         return ".".join(qi(part) for part in str(value).split("."))
     if kind in OBJECT_NAMES:

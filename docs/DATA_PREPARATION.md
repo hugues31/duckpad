@@ -18,9 +18,9 @@ Run upstream nodes to populate the column choices and types.
   numeric suffix if needed. Choose all or left columns, or edit the projection
   in Advanced SQL. The two SQL aliases are `l` and `r`.
 - **Filter** accepts comparisons and nested **All (AND)** / **Any (OR)** groups.
-  Empty AND keeps everything; empty OR keeps nothing. VARCHAR values remain
-  text (`001` and `NULL` are literal text). Use IS NULL / IS NOT NULL for null
-  checks. Numeric and Boolean values are validated; LIKE requires VARCHAR.
+  A filter without conditions keeps every row, and empty groups are ignored.
+  VARCHAR values remain text (`001` and `NULL` are literal text). Use IS NULL /
+  IS NOT NULL for null checks. Numeric and Boolean values are validated; LIKE requires VARCHAR.
 - **Aggregate** accepts grouping columns and named measures. SUM/AVG require
   numeric columns. COUNT(*) counts rows; COUNT(column) and COUNT DISTINCT ignore
   nulls. Without grouping columns, empty input still produces one total row
@@ -88,12 +88,14 @@ leave the supported subset. See [Lineage](LINEAGE.md).
 
 New projects include the current defaults. In an older project, open **Import
 from a project** in the palette, then **Import current built-in templates**.
-The normal project save records these imports. Existing template files, node
-code and configured parameters are never overwritten. Conflicting names create
-independent `<name>_builtin_<number>` copies with the same declared label;
-inspect the identifier to distinguish versions. Reimporting identical code adds
-nothing. Existing nodes retain their original code and get dedicated default
-icons when no `@icon` is present; explicit icons always win.
+This adds the default templates the project lacks, such as Sort or Export
+Parquet, and the normal project save records them. A template the project
+already has keeps its code, even when the current default differs: existing
+Join, Filter and Aggregate templates keep their SQL expression parameters, and
+nodes keep their code and configured parameters. Existing nodes without an
+`@icon` get the dedicated default icon of their template; explicit icons always
+win. To adopt a newer default under an existing name, delete or rename your
+template first, then import again.
 
 Use the public parameter types in any custom template:
 

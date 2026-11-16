@@ -246,14 +246,8 @@ COPY {{ source }} TO {{ destination }} (FORMAT PARQUET, COMPRESSION {{ compressi
 
 
 def add_builtins(bundle):
-    """Import current defaults without changing existing templates or node code."""
+    """Add the default templates a project lacks; existing templates keep their code."""
     templates = bundle.setdefault("templates", {})
-    for name, code in BUILTINS.items():
-        if code in templates.values():
-            continue
-        key, index = name, 1
-        while key in templates:
-            key = f"{name}_builtin_{index}"
-            index += 1
-        templates[key] = code
-    return bundle, {}
+    added = [name for name in BUILTINS if name not in templates]
+    templates.update({name: BUILTINS[name] for name in added})
+    return bundle, {"imported": added}

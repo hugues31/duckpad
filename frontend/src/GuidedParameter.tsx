@@ -131,35 +131,41 @@ export default function GuidedParameter({
               </button>
             </div>
           ))}
-          <button
-            type="button"
-            className="text-button"
-            onClick={() =>
-              change({
-                ...data,
-                conditions: [
-                  ...children,
-                  { column: columns[0]?.name || "", operator: "=", value: "" },
-                ],
-              })
-            }
-          >
-            {t("addCondition")}
-          </button>
-          {depth < 5 && (
+          <div className="preparation-actions">
             <button
               type="button"
               className="text-button"
               onClick={() =>
                 change({
                   ...data,
-                  conditions: [...children, { mode: "or", conditions: [] }],
+                  conditions: [
+                    ...children,
+                    {
+                      column: columns[0]?.name || "",
+                      operator: "=",
+                      value: "",
+                    },
+                  ],
                 })
               }
             >
-              {t("addConditionGroup")}
+              {t("addCondition")}
             </button>
-          )}
+            {depth < 5 && (
+              <button
+                type="button"
+                className="text-button"
+                onClick={() =>
+                  change({
+                    ...data,
+                    conditions: [...children, { mode: "or", conditions: [] }],
+                  })
+                }
+              >
+                {t("addConditionGroup")}
+              </button>
+            )}
+          </div>
         </fieldset>
       );
     }
@@ -215,12 +221,14 @@ export default function GuidedParameter({
         n === i && record(row) ? { ...row, ...patch } : row,
       ),
     );
+  // Pre-select a key only when both inputs share its name: the first column of
+  // each side would be a valid but usually wrong join.
+  const shared = columns.find((c) =>
+    (schemas[ports[1]] || []).some((r) => r.name === c.name),
+  )?.name;
   const newRow = (): Row =>
     kind === "join_keys"
-      ? {
-          left: columns[0]?.name || "",
-          right: schemas[ports[1]]?.[0]?.name || "",
-        }
+      ? { left: shared || "", right: shared || "" }
       : kind === "ordering"
         ? { column: columns[0]?.name || "", direction: "asc", nulls: "last" }
         : {
@@ -430,36 +438,38 @@ export default function GuidedParameter({
           {error}
         </p>
       )}
-      <button
-        type="button"
-        className="text-button"
-        disabled={pending || (!advanced && !worktree)}
-        onClick={async () => {
-          setError("");
-          if (advanced) {
-            onChange(initial(kind));
-            return;
-          }
-          if (Array.isArray(current) && current.length === 0) {
-            onChange("");
-            return;
-          }
-          setPending(true);
-          try {
-            const result = await api<{ sql: string }>(
-              `/worktrees/${worktree}/parameter-sql`,
-              send({ type, value: current, schemas }),
-            );
-            onChange(result.sql);
-          } catch (e) {
-            setError((e as Error).message);
-          } finally {
-            setPending(false);
-          }
-        }}
-      >
-        {t(advanced ? "resetGuidedForm" : "advancedSql")}
-      </button>
+      <div className="preparation-actions">
+        <button
+          type="button"
+          className="text-button"
+          disabled={pending || (!advanced && !worktree)}
+          onClick={async () => {
+            setError("");
+            if (advanced) {
+              onChange(initial(kind));
+              return;
+            }
+            if (Array.isArray(current) && current.length === 0) {
+              onChange("");
+              return;
+            }
+            setPending(true);
+            try {
+              const result = await api<{ sql: string }>(
+                `/worktrees/${worktree}/parameter-sql`,
+                send({ type, value: current, schemas }),
+              );
+              onChange(result.sql);
+            } catch (e) {
+              setError((e as Error).message);
+            } finally {
+              setPending(false);
+            }
+          }}
+        >
+          {t(advanced ? "resetGuidedForm" : "advancedSql")}
+        </button>
+      </div>
     </section>
   );
 }

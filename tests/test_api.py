@@ -76,9 +76,10 @@ def test_import_current_palette_preserves_custom_code_and_checks_revision(client
     before = client.get(endpoint).json()
     imported = client.post(endpoint + "/templates/builtins", json={"revision": before["revision"]})
     assert imported.status_code == 200, imported.text
+    assert "filter" not in imported.json()["imported"]
     after = client.get(endpoint).json()
     assert after["files"]["templates/filter.sql"] == custom
-    assert after["bundle"]["templates"]["filter_builtin_1"] == BUILTINS["filter"]
+    assert set(after["bundle"]["templates"]) == set(BUILTINS)
     assert after["bundle"]["templates"]["sort"] == BUILTINS["sort"]
     assert (
         client.post(endpoint + "/templates/builtins", json={"revision": before["revision"]}).status_code

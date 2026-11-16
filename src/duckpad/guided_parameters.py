@@ -31,6 +31,8 @@ def input_ports(kind, argument):
 
 
 def column(name, schema):
+    if name in (None, ""):
+        raise Problem("Choose a column")
     quoted = identifier(name)
     if schema is not None and name not in {c["name"] for c in schema}:
         raise Problem(
@@ -43,11 +45,11 @@ def column_type(name, schema):
     return next((c["type"] for c in schema or [] if c["name"] == name), "")
 
 
-def rows(value, label, allow_empty=False):
+def rows(value, label, item=None):
     if not isinstance(value, list) or any(not isinstance(row, dict) for row in value):
         raise Problem(f"{label} must be a list of settings")
-    if not value and not allow_empty:
-        raise Problem(f"Add at least one {label.lower()}")
+    if not value and item:
+        raise Problem(f"Add at least one {item}")
     return value
 
 
@@ -66,15 +68,23 @@ def typed_literal(value, kind):
         if isinstance(value, bool) or not re.fullmatch(
             r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?", str(value)
         ):
-            raise Problem(f"Enter a number to compare a {kind} column")
+            raise Problem(f"Enter a number to compare with the {kind} column")
         if not math.isfinite(float(value)):
             raise Problem("Enter a finite number")
         return str(value)
     if kind == "BOOLEAN":
         if str(value).lower() not in ("true", "false"):
-            raise Problem("Enter true or false to compare a BOOLEAN column")
+            raise Problem("Enter true or false to compare with the BOOLEAN column")
         return str(value).upper()
     return literal(str(value))
+
+
+def empty_group(value):
+    return (
+        isinstance(value, dict)
+        and isinstance(value.get("conditions"), list)
+        and all(empty_group(child) for child in value["conditions"])
+    )
 
 
 def predicate(value, schema, depth=0):
@@ -85,9 +95,10 @@ def predicate(value, schema, depth=0):
         mode = value.get("mode", "and")
         if mode not in ("and", "or"):
             raise Problem("Choose AND or OR for the filter group")
-        children = rows(value["conditions"], "Conditions", allow_empty=True)
+        # An empty group, like a group just added in the form, constrains nothing.
+        children = [c for c in rows(value["conditions"], "Conditions") if not empty_group(c)]
         if not children:
-            return "TRUE" if mode == "and" else "FALSE"
+            return "TRUE"
         return "(" + f" {mode.upper()} ".join(predicate(c, schema, depth + 1) for c in children) + ")"
     fields(value, {"column", "operator", "value"})
     name = value.get("column")
@@ -139,7 +150,7 @@ def render_guided(kind, value, schemas):
         return sql + ", " if kind == "group_columns" and sql else sql
     if kind == "join_keys":
         pairs = []
-        for row in rows(value, "Key pairs"):
+        for row in rows(value, "Key pairs", "key pair"):
             fields(row, {"left", "right"})
             left, right = column(row.get("left"), schema), column(row.get("right"), schemas[1])
             lt, rt = column_type(row["left"], schema), column_type(row["right"], schemas[1])
@@ -170,7 +181,7 @@ def render_guided(kind, value, schemas):
         return ", ".join(result)
     if kind == "ordering":
         result = []
-        for row in rows(value, "Sort columns"):
+        for row in rows(value, "Sort columns", "sort column"):
             fields(row, {"column", "direction", "nulls"})
             direction, nulls = row.get("direction", "asc"), row.get("nulls", "last")
             if direction not in ("asc", "desc") or nulls not in ("first", "last"):
@@ -179,7 +190,7 @@ def render_guided(kind, value, schemas):
         return ", ".join(result)
     if kind == "measures":
         result, names = [], set()
-        for row in rows(value, "Measures"):
+        for row in rows(value, "Measures", "measure"):
             fields(row, {"function", "column", "alias"})
             fn = row.get("function", "COUNT")
             if fn not in ("SUM", "AVG", "MIN", "MAX", "COUNT", "COUNT DISTINCT"):

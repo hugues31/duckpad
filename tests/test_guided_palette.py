@@ -102,9 +102,15 @@ def test_nested_filters_keep_text_literals_and_null_checks(db):
     predicate = {"column": "channel", "operator": "=", "value": "Web' OR TRUE --"}
     assert execute(db, "filter", {"condition": predicate}).fetchall() == []
     assert len(execute(db, "filter").fetchall()) == 4
-    assert execute(db, "filter", {"condition": {"mode": "or", "conditions": []}}).fetchall() == []
-    with pytest.raises(Problem, match="Enter a number"):
+    # A group just added in the form constrains nothing until it has a condition.
+    assert len(execute(db, "filter", {"condition": {"mode": "or", "conditions": []}}).fetchall()) == 4
+    nested = {"mode": "and", "conditions": [{"column": "region", "operator": "=", "value": "South"}]}
+    nested["conditions"].append({"mode": "or", "conditions": [{"mode": "and", "conditions": []}]})
+    assert [r[0] for r in execute(db, "filter", {"condition": nested}).fetchall()] == [3, 4]
+    with pytest.raises(Problem, match=r"^condition: Enter a number"):
         execute(db, "filter", {"condition": {"column": "amount", "operator": "=", "value": "bad"}})
+    with pytest.raises(Problem, match=r"^key: Choose a column"):
+        execute(db, "sample", {"key": ""})
 
 
 def test_grouped_and_global_aggregates_and_empty_input(db):
@@ -262,20 +268,21 @@ def test_single_column_choices_keep_dots_inside_identifiers(db):
     assert len(execute(db, "sample", {"key": "order.id", "percent": 100}).fetchall()) == 4
 
 
-def test_import_is_idempotent_and_preserves_custom_templates_and_existing_nodes():
+def test_import_adds_missing_templates_and_preserves_existing_ones():
     customized = BUILTINS["filter"] + "\n-- custom annotation\n"
     bundle = {
         "templates": {"filter": customized},
         "flow": {"nodes": [{"id": "existing", "template": "filter"}]},
     }
     before = copy.deepcopy(bundle)
-    add_builtins(bundle)
+    _, metadata = add_builtins(bundle)
     assert bundle["templates"]["filter"] == customized
     assert bundle["flow"] == before["flow"]
-    assert bundle["templates"]["filter_builtin_1"] == BUILTINS["filter"]
-    assert all(code in bundle["templates"].values() for code in BUILTINS.values())
+    # An existing name is kept as is, so the palette never shows two "Filter" entries.
+    assert set(bundle["templates"]) == set(BUILTINS)
+    assert metadata["imported"] == [name for name in BUILTINS if name != "filter"]
     first = copy.deepcopy(bundle)
-    add_builtins(bundle)
+    assert add_builtins(bundle)[1] == {"imported": []}
     assert bundle == first
 
 
