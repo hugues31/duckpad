@@ -15,7 +15,7 @@ if [[ "$(uname -m)" == x86_64 && -r /proc/cpuinfo ]] && { ! grep -qw avx2 /proc/
     }
     (cd "$wheelhouse" && sha256sum --check SHA256SUMS)
 fi
-uv sync --locked --extra dev --python 3.12 --no-build-package duckdb
+uv sync --locked --python 3.12 --no-build-package duckdb
 if "$portable"; then
     # Install by package name so subsequent locked uv sync/run calls retain it.
     uv pip install --python .venv/bin/python --reinstall-package duckdb \

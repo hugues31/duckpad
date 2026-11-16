@@ -1,0 +1,31 @@
+---
+import { url } from "../lib/docs";
+---
+
+<figure class="demo-player">
+  <video
+    controls
+    playsinline
+    preload="none"
+    poster={url("demos/workspace.png")}
+    width="1440"
+    height="900"
+    aria-label="Duckpad walkthrough: run the Northstar pipeline and explain a revenue value"
+  >
+    <source src={url("demos/northstar.webm")} type="video/webm" />
+    <track
+      kind="captions"
+      src={url("demos/northstar.vtt")}
+      srclang="en"
+      label="English"
+      default
+    />
+    Your browser cannot play this video.{" "}
+    <a href={url("docs/example/")}>Read the walkthrough.</a>
+  </video>
+  <figcaption>
+    <span class="live-dot" aria-hidden="true"></span> Recorded in Duckpad ·
+    Northstar sample data{" "}
+    <a href={url("docs/example/")}>Read the walkthrough ↗</a>
+  </figcaption>
+</figure>
