@@ -444,6 +444,85 @@ def test_connection_creation_rejects_duplicates_without_overwriting_secrets(app,
     assert saved["environments"]["dev"]["password"] == "dev-secret"
 
 
+@pytest.mark.parametrize("create", [True, False], ids=["create", "update"])
+@pytest.mark.parametrize(
+    ("kind", "changes", "field"),
+    [
+        ("connector", {"parameters": [None]}, "parameters[0]"),
+        ("connector", {"parameters": ["oops"]}, "parameters[0]"),
+        ("connector", {"capabilities": None}, "capabilities"),
+        ("connector", {"extensions": [None]}, "extensions[0]"),
+        ("connector", {"init_sql": 3}, "init_sql"),
+        ("connection", {"environments": {"dev": None}}, "environments.dev"),
+        *[
+            ("connector", {field: None}, field)
+            for field in ("id", "name", "family", "parameters", "extensions")
+        ],
+        ("connector", {"description": []}, "description"),
+        ("connector", {"compatibility": {}}, "compatibility"),
+        ("connector", {"parameters": {}}, "parameters"),
+        ("connector", {"parameters": "oops"}, "parameters"),
+        *[
+            ("connector", {"parameters": [{field: value}]}, f"parameters[0].{field}")
+            for field, value in (
+                ("name", []),
+                ("type", None),
+                ("secret", "false"),
+                ("label", 3),
+                ("description", None),
+            )
+        ],
+        ("connector", {"capabilities": "read"}, "capabilities"),
+        ("connector", {"capabilities": [{}]}, "capabilities[0]"),
+        ("connector", {"extensions": "httpfs"}, "extensions"),
+        ("connector", {"extensions": ["httpfs"]}, "extensions[0]"),
+        ("connector", {"extensions": [{"name": None}]}, "extensions[0].name"),
+        ("connector", {"extensions": [{"name": "httpfs", "repository": []}]}, "extensions[0].repository"),
+        ("connection", {"id": []}, "id"),
+        ("connection", {"name": False}, "name"),
+        ("connection", {"connector": {}}, "connector"),
+        ("connection", {"environments": []}, "environments"),
+        ("connection", {"environments": {"dev": []}}, "environments.dev"),
+        ("connection", {"environments": {"dev": "oops"}}, "environments.dev"),
+        ("connection", {"secret_fields": [None]}, "secret_fields[0]"),
+    ],
+)
+def test_malformed_catalog_edits_name_the_field_and_leave_storage_unchanged(
+    app, client, create, kind, changes, field
+):
+    definition = {"id": "custom", "name": "Custom", "family": "database"}
+    body = definition if kind == "connector" else FILES
+    if not create:
+        response = client.put(f"/api/catalog/{kind}?create=true", json=body)
+        assert response.status_code == 200, response.text
+    store = app.state.services.store
+    before = {entity: store.all(entity) for entity in ("connector", "connection")}
+    public = client.get("/api/catalog").json()
+    response = client.put(f"/api/catalog/{kind}", params={"create": create}, json={**body, **changes})
+    assert response.status_code == 422, response.text
+    assert f"{kind}.{field} must be" in response.json()["error"]
+    assert {entity: store.all(entity) for entity in before} == before
+    assert client.get("/api/catalog").json() == public
+
+
+@pytest.mark.parametrize("changes", [{"environments": {"dev": None}}, {"id": []}])
+def test_malformed_connection_probe_is_rejected_before_execution(app, client, monkeypatch, changes):
+    def unexpected_probe(*args, **kwargs):
+        pytest.fail("Malformed connections must not start a probe")
+
+    monkeypatch.setattr("duckpad.connection_probe.run", unexpected_probe)
+    before = client.get("/api/catalog").json()
+    response = client.post(
+        "/api/catalog/connection/test", json={"connection": {**FILES, **changes}, "environment": "dev"}
+    )
+    assert response.status_code == 422, response.text
+    assert (
+        "connection.environments.dev" if "environments" in changes else "connection.id"
+    ) in response.json()["error"]
+    assert client.get("/api/catalog").json() == before
+    assert app.state.services.store.all("connection") == []
+
+
 @pytest.mark.parametrize("query", ["", "?create=false"])
 def test_connection_update_rejects_unknown_identifiers(app, client, query):
     assert client.put("/api/catalog/connection?create=true", json=FILES).status_code == 200

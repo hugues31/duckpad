@@ -27,6 +27,48 @@ FAMILIES = ("database", "storage")
 NAME = re.compile(r"[A-Za-z][\w-]*")
 
 
+def require_type(value, expected, field):
+    """Report malformed JSON without echoing potentially secret values."""
+    if not isinstance(value, expected):
+        label = {str: "a string", bool: "a boolean", list: "an array", dict: "an object"}[expected]
+        raise Problem(f"{field} must be {label}", 422)
+
+
+def check_fields(data, fields, path):
+    require_type(data, dict, path)
+    for name, expected in fields.items():
+        if name in data:
+            require_type(data[name], expected, f"{path}.{name}")
+
+
+def check_shape(kind, data):
+    """Check containers and known fields before business rules; preserve extra metadata and values."""
+    fields: dict[str, type] = dict.fromkeys(("id", "name", "description"), str)
+    if kind == "connector":
+        fields.update(
+            family=str, compatibility=str, init_sql=str, parameters=list, extensions=list, capabilities=list
+        )
+    else:
+        fields.update(connector=str, environments=dict, secret_fields=list)
+    check_fields(data, fields, kind)
+    if kind == "connector":
+        for index, parameter in enumerate(data.get("parameters", [])):
+            check_fields(
+                parameter,
+                {"name": str, "type": str, "secret": bool, "label": str, "description": str},
+                f"connector.parameters[{index}]",
+            )
+        for index, extension in enumerate(data.get("extensions", [])):
+            check_fields(extension, {"name": str, "repository": str}, f"connector.extensions[{index}]")
+        for index, capability in enumerate(data.get("capabilities", [])):
+            require_type(capability, str, f"connector.capabilities[{index}]")
+    else:
+        for environment, values in data.get("environments", {}).items():
+            require_type(values, dict, f"connection.environments.{environment}")
+        for index, field in enumerate(data.get("secret_fields", [])):
+            require_type(field, str, f"connection.secret_fields[{index}]")
+
+
 def secret_names(definition):
     """Names of a connector's parameters that must never be displayed or recorded."""
     return {p["name"] for p in definition.get("parameters", []) if p.get("secret")}
@@ -184,6 +226,7 @@ class Catalog:
         """Validate a connector or connection and complete it for storage, without writing it."""
         if kind not in KINDS:
             raise Problem("Unknown catalog entity", 404)
+        check_shape(kind, data)
         if not NAME.fullmatch(str(data.get("id", ""))):
             raise Problem(
                 "Use an identifier starting with a letter and containing letters, numbers, hyphens or underscores"
@@ -243,6 +286,7 @@ class Catalog:
         self.on_change()
 
     def validate_definition(self, definition):
+        check_shape("connector", definition)
         fingerprint = digest(definition)
         if fingerprint in self._validated:
             return
@@ -261,8 +305,6 @@ class Catalog:
             name, kind = parameter.get("name", ""), parameter.get("type", "text")
             if name in RESERVED_PARAMETERS or not IDENTIFIER.fullmatch(name):
                 raise Problem("Connector parameters must be identifiers other than alias and secret_name")
-            if any(not isinstance(parameter.get(key, ""), str) for key in DESCRIPTIVE_FIELDS):
-                raise Problem("Connector parameter labels and descriptions must be text")
             if kind not in PARAMETER_TYPES and not re.fullmatch(r"choice\([^()]+\)", kind):
                 raise Problem(f"Unsupported connector parameter type: {kind}")
         if not set(definition.get("capabilities", [])) <= {"read", "write"}:
@@ -323,6 +365,7 @@ class Catalog:
 
         Masked secrets keep the stored values of the connection being edited.
         """
+        check_shape("connection", data)
         data = copy.deepcopy(data)
         data["id"] = data.get("id") or "unsaved"
         data = self.check("connection", data, create=self.store.get("connection", data["id"]) is None)

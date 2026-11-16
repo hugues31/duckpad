@@ -488,7 +488,7 @@ def test_postgres_passes_additional_options_to_the_driver_unchanged(services):
 
 def test_connector_parameter_labels_are_documentation(services):
     _, _, catalog, _ = services
-    with pytest.raises(Problem, match="labels and descriptions must be text"):
+    with pytest.raises(Problem, match=r"connector.parameters\[0\].label must be a string"):
         catalog.save(
             "connector", {**NATIVE, "parameters": [{"name": "database", "type": "file", "label": 1}]}
         )
