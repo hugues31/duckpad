@@ -15,6 +15,24 @@ import httpx
 def smoke(python):
     with tempfile.TemporaryDirectory(prefix="duckpad-wheel-") as temporary:
         folder = Path(temporary)
+        # The assistant's guides ship inside the wheel; the checkout's docs/ is out of reach here.
+        guides = "from duckpad.assistant.knowledge import guide_text; assert '-- @param' in guide_text('sql')"
+        subprocess.run([python, "-I", "-c", guides], cwd=folder, check=True, timeout=60)
+        # PyPI shows the description outside the repository: its links and images must be absolute.
+        description = "from importlib.metadata import metadata; print(metadata('duckpad')['Description'])"
+        published = subprocess.run(
+            [python, "-I", "-c", description],
+            cwd=folder,
+            check=True,
+            timeout=60,
+            capture_output=True,
+            text=True,
+        ).stdout
+        targets = re.findall(
+            r'(?:\]\(|\b(?:src|srcset|href)=")([^)"\s]+)',
+            re.sub(r"```.*?```", "", published, flags=re.DOTALL),
+        )
+        assert targets and all(re.match(r"https://|#", target) for target in targets), targets
         with socket.socket() as reservation:
             reservation.bind(("127.0.0.1", 0))
             port = reservation.getsockname()[1]
@@ -52,11 +70,14 @@ def smoke(python):
         try:
             first, log = start("first.log")
             password = re.search(r"Password: (\S+)", log.read_text())[1]
-            duplicate = subprocess.run(command, cwd=folder, capture_output=True, text=True)
+            duplicate = subprocess.run(command, cwd=folder, capture_output=True, text=True, timeout=60)
             assert duplicate.returncode != 0 and "already running" in duplicate.stderr
             with httpx.Client(base_url=base) as client:
                 assert client.get("/api/workspace").status_code == 401
-                assert client.post("/api/login", json={"password": password}).status_code == 200
+                assert (
+                    client.post("/api/login", json={"username": "admin", "password": password}).status_code
+                    == 200
+                )
                 html = client.get("/").text
                 scripts = re.findall(r'src="(/assets/[^\"]+)"', html)
                 assert scripts and all(client.get(script).status_code == 200 for script in scripts)
@@ -65,7 +86,7 @@ def smoke(python):
                 deadline = time.monotonic() + 15
                 while time.monotonic() < deadline:
                     result = client.get(f"/api/runs/{run['id']}").json()
-                    if result["status"] not in ("preparing", "running"):
+                    if result["status"] not in ("preparing", "running", "canceling"):
                         break
                     time.sleep(0.05)
                 assert result["status"] == "success", result
@@ -74,9 +95,15 @@ def smoke(python):
                 first.wait(10)
                 second, next_log = start("second.log")
                 assert "Password:" not in next_log.read_text()
-                assert client.post("/api/login", json={"password": password}).status_code == 200
+                assert (
+                    client.post("/api/login", json={"username": "admin", "password": password}).status_code
+                    == 200
+                )
                 assert client.get(f"/api/runs/{run['id']}").json()["status"] == "success"
-                assert client.get(f"/api/worktrees/{example['id']}/preview/orders").status_code == 404
+                assert (
+                    client.get(f"/api/worktrees/{example['id']}/preview/orders?environment=dev").status_code
+                    == 404
+                )
                 second.terminate()
                 second.wait(10)
             return {
@@ -101,8 +128,12 @@ def smoke(python):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--python", required=True)
+    parser.add_argument(
+        "--python", required=True, help="Interpreter of a virtualenv with the wheel installed"
+    )
+    parser.add_argument("--output", type=Path, help="Also write the JSON summary to this file")
     args = parser.parse_args()
-    result = smoke(str(Path(args.python).absolute()))
-    Path("docs/validation/wheel.json").write_text(json.dumps(result, indent=2) + "\n")
-    print(json.dumps(result, indent=2))
+    result = json.dumps(smoke(str(Path(args.python).absolute())), indent=2) + "\n"
+    if args.output:
+        args.output.write_text(result, encoding="utf-8")
+    print(result, end="")
