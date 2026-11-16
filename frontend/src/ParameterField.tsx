@@ -94,7 +94,9 @@ export default function ParameterField({
         <small>
           {parameter.python_type === "int" || parameter.python_type === "float"
             ? parameter.python_type
-            : base}
+            : base === "list"
+              ? type
+              : base}
           {numberBounds(parameter)
             .map((bound) => ` · ${bound}`)
             .join("")}
@@ -175,7 +177,8 @@ export default function ParameterField({
       ) : base === "list" || base === "number" ? (
         <ParameterInput
           id={id}
-          kind={base}
+          key={type}
+          type={type}
           limits={parameter}
           value={value}
           onChange={onChange}

@@ -1,5 +1,8 @@
 {
   "invalidNumber": "Geben Sie eine endliche Zahl ein.",
+  "invalidListNumber": "Element {index}: Geben Sie eine endliche Zahl ein.",
+  "invalidListBoolean": "Element {index}: Geben Sie true oder false ein.",
+  "listInputHint": "Trennen Sie Werte durch Kommas, z. B. {example}. Lassen Sie das Feld für eine leere Liste leer.",
   "addConnectedNode": "Verbundenen Knoten hinzufügen",
   "compatibleNodes": "Kompatible Knoten",
   "noCompatibleNodes": "Keine kompatiblen Knoten gefunden.",

@@ -1,5 +1,8 @@
 {
   "invalidNumber": "Saisissez un nombre fini.",
+  "invalidListNumber": "Élément {index} : saisissez un nombre fini.",
+  "invalidListBoolean": "Élément {index} : saisissez true ou false.",
+  "listInputHint": "Séparez les valeurs par des virgules, par exemple {example}. Laissez vide pour une liste vide.",
   "addConnectedNode": "Ajouter un nœud connecté",
   "compatibleNodes": "Nœuds compatibles",
   "noCompatibleNodes": "Aucun nœud compatible trouvé.",

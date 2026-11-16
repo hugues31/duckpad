@@ -199,6 +199,131 @@ test("navigation keeps an incomplete numeric Inspector draft until it is correct
   ).toBe(12.5);
 });
 
+test("typed lists save as JSON values, protect invalid drafts, and execute", async ({
+  page,
+}) => {
+  const url = await prepare(page);
+  const initial: Snapshot = await (await page.request.get(url)).json();
+  const bundle = initial.bundle!;
+  bundle.templates.typed_lists = `-- @label Typed lists
+-- @param amounts: list<number> = [1]
+-- @param flags: list<boolean> = [true]
+-- @param cities: list<text> = ["London"]
+-- @param columns: list<column> = ["amounts", "flags", "cities"]
+-- @output result
+SELECT {{ columns }} FROM (
+  SELECT [{{ amounts }}]::DOUBLE[] AS amounts, [{{ flags }}] AS flags, [{{ cities }}] AS cities
+);`;
+  bundle.flow.nodes = [
+    {
+      id: "lists",
+      template: "typed_lists",
+      params: {},
+      position: { x: 0, y: 0 },
+    },
+  ];
+  expect(
+    (
+      await page.request.put(url, {
+        data: { revision: initial.revision, bundle },
+      })
+    ).ok(),
+  ).toBe(true);
+  await page.goto(`/worktrees/${initial.worktree.id}/flow?node=lists`);
+  const inspector = page.locator(".inspector");
+  const field = (name: string) =>
+    inspector.getByRole("textbox", { name, exact: true });
+  const params = (snapshot: Snapshot) => snapshot.bundle!.flow.nodes[0].params;
+
+  for (const { name, text, value } of [
+    { name: "amounts", text: "1, -2.5, 3e2", value: [1, -2.5, 300] },
+    { name: "flags", text: "true, false", value: [true, false] },
+    { name: "cities", text: "New York, Paris", value: ["New York", "Paris"] },
+    {
+      name: "columns",
+      text: "flags, amounts, cities",
+      value: ["flags", "amounts", "cities"],
+    },
+  ]) {
+    const empty = await save(page, url, () => field(name).fill(""));
+    expect(params(empty)[name]).toEqual([]);
+    await field(name).blur();
+    await expect(field(name)).toHaveValue("");
+    const saved = await save(page, url, () => field(name).fill(text));
+    expect(params(saved)[name]).toEqual(value);
+  }
+
+  for (const { name, invalid, corrected, message } of [
+    {
+      name: "amounts",
+      invalid: "1, abc, 300",
+      corrected: "1, -2.5, 300",
+      message: "Item 2: enter a finite number.",
+    },
+    {
+      name: "flags",
+      invalid: "true, maybe",
+      corrected: "true, false",
+      message: "Item 2: enter true or false.",
+    },
+  ]) {
+    const before: Snapshot = await (await page.request.get(url)).json();
+    await field(name).fill(invalid);
+    await field(name).blur();
+    await expect(field(name)).toHaveAttribute("aria-invalid", "true");
+    await expect(inspector.locator(".parameter-list-error")).toHaveText(
+      message,
+    );
+    await page.getByRole("link", { name: "Code", exact: true }).click();
+    const guard = page.getByRole("dialog", {
+      name: "Unsaved changes",
+      exact: true,
+    });
+    await expect(guard).toContainText(message);
+    await guard
+      .getByRole("button", { name: "Stay on this page", exact: true })
+      .click();
+    await expect(field(name)).toHaveValue(invalid);
+    expect((await (await page.request.get(url)).json()).revision).toBe(
+      before.revision,
+    );
+    // Correcting back to the saved value needs no write.
+    await field(name).fill(corrected);
+    await field(name).blur();
+    await expect(page.locator(".save-status")).toHaveText("All changes saved");
+    await expect(inspector.locator(".parameter-list-error")).toHaveCount(0);
+  }
+
+  await page.reload();
+  await expect(field("amounts")).toHaveValue("1, -2.5, 300");
+  await expect(field("flags")).toHaveValue("true, false");
+  const compiled = await page.request.get(
+    `${url}/compile/lists?environment=dev`,
+  );
+  expect(compiled.ok()).toBe(true);
+  const runResponse = await page.request.post(`${url}/runs`, {
+    data: { environment: "dev", node: "lists" },
+  });
+  expect(runResponse.ok()).toBe(true);
+  const run = await runResponse.json();
+  await expect
+    .poll(
+      async () =>
+        (await (await page.request.get(`/api/runs/${run.id}`)).json()).status,
+    )
+    .toBe("success");
+  const preview = await (
+    await page.request.get(`${url}/preview/lists?environment=dev&port=result`)
+  ).json();
+  expect(preview.rows.map((row: { values: unknown[] }) => row.values)).toEqual([
+    [
+      [true, false],
+      [1, -2.5, 300],
+      ["New York", "Paris"],
+    ],
+  ]);
+});
+
 test("clearing a required number does not save zero and invalid drafts stay editable", async ({
   page,
 }) => {

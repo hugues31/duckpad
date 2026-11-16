@@ -18,6 +18,7 @@ import { nodeCode, nodeEntity, nodeSourcePath } from "./nodeCode";
 import NodeDocumentation from "./NodeDocumentation";
 import NodeInfo from "./NodeInfo";
 import { numberBoundsError } from "./numberBounds";
+import { listInputError } from "./listInput";
 import { baseType, typeArgument } from "./parameterType";
 import { PartitionInspector } from "./PartitionControls";
 import QueryBuilder from "./QueryBuilder";
@@ -148,6 +149,9 @@ export default function Inspector({
           typeof current === "number" &&
           numberBoundsError(current, parameter, t);
         if (invalid) throw new Error(invalid);
+        const listError = listInputError(parameter.type, current, t);
+        if (listError)
+          throw new Error(`${parameter.label || parameter.name}: ${listError}`);
       }
       const variables = { ...declared.current };
       const saved = await onSave(value, base, variables);

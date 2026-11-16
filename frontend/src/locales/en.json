@@ -1,5 +1,8 @@
 {
   "invalidNumber": "Enter a finite number.",
+  "invalidListNumber": "Item {index}: enter a finite number.",
+  "invalidListBoolean": "Item {index}: enter true or false.",
+  "listInputHint": "Separate values with commas, e.g. {example}. Leave blank for an empty list.",
   "addConnectedNode": "Add a connected node",
   "compatibleNodes": "Compatible nodes",
   "noCompatibleNodes": "No compatible nodes found.",

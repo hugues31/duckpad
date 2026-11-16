@@ -190,6 +190,20 @@ a.button {
   text-transform: uppercase;
   color: var(--muted);
 }
+.parameter-list-input {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.parameter-list-input small {
+  line-height: 1.45;
+}
+.parameter-list-input input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+.parameter-list-error {
+  color: var(--danger);
+}
 .field {
   display: flex;
   flex-direction: column;

@@ -189,7 +189,12 @@ Numeric and list fields preserve the text you type until you leave the field or
 save. Clearing a numeric field removes its override, so the template, component,
 or connector default applies. Without a default, the parameter remains required.
 Comma-separated lists trim spaces around each item and preserve spaces within
-items: `New York, Paris` becomes `["New York", "Paris"]`.
+items: `New York, Paris` becomes `["New York", "Paris"]`. Empty items are ignored;
+clearing the field stores an empty list (`[]`). Number lists store numbers, and
+boolean lists accept `true` or `false` regardless of letter case. An invalid item
+is identified below the field and prevents saving; its text stays editable until
+corrected. The variable editor uses the same input for its `list<text>` and
+`list<number>` types.
 
 | Parameter declaration | Value contract |
 | --- | --- |

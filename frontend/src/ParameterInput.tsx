@@ -1,11 +1,13 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useT } from "./i18n";
+import { listInputError, listItemType, parseListInput } from "./listInput";
 import { numberBoundsError, type NumberLimits } from "./numberBounds";
+import { baseType } from "./parameterType";
 import type { Json } from "./types";
 
 /** Keep incomplete input intact until it can be committed as a parameter value. */
 export default function ParameterInput({
-  kind,
+  type,
   id,
   label,
   placeholder,
@@ -17,7 +19,8 @@ export default function ParameterInput({
   commitOnChange = false,
   limits = {},
 }: {
-  kind: "number" | "list";
+  /** Full parameter type, including the list item type. */
+  type: string;
   id?: string;
   /** An accessible name, when no label element names the input. */
   label?: string;
@@ -25,8 +28,8 @@ export default function ParameterInput({
   secret?: boolean;
   disabled?: boolean;
   value: Json | undefined;
-  /** Receives the parsed value, or incomplete numeric text when commitOnChange is enabled. */
-  onChange: (value: number | string | string[] | undefined) => void;
+  /** Receives typed values, retaining invalid text for form validation. */
+  onChange: (value: Json | undefined) => void;
   onBlur?: () => void;
   /** Let form validation see incomplete values while preserving their input text. */
   commitOnChange?: boolean;
@@ -34,21 +37,43 @@ export default function ParameterInput({
   limits?: NumberLimits;
 }) {
   const t = useT();
+  const descriptionId = useId();
+  const errorId = useId();
+  const kind = baseType(type);
+  const itemType = listItemType(type);
   const integer = limits.python_type === "int";
   const [draft, setDraft] = useState<string | null>(null);
   const parse = (text: string) =>
     kind === "list"
-      ? text.split(",").map((item) => item.trim())
+      ? parseListInput(type, text)
       : text.trim() === ""
         ? undefined
         : Number.isFinite(Number(text))
           ? Number(text)
           : text;
-  return (
+  const listError =
+    kind === "list"
+      ? listInputError(type, draft === null ? value : parse(draft), t)
+      : "";
+  const example =
+    itemType === "number"
+      ? "1, 2.5, -3"
+      : itemType === "boolean"
+        ? "true, false"
+        : itemType === "column"
+          ? "customer_id, amount"
+          : "London, Paris";
+  const input = (
     <input
       id={id}
       aria-label={label}
-      placeholder={placeholder}
+      placeholder={placeholder ?? (kind === "list" ? example : undefined)}
+      aria-invalid={listError ? true : undefined}
+      aria-describedby={
+        kind === "list"
+          ? `${descriptionId}${listError ? ` ${errorId}` : ""}`
+          : undefined
+      }
       disabled={disabled}
       type={secret ? "password" : "text"}
       inputMode={
@@ -58,7 +83,9 @@ export default function ParameterInput({
         draft ?? (Array.isArray(value) ? value.join(", ") : String(value ?? ""))
       }
       onChange={(e) => {
-        e.currentTarget.setCustomValidity("");
+        e.currentTarget.setCustomValidity(
+          kind === "list" ? listInputError(type, parse(e.target.value), t) : "",
+        );
         setDraft(e.target.value);
         if (commitOnChange) onChange(parse(e.target.value));
       }}
@@ -66,8 +93,8 @@ export default function ParameterInput({
         if (draft !== null) {
           const parsed = parse(draft);
           const invalid =
-            kind !== "number"
-              ? ""
+            kind === "list"
+              ? listError
               : typeof parsed === "string"
                 ? t("invalidNumber")
                 : typeof parsed === "number"
@@ -84,5 +111,20 @@ export default function ParameterInput({
         onBlur?.();
       }}
     />
+  );
+  return kind === "list" ? (
+    <div className="parameter-list-input">
+      {input}
+      <small id={descriptionId} className="muted">
+        {t("listInputHint").replace("{example}", example)}
+      </small>
+      {listError && (
+        <small id={errorId} className="parameter-list-error" role="alert">
+          {listError}
+        </small>
+      )}
+    </div>
+  ) : (
+    input
   );
 }
