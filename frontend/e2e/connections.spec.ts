@@ -1,6 +1,11 @@
 import { execFileSync } from "node:child_process";
 import { expect, test } from "@playwright/test";
-import { dragPaletteNode, openInstanceSettings, signIn } from "./helpers";
+import {
+  dragPaletteNode,
+  editCode,
+  openInstanceSettings,
+  signIn,
+} from "./helpers";
 
 test("connection IDs stay fixed and duplicate creation preserves the original", async ({
   page,
@@ -312,6 +317,50 @@ test("connector definitions are grouped by family, customized built-ins reset an
     await page.request.delete("/api/catalog/connector/landing_ui");
     await page.request.delete("/api/catalog/connector/folder_copy");
   }
+});
+
+test("connector JSON validation names the malformed field and keeps the editor open", async ({
+  page,
+}) => {
+  await signIn(page);
+  const before = await (await page.request.get("/api/catalog")).json();
+  await openInstanceSettings(page, "Connections");
+  await page
+    .getByRole("button", { name: "Edit Server folder", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog");
+  const original = before.connectors.find(
+    (item: { id: string }) => item.id === "folder",
+  );
+  const definition = { ...original, parameters: [null] };
+  const replace = (value: unknown) =>
+    editCode(
+      page,
+      JSON.stringify(value, null, 2),
+      dialog.locator(".monaco-editor"),
+    );
+  await replace(definition);
+  const response = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/catalog/connector") &&
+      response.request().method() === "PUT",
+  );
+  await dialog
+    .getByRole("button", { name: "Save changes", exact: true })
+    .click();
+  expect((await response).status()).toBe(422);
+  await expect(dialog.locator(".notice.error")).toHaveText(
+    "connector.parameters[0] must be an object",
+  );
+  expect(await (await page.request.get("/api/catalog")).json()).toEqual(before);
+
+  // Correcting the JSON can be saved from the same editor.
+  await replace(original);
+  await dialog
+    .getByRole("button", { name: "Save changes", exact: true })
+    .click();
+  await expect(dialog).toHaveCount(0);
+  expect(await (await page.request.get("/api/catalog")).json()).toEqual(before);
 });
 
 test("file nodes offer granted storage connections as locations, custom types included", async ({

@@ -303,6 +303,37 @@ def test_duplicates_are_custom_types_under_a_new_identifier(services):
     assert store.get("connector", "finance_folder") == duplicate
 
 
+def test_shape_validation_preserves_unknown_metadata_and_json_values(services):
+    store, _, catalog, _ = services
+    definition = {
+        "id": "documented",
+        "name": "Documented connector",
+        "family": "database",
+        "documentation": {"examples": ["Example"]},
+        "parameters": [{"name": "options", "default": None, "hint": {"advanced": True}}],
+        "extensions": [{"name": "json", "notes": ["Bundled extension"]}],
+    }
+    catalog.save("connector", copy.deepcopy(definition), create=True)
+    assert store.get("connector", "documented") == definition
+    connection = {
+        "id": "documented",
+        "name": "Documented connection",
+        "connector": "documented",
+        "environments": {"dev": {"options": None}},
+    }
+    catalog.save("connection", copy.deepcopy(connection), create=True)
+    assert catalog.public()["connections"] == [connection]
+
+
+@pytest.mark.parametrize("changes", [{"parameters": [None]}, {"extensions": [None]}, {"init_sql": 3}])
+def test_definition_validation_checks_shape_outside_save(services, changes):
+    _, _, catalog, _ = services
+    with pytest.raises(Problem) as invalid:
+        catalog.validate_definition({"family": "database", **changes})
+    assert invalid.value.status == 422
+    assert next(iter(changes)) in str(invalid.value)
+
+
 @pytest.mark.parametrize(
     ("changes", "message"),
     [
