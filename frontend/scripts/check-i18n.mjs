@@ -39,6 +39,17 @@ const DYNAMIC_KEYS = [
   "export_xlsx",
   "export_table",
   "export_oracle",
+  "union",
+  "sort",
+  "deduplicate",
+  "calculate",
+  "pivot",
+  "unpivot",
+  "sample",
+  "rank",
+  "running_total",
+  "export_parquet",
+
   // Roles: role_<role> and project_<role>_hint.
   "role_editor",
   "role_reader",

@@ -126,6 +126,13 @@ const TYPE_DOCS: Record<ParameterType, TranslationKey> = {
   list: "codeTypeList",
   column_selection: "codeTypeColumnSelection",
   value_cleaning: "codeTypeValueCleaning",
+  conditions: "codeTypeConditions",
+  join_keys: "codeTypeJoinKeys",
+  joined_columns: "codeTypeJoinedColumns",
+  group_columns: "codeTypeGroupColumns",
+  measures: "codeTypeMeasures",
+  ordering: "codeTypeOrdering",
+  columns: "codeTypeColumns",
 };
 const PROBLEM_MESSAGES: Record<TemplateProblem["code"], TranslationKey> = {
   unknownDirective: "codeProblemUnknownDirective",
@@ -730,30 +737,32 @@ async function sqlCompletions(
             const choices = (names: string[], fallback: string) =>
               names.length ? `\${1|${names.join(",")}|}` : `\${1:${fallback}}`;
             const insertText =
-              argument === "connection"
-                ? `${type}(${choices(
-                    parameters
-                      .filter((p) => p.type === "connection")
-                      .map((p) => p.name),
-                    "connection",
-                  )})`
-                : argument === "input"
+              type === "join_keys" || type === "joined_columns"
+                ? `${type}(\${1:${inputs[0]?.name || "left"}},\${2:${inputs[1]?.name || "right"}})`
+                : argument === "connection"
                   ? `${type}(${choices(
-                      inputs.map((i) => i.name),
-                      "source",
+                      parameters
+                        .filter((p) => p.type === "connection")
+                        .map((p) => p.name),
+                      "connection",
                     )})`
-                  : argument === "schema"
+                  : argument === "input"
                     ? `${type}(${choices(
-                        parameters
-                          .filter((p) => baseOf(p.type!) === "schema_name")
-                          .map((p) => p.name),
-                        "schema",
+                        inputs.map((i) => i.name),
+                        "source",
                       )})`
-                    : argument === "options"
-                      ? `${type}(\${1:a}|\${2:b})`
-                      : argument === "item"
-                        ? `list<\${1|${LIST_ITEM_TYPES.join(",")}|}>`
-                        : type;
+                    : argument === "schema"
+                      ? `${type}(${choices(
+                          parameters
+                            .filter((p) => baseOf(p.type!) === "schema_name")
+                            .map((p) => p.name),
+                          "schema",
+                        )})`
+                      : argument === "options"
+                        ? `${type}(\${1:a}|\${2:b})`
+                        : argument === "item"
+                          ? `list<\${1|${LIST_ITEM_TYPES.join(",")}|}>`
+                          : type;
             return {
               label: type,
               kind: Kind.TypeParameter,

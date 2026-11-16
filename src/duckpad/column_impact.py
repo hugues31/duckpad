@@ -14,6 +14,7 @@ from .column_references import export_inputs, local_alias, references, replace_s
 from .components import expand
 from .execution.statements import compile_node
 from .graph import connection_references, reachable, topological
+from .guided_parameters import GUIDED_TYPES
 from .node_code import code_path, find_node, template_path
 from .node_names import node_name
 from .templates import IDENTIFIER, REFERENCE, VARIABLE_REFERENCE
@@ -325,14 +326,16 @@ def inspect(engine, worktree, environment, node, port, column, *, new_name=None,
                     if definition is None:
                         raise Incomplete("relation_identifier")
                     raw = item.get("params", {}).get(parameter, definition.get("default"))
+                    kind = definition["type"].split("(")[0]
                     expression_list = isinstance(raw, list) and all(isinstance(v, str) for v in raw)
-                    if (not isinstance(raw, str) and not expression_list) or definition["type"].split("(")[
-                        0
-                    ] not in {
+                    if kind in GUIDED_TYPES and not isinstance(raw, str):
+                        raise Incomplete("parameter_type")
+                    if (not isinstance(raw, str) and not expression_list) or kind not in {
                         "expression",
                         "expressions",
                         "column",
                         "identifier",
+                        *GUIDED_TYPES,
                     }:
                         raise Incomplete("parameter_type")
                     owner = parameter_owner(bundle, key, parameter)

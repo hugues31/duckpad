@@ -9,15 +9,17 @@ from starlette.datastructures import UploadFile as FormFile
 
 from .. import schemas, source_files, variables
 from ..archive import write_archive
-from ..builtin_templates import BUILTINS
+from ..builtin_templates import BUILTINS, add_builtins
 from ..bundle import bundle_to_files
 from ..comparison import CommitContext
 from ..components import group, import_definition
+from ..guided_parameters import GUIDED_TYPES, input_ports, render_guided
 from ..project_extensions import enabled as enabled_extensions
 from ..project_view import project_view
 from ..types import Record
 from ..uploads import limited_body
 from ..util import Problem, uid
+from ..value_types import base_type, type_argument
 from .context import Context
 from .http import MAX_UPLOAD_BYTES, UPLOAD_CHUNK, upload_name
 from .security import (
@@ -184,6 +186,29 @@ def router(ctx: Context) -> APIRouter:
         worktree: str, environment: str, node: str | None = None, ancestors: bool = False
     ) -> Record:
         return engine.scope_variables(worktree, environment, node, ancestors)
+
+    @api.post(
+        "/api/worktrees/{worktree}/templates/builtins",
+        response_model=None,
+        dependencies=[Depends(worktree_role("editor"))],
+    )
+    def import_builtins(worktree: str, data: schemas.Revision) -> Record:
+        return projects.transform(
+            worktree, data.revision, add_builtins, "Reload before importing built-in templates"
+        )
+
+    @api.post(
+        "/api/worktrees/{worktree}/parameter-sql",
+        response_model=None,
+        dependencies=[Depends(worktree_role("editor"))],
+    )
+    def parameter_sql(worktree: str, data: schemas.RenderParameter) -> Record:
+        kind = base_type(data.type)
+        if kind not in GUIDED_TYPES:
+            raise Problem("Choose a guided parameter type")
+        ports = input_ports(kind, type_argument(data.type))
+        sql = render_guided(kind, data.value, [data.schemas.get(p) for p in ports])
+        return {"sql": sql.removesuffix(", ") if kind == "group_columns" else sql}
 
     @api.post(
         "/api/worktrees/{worktree}/import",

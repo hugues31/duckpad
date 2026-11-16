@@ -1,5 +1,15 @@
 # Northstar example tour
 
+Drag **Preparation tour** from the example's palette onto the canvas. This
+self-contained component loads its own sample inputs and demonstrates the expanded default palette:
+union, deduplication, calculated columns, reproducible sampling, ranking, running
+totals, sorting, pivot/unpivot, guided aggregation and Parquet export. Open the
+component to edit its ordinary SQL templates and public parameter forms. Its
+120 input orders become 240 after Union and 120 after Deduplicate; the reshape
+branch produces four region rows and twelve region/channel rows. See
+[data preparation](DATA_PREPARATION.md) for configuration, expected results and
+lineage limitations.
+
 Choose **New project** on the Projects page or beside the active project selector. Enter your project name, then choose **Start from an example → Create**. This creates an independent copy of Northstar under your chosen name, even when other projects already exist. It creates its own local inputs and a connection named Northstar; no credentials or external database are needed. The **Open example project** shortcut is also available when the project list is empty.
 
 New to Duckpad? Follow the [quickstart](QUICKSTART.md) to install it and run your

@@ -34,6 +34,31 @@ import { useNow } from "./useNow";
 function defaultIcon(kind: string) {
   // Python template IDs end with ".py", whatever their name says.
   if (kind === "python" || kind.endsWith(".py")) return "python";
+  const defaults: Record<string, string> = {
+    load_csv: "spreadsheet",
+    load_parquet: "layers",
+    load_xlsx: "table",
+    load_json: "json",
+    load_delta: "history",
+    load_table: "database",
+    select_columns: "columns",
+    clean_values: "clean",
+    export_csv: "export",
+    export_xlsx: "file",
+    export_table: "upload",
+    export_oracle: "server",
+    union: "union",
+    sort: "sort",
+    deduplicate: "deduplicate",
+    calculate: "formula",
+    pivot: "pivot",
+    unpivot: "unpivot",
+    sample: "sample",
+    rank: "number",
+    running_total: "window",
+    export_parquet: "download",
+  };
+  if (defaults[kind]) return defaults[kind];
   if (kind.includes("export")) return "export";
   if (kind === "join") return "join";
   if (kind === "filter") return "filter";

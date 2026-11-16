@@ -190,6 +190,9 @@ own colors, so a red node is not a failed node.
 | `globe` | world, web, international |
 | `lock` | secure, private |
 
-The built-in nodes use these names too: without `@icon`, a filter shows
-`filter`, a join `join`, an aggregation `aggregate`, a source `import`, an
-export `export`, a Python node `python` and any other SQL node `sql`.
+Every built-in template declares its dedicated `@icon`, including loaders and
+exports for each format, column selection and cleaning. Older built-in nodes
+without a directive use the corresponding icon as a presentation fallback.
+Custom SQL and Python nodes without a directive use `sql` and `python`; any
+explicit valid `@icon` takes precedence. See the [default palette](DATA_PREPARATION.md)
+for the complete set of transformations.

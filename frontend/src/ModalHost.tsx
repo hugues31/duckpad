@@ -674,6 +674,26 @@ function LibraryDialog({
     <Modal title={t("library")} onClose={onClose} wide>
       <div className="modal-content">
         <p className="muted">{t("importHint")}</p>
+        <p className="muted">{t("importBuiltinsHint")}</p>
+        <button
+          className="button secondary"
+          disabled={
+            pending || !["admin", "editor"].includes(snapshot.role || "")
+          }
+          onClick={async () => {
+            const imported = await run(() =>
+              commit((base) =>
+                api<Snapshot>(
+                  `/worktrees/${id}/templates/builtins`,
+                  send({ revision: base.revision }),
+                ),
+              ),
+            );
+            if (imported) notify(t("importComplete"));
+          }}
+        >
+          {t("importBuiltins")}
+        </button>
         {library.pending ? (
           <p>{t("loading")}</p>
         ) : library.error ? (

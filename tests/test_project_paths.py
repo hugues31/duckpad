@@ -25,7 +25,11 @@ def test_example_definitions_survive_disk_and_git_round_trips(services, monkeypa
     snapshot = projects.snapshot(worktree["id"])
     assert snapshot["diagnostics"] == []
     assert snapshot["bundle"]["templates"].keys() >= BUILTINS.keys()
-    assert snapshot["bundle"]["components"].keys() == {"regional_summary", "regional_report"}
+    assert snapshot["bundle"]["components"].keys() == {
+        "regional_summary",
+        "regional_report",
+        "preparation_tour",
+    }
     assert "templates/load_csv.sql" in snapshot["files"]
     assert "components/regional_report.json" in snapshot["files"]
     assert all("\\" not in name for name in snapshot["files"])

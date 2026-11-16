@@ -9,7 +9,7 @@ from sqlglot import exp
 from sqlglot.optimizer.qualify import qualify
 
 from ..materialize import outer_aggregates
-from ..sqlast import VARIABLE_LABEL, is_volatile, labeled, sql
+from ..sqlast import VARIABLE_LABEL, expand_group_by_all, is_volatile, labeled, sql
 from . import builders as b
 from .coverage import Coverage
 
@@ -101,7 +101,7 @@ def qualify_columns(tree, datasets):
             raise Coverage("A SQL relation is not an available materialized dependency.")
         schema[table.name] = {c["name"]: c["type"] for c in data.columns}
     try:
-        return qualify(tree, dialect="duckdb", schema=schema)
+        return expand_group_by_all(qualify(tree, dialect="duckdb", schema=schema))
     except Exception as error:
         raise Coverage(f"Column resolution is not supported for this SQL step: {error}") from error
 

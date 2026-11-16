@@ -178,6 +178,7 @@ export default function InspectorParameters({
               projectFile={type.startsWith("file") && !valueOf(port) && !folder}
               csv={csvSource}
               objects={objectNames(parameter)}
+              inputColumns={inputColumns}
               columns={port ? inputColumns[port] : undefined}
               schemas={(port && schemas[port]) || Object.values(schemas).flat()}
             />

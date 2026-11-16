@@ -38,3 +38,22 @@ def has_filtering_join(tree):
 def has_grouping_sets(group):
     """Whether a GROUP BY clause uses GROUPING SETS, CUBE or ROLLUP."""
     return any(group.args.get(key) for key in ("grouping_sets", "cube", "rollup"))
+
+
+def expand_group_by_all(tree):
+    """Make implicit grouping keys explicit after qualification has expanded stars.
+
+    DuckDB groups nonaggregate projections that reference input columns. Constants
+    do not create groups. Tracing must freeze these keys before replacing projections.
+    """
+    for select in tree.find_all(exp.Select):
+        group = select.args.get("group")
+        if group is None or not group.args.get("all"):
+            continue
+        keys = []
+        for projection in select.expressions:
+            expression = projection.this if isinstance(projection, exp.Alias) else projection
+            if expression.find(exp.Column) and not expression.find(exp.AggFunc, exp.Window, exp.Subquery):
+                keys.append(expression.copy())
+        select.set("group", exp.Group(expressions=keys) if keys else None)
+    return tree

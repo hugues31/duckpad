@@ -835,6 +835,11 @@ test("filter on a period with a variable, typed or chosen in the guided form (wo
   page,
 }) => {
   const { id, url } = await example(page, (bundle) => {
+    // Existing projects keep their original expression-based filter helper.
+    bundle.templates.filter = bundle.templates.filter.replace(
+      'conditions(source) = {"mode":"and","conditions":[]}',
+      'expression(source) = "amount > 0"',
+    );
     bundle.variables = {
       report_start: {
         type: "date",

@@ -33,7 +33,17 @@ LIST_TYPE = re.compile(r"list\s*<\s*(text|number)\s*>")
 CHOICE_TYPE = re.compile(r"choice\s*\((.*)\)")
 # `{{ var.name }}` inside expression parameters; templates and components never accept them.
 EXPRESSION_REFERENCE = VARIABLE_REFERENCE
-EXPRESSION_PARAMETERS = ("expression", "expressions")
+EXPRESSION_PARAMETERS = (
+    "expression",
+    "expressions",
+    "conditions",
+    "join_keys",
+    "joined_columns",
+    "group_columns",
+    "measures",
+    "ordering",
+    "columns",
+)
 REFERENCE_PARAMETERS = (*EXPRESSION_PARAMETERS, "file", "destination")
 # Variable types an expression can reference: each becomes a DuckDB parameter of the same type.
 EXPRESSION_TYPES = ("text", "number", "boolean", "date", "choice")
