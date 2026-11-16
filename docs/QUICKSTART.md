@@ -73,9 +73,9 @@ and upload your own file.
 
 ## 4. Connect a transformation · 3 minutes
 
-Click **SQL** in the **Transformations** list again and set its **Display name**
-to **Revenue report**. Choose **Edit code**, replace the code with the
-following, then close the editor:
+Drag another **SQL** node from the **Transformations** list onto the canvas and
+set its **Display name** to **Revenue report**. Choose **Edit code**, replace the
+code with the following, then close the editor:
 
 ```sql
 -- @label Revenue report
