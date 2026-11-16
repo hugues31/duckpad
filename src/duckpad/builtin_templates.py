@@ -187,7 +187,7 @@ SELECT *, {{ calculations }} FROM {{ source }};
 -- @param groups: group_columns(source) = []
 -- @param category: column(source) = ""
 -- @param value: column(source) = ""
--- @param categories: list<text> = []
+-- @param categories: list<text>
 -- @param function: keyword(SUM|AVG|MIN|MAX|COUNT) = "SUM"
 -- @output result
 SELECT * FROM (SELECT {{ groups }}{{ category }}, {{ value }} FROM {{ source }}) PIVOT ({{ function }}({{ value }}) FOR {{ category }} IN ({{ categories }}));
