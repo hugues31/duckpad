@@ -1,0 +1,136 @@
+WEBVTT
+
+00:00:00.500 --> 00:00:02.740
+Most data tools make you choose:
+
+00:00:02.900 --> 00:00:05.060
+drag boxes, or write code.
+
+00:00:05.140 --> 00:00:06.980
+Duckpad gives you both.
+
+00:00:07.060 --> 00:00:09.700
+Duckpad is a free, open-source workspace for
+
+00:00:09.860 --> 00:00:12.620
+data pipelines, powered by DuckDB.
+
+00:00:12.900 --> 00:00:14.740
+Connect steps on a canvas:
+
+00:00:14.820 --> 00:00:18.500
+load, join, filter, aggregate, export.
+
+00:00:18.580 --> 00:00:21.700
+Every step is a SQL query or a Python class
+
+00:00:21.780 --> 00:00:23.300
+you can read and edit.
+
+00:00:23.380 --> 00:00:25.700
+Open the code beside the canvas, and preview
+
+00:00:25.780 --> 00:00:27.940
+it on real rows as you type.
+
+00:00:28.020 --> 00:00:30.420
+Every step keeps its result, so you never
+
+00:00:30.500 --> 00:00:32.580
+have to guess what the pipeline did.
+
+00:00:32.660 --> 00:00:33.700
+Missing a step?
+
+00:00:33.820 --> 00:00:34.500
+Write your own.
+
+00:00:34.820 --> 00:00:36.820
+A few comments declare its inputs,
+
+00:00:36.900 --> 00:00:39.260
+parameters, outputs and tests.
+
+00:00:39.460 --> 00:00:42.140
+Duckpad turns them into ports, a form and a
+
+00:00:42.180 --> 00:00:43.180
+palette entry.
+
+00:00:43.380 --> 00:00:45.940
+Nothing to compile, nothing to register.
+
+00:00:46.180 --> 00:00:49.300
+Data tests sit next to the SQL they check:
+
+00:00:49.380 --> 00:00:51.380
+bad rows stop the result before it is
+
+00:00:51.580 --> 00:00:54.220
+exported, and they are one click away.
+
+00:00:54.420 --> 00:00:56.100
+Click any number to see how it was
+
+00:00:56.180 --> 00:00:58.820
+calculated, through joins and aggregates,
+
+00:00:58.940 --> 00:01:00.660
+down to the source cells behind it.
+
+00:01:01.060 --> 00:01:03.700
+Before you rename a column, see every step
+
+00:01:03.780 --> 00:01:04.740
+it reaches.
+
+00:01:04.820 --> 00:01:07.300
+And when a step cannot be explained, Duckpad
+
+00:01:07.380 --> 00:01:08.340
+says so.
+
+00:01:08.420 --> 00:01:11.300
+Every save is a Git commit, and every run is
+
+00:01:11.380 --> 00:01:12.340
+recorded.
+
+00:01:12.420 --> 00:01:14.580
+Run the approved version from the interface,
+
+00:01:14.660 --> 00:01:16.900
+the command line or your scheduler.
+
+00:01:16.940 --> 00:01:18.580
+Duckpad even writes your project's
+
+00:01:18.660 --> 00:01:21.700
+documentation, ready to export as a PDF.
+
+00:01:22.100 --> 00:01:23.060
+Need a hand?
+
+00:01:23.140 --> 00:01:25.700
+The AI assistant explains a flow and makes
+
+00:01:25.780 --> 00:01:28.100
+edits you can undo, with the provider of
+
+00:01:28.140 --> 00:01:30.300
+your choice, even a local model.
+
+00:01:30.500 --> 00:01:33.780
+No cloud, no sign-up, no paid edition.
+
+00:01:33.820 --> 00:01:36.820
+Two commands, and you are in.
+
+00:01:37.100 --> 00:01:37.740
+Duckpad.
+
+00:01:38.140 --> 00:01:39.020
+See the flow.
+
+00:01:39.180 --> 00:01:40.620
+Trust the result.
