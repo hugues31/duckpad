@@ -102,7 +102,8 @@ export default function ParameterInput({
                   : "";
           if (invalid) {
             e.currentTarget.setCustomValidity(invalid);
-            e.currentTarget.reportValidity();
+            // Lists explain the error inline without taking focus back on blur.
+            if (kind !== "list") e.currentTarget.reportValidity();
             return;
           }
           onChange(parsed);

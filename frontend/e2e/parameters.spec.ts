@@ -271,6 +271,7 @@ SELECT {{ columns }} FROM (
     await field(name).fill(invalid);
     await field(name).blur();
     await expect(field(name)).toHaveAttribute("aria-invalid", "true");
+    await expect(field(name)).not.toBeFocused();
     await expect(inspector.locator(".parameter-list-error")).toHaveText(
       message,
     );
