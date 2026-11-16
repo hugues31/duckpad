@@ -212,7 +212,7 @@ class Catalog:
                 }
             data["secret_fields"] = sorted(set(previous["secret_fields"]) | secret_names(definition))
             for env, values in data["environments"].items():
-                for key in secret_names(definition):
+                for key in data["secret_fields"]:
                     if values.get(key) == MASK:
                         values[key] = previous["environments"].get(env, {}).get(key, "")
                 for key, value in values.items():
@@ -343,11 +343,12 @@ class Catalog:
         if environment not in connection["environments"]:
             raise Problem(f"Connection {reference} has no configuration for {environment}")
         values = copy.deepcopy(connection["environments"][environment])
-        hidden = secret_names(definition)
+        current_secrets = secret_names(definition)
+        hidden = set(connection["secret_fields"]) | current_secrets
         for name, value in values.items():
             if not is_reference(value):
                 continue
-            if name not in hidden:
+            if name not in current_secrets:
                 raise Problem(f"Connection {reference}: {name} is no longer secret; enter its value")
             if resolve:
                 try:
@@ -362,8 +363,6 @@ class Catalog:
                 values[name] = p["default"]
             if is_reference(values[name]):
                 continue
-            if p.get("secret"):
-                secrets.append(values[name])
             kind = p.get("type", "text")
             if kind == "number" and (
                 isinstance(values[name], bool) or not isinstance(values[name], (int, float))
@@ -375,6 +374,8 @@ class Catalog:
                 "|"
             ):
                 raise Problem(f"Connection {reference}: invalid choice for {name}")
+        # Retained fields stay private even after a connector edit or reset removes their parameter.
+        secrets.extend(value for name, value in values.items() if name in hidden and not is_reference(value))
         # The probe and worker must attach the same file, including relative paths,
         # home expansion and symlinks. The sandbox grants its resolved parent.
         for name, path in database_files(definition, values).items():
