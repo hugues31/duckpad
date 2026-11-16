@@ -280,7 +280,6 @@ export default function ConnectionEditorModal({
                   </Select>
                 ) : p.type === "number" ? (
                   <ParameterInput
-                    kind="number"
                     label={name}
                     disabled={saving}
                     secret={p.secret}

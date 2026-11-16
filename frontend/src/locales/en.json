@@ -1,5 +1,11 @@
 {
   "invalidNumber": "Enter a finite number.",
+  "invalidListNumber": "“{item}” is not a number.",
+  "invalidListBoolean": "“{item}” is not true or false.",
+  "listInputHint": "Type a comma or press Enter to add a value. Backspace edits the previous value.",
+  "editListValue": "Edit this value",
+  "switchListValue": "Switch between true and false",
+  "removeListValue": "Remove {item}",
   "addConnectedNode": "Add a connected node",
   "compatibleNodes": "Compatible nodes",
   "noCompatibleNodes": "No compatible nodes found.",

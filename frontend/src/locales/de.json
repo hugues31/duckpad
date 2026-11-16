@@ -1,5 +1,11 @@
 {
   "invalidNumber": "Geben Sie eine endliche Zahl ein.",
+  "invalidListNumber": "„{item}“ ist keine Zahl.",
+  "invalidListBoolean": "„{item}“ ist weder true noch false.",
+  "listInputHint": "Geben Sie ein Komma ein oder drücken Sie Enter, um einen Wert hinzuzufügen. Die Rücktaste bearbeitet den vorherigen Wert.",
+  "editListValue": "Diesen Wert bearbeiten",
+  "switchListValue": "Zwischen true und false wechseln",
+  "removeListValue": "{item} entfernen",
   "addConnectedNode": "Verbundenen Knoten hinzufügen",
   "compatibleNodes": "Kompatible Knoten",
   "noCompatibleNodes": "Keine kompatiblen Knoten gefunden.",

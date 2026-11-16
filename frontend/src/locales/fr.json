@@ -1,5 +1,11 @@
 {
   "invalidNumber": "Saisissez un nombre fini.",
+  "invalidListNumber": "« {item} » n’est pas un nombre.",
+  "invalidListBoolean": "« {item} » n’est ni true ni false.",
+  "listInputHint": "Tapez une virgule ou appuyez sur Entrée pour ajouter une valeur. Retour arrière modifie la valeur précédente.",
+  "editListValue": "Modifier cette valeur",
+  "switchListValue": "Basculer entre true et false",
+  "removeListValue": "Retirer {item}",
   "addConnectedNode": "Ajouter un nœud connecté",
   "compatibleNodes": "Nœuds compatibles",
   "noCompatibleNodes": "Aucun nœud compatible trouvé.",

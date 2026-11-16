@@ -1,6 +1,7 @@
 import { Link, useParams } from "react-router";
 import { withQuery } from "./api";
 import { useT } from "./i18n";
+import ListInput from "./ListInput";
 import { worktreeUrl } from "./navigation";
 import ParameterInput from "./ParameterInput";
 import { baseType, typeOptions } from "./parameterType";
@@ -23,7 +24,7 @@ import {
   variableSummary,
 } from "./variables";
 
-/** Edit a value of a variable type; an empty field gives `undefined`. */
+/** Edit a variable value; empty lists give `[]`, empty numbers give `undefined`. */
 export function VariableValueInput({
   type,
   value,
@@ -71,31 +72,29 @@ export function VariableValueInput({
       </Select>
     );
   }
-  if (kind === "number" || kind === "list")
+  if (kind === "list")
     return (
-      <ParameterInput
+      <ListInput
         key={type}
         id={id}
         label={label}
         placeholder={placeholder}
         disabled={disabled}
-        kind={kind}
+        type={type}
+        value={value}
+        onChange={onChange}
+      />
+    );
+  if (kind === "number")
+    return (
+      <ParameterInput
+        id={id}
+        label={label}
+        placeholder={placeholder}
+        disabled={disabled}
         commitOnChange
         value={value}
-        onChange={(next) => {
-          if (kind === "number" || !Array.isArray(next)) return onChange(next);
-          const items = next.filter((item) => item !== "");
-          // Keep text that is not a number, so validation can point at it.
-          onChange(
-            type === "list<number>"
-              ? items.map((item) =>
-                  typeof item === "string" && Number.isFinite(Number(item))
-                    ? Number(item)
-                    : item,
-                )
-              : items,
-          );
-        }}
+        onChange={onChange}
       />
     );
   return (

@@ -1,5 +1,11 @@
 {
   "invalidNumber": "Digite um número finito.",
+  "invalidListNumber": "“{item}” não é um número.",
+  "invalidListBoolean": "“{item}” não é true nem false.",
+  "listInputHint": "Digite uma vírgula ou pressione Enter para adicionar um valor. Backspace edita o valor anterior.",
+  "editListValue": "Editar este valor",
+  "switchListValue": "Alternar entre true e false",
+  "removeListValue": "Remover {item}",
   "addConnectedNode": "Adicionar um nó conectado",
   "compatibleNodes": "Nós compatíveis",
   "noCompatibleNodes": "Nenhum nó compatível encontrado.",

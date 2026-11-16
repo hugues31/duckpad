@@ -185,11 +185,21 @@ write**, even when declared below `COPY`. A failing error check prevents it.
 
 ## Parameter values
 
-Numeric and list fields preserve the text you type until you leave the field or
-save. Clearing a numeric field removes its override, so the template, component,
-or connector default applies. Without a default, the parameter remains required.
-Comma-separated lists trim spaces around each item and preserve spaces within
-items: `New York, Paris` becomes `["New York", "Paris"]`.
+Numeric fields preserve the text you type until you leave the field or save.
+Clearing a numeric field removes its override, so the template, component, or
+connector default applies. Without a default, the parameter remains required.
+
+List fields show each value separately. Type a comma or press Enter to add the
+typed value: spaces around it are trimmed and spaces within it are kept, so
+typing `New York, Paris` gives `["New York", "Paris"]`. Pasted lines or
+spreadsheet cells become separate values. Click a value to edit it, or its ×
+button to remove it; Backspace in the empty text field brings the previous
+value back for editing. Removing every value stores an empty list (`[]`).
+Number lists store numbers. Boolean lists accept `true` or `false` regardless
+of letter case, and clicking a value switches it. Column lists suggest the
+input columns. An invalid value is highlighted and named below the field, and
+the node is not saved until it is corrected. The variable editor uses the same
+field for its `list<text>` and `list<number>` types.
 
 | Parameter declaration | Value contract |
 | --- | --- |
