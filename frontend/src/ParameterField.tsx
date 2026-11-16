@@ -1,6 +1,8 @@
 import { useId, type ReactNode } from "react";
 import ColumnPreparation from "./ColumnPreparation";
 import { useT } from "./i18n";
+import ListInput from "./ListInput";
+import { listItemType } from "./listValues";
 import { numberBounds } from "./numberBounds";
 import ParameterInput from "./ParameterInput";
 import { baseType, typeOptions } from "./parameterType";
@@ -174,11 +176,19 @@ export default function ParameterField({
             <option key={x}>{x}</option>
           ))}
         </Select>
-      ) : base === "list" || base === "number" ? (
-        <ParameterInput
+      ) : base === "list" ? (
+        <ListInput
           id={id}
           key={type}
           type={type}
+          value={value}
+          onChange={onChange}
+          onBlur={onBlur}
+          suggestions={listItemType(type) === "column" ? schemas : undefined}
+        />
+      ) : base === "number" ? (
+        <ParameterInput
+          id={id}
           limits={parameter}
           value={value}
           onChange={onChange}

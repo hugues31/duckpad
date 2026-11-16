@@ -190,19 +190,100 @@ a.button {
   text-transform: uppercase;
   color: var(--muted);
 }
-.parameter-list-input {
+/* A list field: its values as chips, then the text field that adds more. */
+.list-field {
   display: grid;
   gap: 6px;
   min-width: 0;
 }
-.parameter-list-input small {
-  line-height: 1.45;
+.list-input {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  min-height: 38px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  cursor: text;
 }
-.parameter-list-input input[aria-invalid="true"] {
+.list-input:focus-within {
+  border-color: var(--accent);
+}
+.list-input:has(.list-input-text:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.list-input.invalid {
   border-color: var(--danger);
 }
-.parameter-list-error {
+.list-input.disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.list-input .list-input-text {
+  flex: 1 0 auto;
+  width: 0;
+  padding: 3px 5px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  outline: none;
+}
+/* Editing a value in place keeps it between its neighbours. */
+.list-input .list-input-text.inline {
+  flex: none;
+  background: var(--accent-soft);
+}
+.list-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-height: 26px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface-alt);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.list-chip:has(.list-chip-value:not(:disabled):hover) {
+  border-color: var(--accent);
+}
+.list-chip-value {
+  overflow: hidden;
+  padding: 3px 3px 3px 8px;
+  color: inherit;
+  text-overflow: ellipsis;
+  white-space: pre;
+}
+.list-chip-remove {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-right: 2px;
+  border-radius: 4px;
+  color: var(--muted);
+  opacity: 0.6;
+}
+.list-chip-remove:not(:disabled):hover {
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  opacity: 1;
+}
+.list-chip.invalid {
+  border-color: color-mix(in srgb, var(--danger) 60%, transparent);
+  background: color-mix(in srgb, var(--danger) 12%, var(--surface));
   color: var(--danger);
+}
+.list-chip.invalid .list-chip-remove {
+  color: var(--danger);
+}
+.list-input-error {
+  color: var(--danger);
+  line-height: 1.45;
 }
 .field {
   display: flex;

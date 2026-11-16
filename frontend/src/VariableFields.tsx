@@ -1,6 +1,7 @@
 import { Link, useParams } from "react-router";
 import { withQuery } from "./api";
 import { useT } from "./i18n";
+import ListInput from "./ListInput";
 import { worktreeUrl } from "./navigation";
 import ParameterInput from "./ParameterInput";
 import { baseType, typeOptions } from "./parameterType";
@@ -71,15 +72,26 @@ export function VariableValueInput({
       </Select>
     );
   }
-  if (kind === "number" || kind === "list")
+  if (kind === "list")
     return (
-      <ParameterInput
+      <ListInput
         key={type}
         id={id}
         label={label}
         placeholder={placeholder}
         disabled={disabled}
         type={type}
+        value={value}
+        onChange={onChange}
+      />
+    );
+  if (kind === "number")
+    return (
+      <ParameterInput
+        id={id}
+        label={label}
+        placeholder={placeholder}
+        disabled={disabled}
         commitOnChange
         value={value}
         onChange={onChange}

@@ -82,9 +82,9 @@ async function save(page: Page, url: string, action: () => Promise<void>) {
   return (await (await page.request.get(url)).json()) as Snapshot;
 }
 
-for (const [node, defaultAmount] of [
-  ["template", 42],
-  ["component", 84],
+for (const [node, defaultAmount, defaultCity] of [
+  ["template", 42, "London"],
+  ["component", 84, "Oslo"],
 ] as const) {
   test(`${node} parameters preserve drafts and restore numeric defaults`, async ({
     page,
@@ -94,6 +94,11 @@ for (const [node, defaultAmount] of [
     const inspector = page.locator(".inspector");
     const amount = inspector.getByRole("textbox", { name: /amount/ });
     const cities = inspector.getByRole("textbox", { name: /cities/ });
+    const cityValues = inspector
+      .locator(".list-input", {
+        has: page.getByRole("textbox", { name: /cities/ }),
+      })
+      .locator(".list-chip-value");
     const params = (snapshot: Snapshot) =>
       snapshot.bundle!.flow.nodes.find((item) => item.id === node)!.params;
 
@@ -131,15 +136,24 @@ for (const [node, defaultAmount] of [
     snapshot = await save(page, url, () => amount.fill(""));
     expect(params(snapshot)).not.toHaveProperty("amount");
 
+    await expect(cityValues).toHaveText([defaultCity]);
+    snapshot = await save(page, url, () =>
+      inspector
+        .getByRole("button", { name: `Remove ${defaultCity}`, exact: true })
+        .click(),
+    );
+    expect(params(snapshot).cities).toEqual([]);
+    // A comma turns the typed text into a value; the rest stays typed.
     snapshot = await save(page, url, async () => {
-      await cities.fill("");
       await cities.pressSequentially("New York, Paris");
-      await expect(cities).toHaveValue("New York, Paris");
+      await expect(cityValues).toHaveText(["New York"]);
+      await expect(cities).toHaveValue("Paris");
     });
     expect(params(snapshot).cities).toEqual(["New York", "Paris"]);
     await page.reload();
     await page.locator(`.react-flow__node[data-id="${node}"]`).click();
-    await expect(cities).toHaveValue("New York, Paris");
+    await expect(cityValues).toHaveText(["New York", "Paris"]);
+    await expect(cities).toHaveValue("");
     await expect(amount).toHaveValue(String(defaultAmount));
 
     const run = await (
@@ -199,7 +213,7 @@ test("navigation keeps an incomplete numeric Inspector draft until it is correct
   ).toBe(12.5);
 });
 
-test("typed lists save as JSON values, protect invalid drafts, and execute", async ({
+test("typed lists edit values as chips, save JSON values, protect invalid drafts, and execute", async ({
   page,
 }) => {
   const url = await prepare(page);
@@ -233,38 +247,78 @@ SELECT {{ columns }} FROM (
   const inspector = page.locator(".inspector");
   const field = (name: string) =>
     inspector.getByRole("textbox", { name, exact: true });
+  const list = (name: string) =>
+    inspector.locator(".list-input", {
+      has: page.getByRole("textbox", { name, exact: true }),
+    });
+  const values = (name: string) => list(name).locator(".list-chip-value");
   const params = (snapshot: Snapshot) => snapshot.bundle!.flow.nodes[0].params;
 
-  for (const { name, text, value } of [
-    { name: "amounts", text: "1, -2.5, 3e2", value: [1, -2.5, 300] },
-    { name: "flags", text: "true, false", value: [true, false] },
-    { name: "cities", text: "New York, Paris", value: ["New York", "Paris"] },
+  for (const { name, initial, text, value } of [
+    {
+      name: "amounts",
+      initial: ["1"],
+      text: "1, -2.5, 3e2",
+      value: [1, -2.5, 300],
+    },
+    {
+      name: "flags",
+      initial: ["true"],
+      text: "true, FALSE",
+      value: [true, false],
+    },
+    {
+      name: "cities",
+      initial: ["London"],
+      text: "New York, Paris",
+      value: ["New York", "Paris"],
+    },
     {
       name: "columns",
+      initial: ["amounts", "flags", "cities"],
       text: "flags, amounts, cities",
       value: ["flags", "amounts", "cities"],
     },
   ]) {
-    const empty = await save(page, url, () => field(name).fill(""));
+    await expect(values(name)).toHaveText(initial);
+    const empty = await save(page, url, async () => {
+      for (const item of initial)
+        await list(name)
+          .getByRole("button", { name: `Remove ${item}`, exact: true })
+          .click();
+    });
     expect(params(empty)[name]).toEqual([]);
-    await field(name).blur();
-    await expect(field(name)).toHaveValue("");
-    const saved = await save(page, url, () => field(name).fill(text));
+    await expect(values(name)).toHaveCount(0);
+    const saved = await save(page, url, async () => {
+      await field(name).fill(text);
+      await field(name).blur();
+    });
     expect(params(saved)[name]).toEqual(value);
+    await expect(values(name)).toHaveText(value.map(String));
+    await expect(field(name)).toHaveValue("");
   }
 
-  for (const { name, invalid, corrected, message } of [
+  for (const { name, invalid, message, fix } of [
     {
       name: "amounts",
-      invalid: "1, abc, 300",
-      corrected: "1, -2.5, 300",
-      message: "Item 2: enter a finite number.",
+      invalid: "abc",
+      message: "amounts: “abc” is not a number.",
+      // Clicking the value edits it in place.
+      fix: async () => {
+        await values("amounts").filter({ hasText: "abc" }).click();
+        await expect(field("amounts")).toHaveValue("abc");
+        await page.keyboard.type("4");
+        await page.keyboard.press("Enter");
+      },
     },
     {
       name: "flags",
-      invalid: "true, maybe",
-      corrected: "true, false",
-      message: "Item 2: enter true or false.",
+      invalid: "maybe",
+      message: "flags: “maybe” is not true or false.",
+      fix: () =>
+        list("flags")
+          .getByRole("button", { name: "Remove maybe", exact: true })
+          .click(),
     },
   ]) {
     const before: Snapshot = await (await page.request.get(url)).json();
@@ -272,8 +326,9 @@ SELECT {{ columns }} FROM (
     await field(name).blur();
     await expect(field(name)).toHaveAttribute("aria-invalid", "true");
     await expect(field(name)).not.toBeFocused();
-    await expect(inspector.locator(".parameter-list-error")).toHaveText(
-      message,
+    await expect(list(name).locator(".list-chip.invalid")).toHaveText(invalid);
+    await expect(inspector.locator(".list-input-error")).toHaveText(
+      message.slice(name.length + 2),
     );
     await page.getByRole("link", { name: "Code", exact: true }).click();
     const guard = page.getByRole("dialog", {
@@ -284,20 +339,19 @@ SELECT {{ columns }} FROM (
     await guard
       .getByRole("button", { name: "Stay on this page", exact: true })
       .click();
-    await expect(field(name)).toHaveValue(invalid);
+    await expect(list(name).locator(".list-chip.invalid")).toHaveText(invalid);
     expect((await (await page.request.get(url)).json()).revision).toBe(
       before.revision,
     );
-    // Correcting back to the saved value needs no write.
-    await field(name).fill(corrected);
+    await fix();
     await field(name).blur();
     await expect(page.locator(".save-status")).toHaveText("All changes saved");
-    await expect(inspector.locator(".parameter-list-error")).toHaveCount(0);
+    await expect(inspector.locator(".list-input-error")).toHaveCount(0);
   }
 
   await page.reload();
-  await expect(field("amounts")).toHaveValue("1, -2.5, 300");
-  await expect(field("flags")).toHaveValue("true, false");
+  await expect(values("amounts")).toHaveText(["1", "-2.5", "300", "4"]);
+  await expect(values("flags")).toHaveText(["true", "false"]);
   const compiled = await page.request.get(
     `${url}/compile/lists?environment=dev`,
   );
@@ -319,7 +373,7 @@ SELECT {{ columns }} FROM (
   expect(preview.rows.map((row: { values: unknown[] }) => row.values)).toEqual([
     [
       [true, false],
-      [1, -2.5, 300],
+      [1, -2.5, 300, 4],
       ["New York", "Paris"],
     ],
   ]);

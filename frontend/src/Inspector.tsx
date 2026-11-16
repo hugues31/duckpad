@@ -18,7 +18,7 @@ import { nodeCode, nodeEntity, nodeSourcePath } from "./nodeCode";
 import NodeDocumentation from "./NodeDocumentation";
 import NodeInfo from "./NodeInfo";
 import { numberBoundsError } from "./numberBounds";
-import { listInputError } from "./listInput";
+import { listInputError } from "./listValues";
 import { baseType, typeArgument } from "./parameterType";
 import { PartitionInspector } from "./PartitionControls";
 import QueryBuilder from "./QueryBuilder";
