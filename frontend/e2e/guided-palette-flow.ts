@@ -15,6 +15,13 @@ export async function verifyGuidedPalette(page: Page) {
   const added = async () =>
     (await snapshot()).bundle.flow.nodes.at(-1).id as string;
   const save = (edit: () => Promise<unknown>) => autosaved(page, edit);
+  const add = async (label: string) => {
+    await dragPaletteNode(page, label);
+    await expect(
+      inspector.locator(".inspector-title .panel-heading > span"),
+    ).toHaveText(label);
+    await expect(page.locator(".save-status")).toHaveText("All changes saved");
+  };
   const run = async () => {
     const button = page.getByRole("button", { name: "Run", exact: true });
     await expect(button).toBeEnabled();
@@ -34,7 +41,7 @@ export async function verifyGuidedPalette(page: Page) {
     await expect(button).toBeEnabled();
   };
   const load = async (filename: string, csv: string) => {
-    await dragPaletteNode(page, "Load CSV");
+    await add("Load CSV");
     await expect(
       inspector.getByRole("combobox", { name: /^file/ }),
     ).toHaveValue("");
@@ -89,7 +96,7 @@ export async function verifyGuidedPalette(page: Page) {
     "customer_id,region\n1,North\n2,South\n3,West\n",
   );
   await run();
-  await dragPaletteNode(page, "Join");
+  await add("Join");
   await connect("left", orders);
   await connect("right", customers);
   await save(async () => {
@@ -106,7 +113,7 @@ export async function verifyGuidedPalette(page: Page) {
   const join = await added();
   await run();
   await expect(inspector).toContainText("right_");
-  await dragPaletteNode(page, "Filter");
+  await add("Filter");
   await connect("source", join);
   await save(async () => {
     await inspector
@@ -123,11 +130,11 @@ export async function verifyGuidedPalette(page: Page) {
     "paid",
   );
   await run();
-  await dragPaletteNode(page, "Aggregate");
+  await add("Aggregate");
   await connect("source", filter);
   await save(async () => {
     await inspector
-      .getByLabel("Group by columns", { exact: true })
+      .getByRole("listbox", { name: "Group by columns", exact: true })
       .selectOption(["region"]);
     await inspector
       .getByRole("button", { name: "Add a measure", exact: true })
@@ -167,7 +174,7 @@ export async function verifyGuidedPalette(page: Page) {
   await expect(
     inspector.getByRole("textbox", { name: /Advanced SQL/ }),
   ).toHaveValue(/SUM\("amount"\)/);
-  await dragPaletteNode(page, "Export Parquet");
+  await add("Export Parquet");
   await connect("source", aggregate);
   await run();
   await page.getByRole("tab", { name: /^Log/ }).click();

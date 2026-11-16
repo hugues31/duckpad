@@ -15,6 +15,11 @@ async function prepare(page: Page) {
     (await page.request.get(endpoint)).json();
   const snapshot = await read();
   const bundle = snapshot.bundle!;
+  // Preserve coverage of the expression helper used by existing projects.
+  bundle.templates.filter = bundle.templates.filter.replace(
+    'conditions(source) = {"mode":"and","conditions":[]}',
+    'expression(source) = "amount > 0"',
+  );
   bundle.templates.rows = `-- @label Rows
 -- @output result
 SELECT 1 AS amount;`;

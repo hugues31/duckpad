@@ -507,10 +507,9 @@ test("capture node icons and colors, and the icon library", async ({
   const endpoint = `/api/worktrees/${worktree.id}`;
   const { revision, bundle } = await (await page.request.get(endpoint)).json();
   const styled = (code: string, icon: string, color: string) =>
-    code.replace(
-      /^(-- @label.*\n)/m,
-      `$1-- @icon ${icon}\n-- @color ${color}\n`,
-    );
+    code
+      .replace(/^-- @(?:icon|color).*\n/gm, "")
+      .replace(/^(-- @label.*\n)/m, `$1-- @icon ${icon}\n-- @color ${color}\n`);
   for (const [file, icon, color] of [
     ["nodes/enriched.sql", "left-join", "purple"],
     ["nodes/period.sql", "date", "orange"],
