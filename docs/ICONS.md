@@ -191,8 +191,6 @@ own colors, so a red node is not a failed node.
 | `lock` | secure, private |
 
 Every built-in template declares its dedicated `@icon`, including loaders and
-exports for each format, column selection and cleaning. Older built-in nodes
-without a directive use the corresponding icon as a presentation fallback.
-Custom SQL and Python nodes without a directive use `sql` and `python`; any
-explicit valid `@icon` takes precedence. See the [default palette](DATA_PREPARATION.md)
+exports for each format, column selection and cleaning. Nodes without a
+directive use `sql` or `python`; any explicit valid `@icon` takes precedence. See the [default palette](DATA_PREPARATION.md)
 for the complete set of transformations.

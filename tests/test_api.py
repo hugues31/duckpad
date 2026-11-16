@@ -66,31 +66,6 @@ def test_session_reports_the_packaged_version(client):
     )
 
 
-def test_import_current_palette_preserves_custom_code_and_checks_revision(client, worktree):
-    endpoint = f"/api/worktrees/{worktree}"
-    snapshot = client.get(endpoint).json()
-    custom = "-- @label My filter\n-- @input source\n-- @output result\nSELECT * FROM {{ source }};"
-    snapshot["bundle"]["templates"] = {"filter": custom}
-    saved = client.put(endpoint, json={"revision": snapshot["revision"], "bundle": snapshot["bundle"]})
-    assert saved.status_code == 200
-    before = client.get(endpoint).json()
-    imported = client.post(endpoint + "/templates/builtins", json={"revision": before["revision"]})
-    assert imported.status_code == 200, imported.text
-    assert "filter" not in imported.json()["imported"]
-    after = client.get(endpoint).json()
-    assert after["files"]["templates/filter.sql"] == custom
-    assert set(after["bundle"]["templates"]) == set(BUILTINS)
-    assert after["bundle"]["templates"]["sort"] == BUILTINS["sort"]
-    assert (
-        client.post(endpoint + "/templates/builtins", json={"revision": before["revision"]}).status_code
-        == 409
-    )
-    assert (
-        client.post(endpoint + "/templates/builtins", json={"revision": after["revision"]}).status_code == 200
-    )
-    assert client.get(endpoint).json()["files"] == after["files"]
-
-
 def test_guided_sql_conversion_quotes_names_and_validates_types_without_writing(client, worktree):
     endpoint = f"/api/worktrees/{worktree}"
     before = client.get(endpoint).json()

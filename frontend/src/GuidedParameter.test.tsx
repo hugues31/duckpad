@@ -145,3 +145,60 @@ it("keeps advanced SQL editable without silently replacing it with form state", 
   expect(change).toHaveBeenCalledWith("amount > 10");
   expect(screen.queryByText("Add condition")).toBeNull();
 });
+
+it("chooses columns with checkboxes, in the order they are checked", () => {
+  render(<Form type="group_columns(orders)" saved={["missing"]} />);
+  // A saved name the input lacks stays listed so it can be unchecked.
+  fireEvent.click(screen.getByRole("checkbox", { name: "missing" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: /^status/ }));
+  fireEvent.click(screen.getByRole("checkbox", { name: /^id/ }));
+  expect(screen.getByRole("status").textContent).toBe('["status","id"]');
+  expect(screen.queryByRole("checkbox", { name: "missing" })).toBeNull();
+});
+
+it("offers the variables of the environment as a condition value", () => {
+  const change = vi.fn();
+  const variable = (type: string, value: Json) => ({
+    type,
+    description: "",
+    environments: {},
+    errors: [],
+    warnings: [],
+    values: { dev: { value } },
+    usages: [],
+  });
+  render(
+    <GuidedParameter
+      type="conditions(orders)"
+      name="condition"
+      value={{ column: "amount", operator: ">=", value: "10" }}
+      schemas={schemas}
+      expressionVariables={{
+        environment: "dev",
+        summary: {
+          file_error: null,
+          undeclared: {},
+          diagnostics: [],
+          warnings: [],
+          declarations: {
+            threshold: variable("number", 20),
+            schema_name: variable("identifier", "DEMO"),
+          },
+        },
+      }}
+      onChange={change}
+    />,
+  );
+  const source = screen.getByLabelText("Value source") as HTMLSelectElement;
+  // Only variables an expression can bind are offered, with their value.
+  expect([...source.options].map((o) => o.textContent)).toEqual([
+    "Fixed value",
+    "threshold · 20",
+  ]);
+  fireEvent.change(source, { target: { value: "threshold" } });
+  expect(change).toHaveBeenCalledWith({
+    column: "amount",
+    operator: ">=",
+    value: "{{ var.threshold }}",
+  });
+});

@@ -457,7 +457,6 @@
   "importComplete": "Unabhängige Kopie importiert",
   "noMatches": "Keine Zeilen entsprechen diesen Filtern",
   "clear": "Leeren",
-  "guidedConfiguration": "Geführte Konfiguration",
   "schemaHint": "Verbinden Sie die Eingabeknoten und führen Sie sie aus, um ihre Spalten zu sehen.",
   "column": "Spalte",
   "operator": "Operator",
@@ -468,7 +467,6 @@
   "function": "Funktion",
   "alias": "Name der Ausgabespalte",
   "addMeasure": "Kennzahl hinzufügen",
-  "advancedExpressionHint": "Das Formular schreibt die folgenden SQL-Ausdrücke, die bearbeitbar bleiben.",
   "executionConfiguration": "Ausführungskonfiguration",
   "externalOutcome": "Ergebnis des externen Schreibvorgangs",
   "completed": "Abgeschlossen",
@@ -1854,16 +1852,11 @@
   "nullsLast": "Nullwerte zuletzt",
   "addKeyPair": "Schlüsselpaar hinzufügen",
   "addSortColumn": "Sortierspalte hinzufügen",
-  "importBuiltins": "Aktuelle integrierte Vorlagen importieren",
-  "importBuiltinsHint": "Fügt die Standardvorlagen hinzu, die diesem Projekt fehlen. Vorhandene Vorlagen, auch angepasste, bleiben unverändert.",
-  "builtinsImportedOne": "{count} Vorlage importiert",
-  "builtinsImportedMany": "{count} Vorlagen importiert",
-  "builtinsUpToDate": "Alle Standardvorlagen sind bereits in diesem Projekt",
   "codeTypeConditions": "conditions(input): Boolesche Gruppen und typisierte Vergleiche oder ein erweitertes SQL-Prädikat.",
   "codeTypeJoinKeys": "join_keys(left,right): Gleichheits-Schlüsselpaare aus zwei Ports. Verwenden Sie im SQL die Aliasse l und r.",
   "codeTypeJoinedColumns": "joined_columns(left,right): alle Spalten mit eindeutigen right_-Aliassen, nur linke Spalten oder eine SQL-Projektion. Verwenden Sie die Aliasse l und r.",
   "codeTypeGroupColumns": "group_columns(input): gewählte Spaltennamen gefolgt von einem Komma oder leerer Text für ein Gesamtaggregat. Direkt vor die Kennzahlen im SELECT setzen; GROUP BY ALL verwenden.",
   "codeTypeMeasures": "measures(input): Aggregatfunktionen, Spalten und eindeutige Aliasse oder eine SQL-Projektion.",
   "codeTypeOrdering": "ordering(input): geordnete Spalten mit ASC/DESC und NULLS FIRST/LAST oder eine SQL-Sortierliste.",
-  "codeTypeColumns": "columns(input): ein oder mehrere Spaltennamen oder eine SQL-Ausdrucksliste. Verwenden Sie 1 als erweiterte Partition, um alle Zeilen zu gruppieren."
+  "codeTypeColumns": "columns(input): ein oder mehrere Spaltennamen oder eine SQL-Ausdrucksliste."
 }

@@ -21,8 +21,6 @@ import { numberBoundsError } from "./numberBounds";
 import { listInputError } from "./listValues";
 import { baseType, typeArgument } from "./parameterType";
 import { PartitionInspector } from "./PartitionControls";
-import { GUIDED_TYPES } from "./GuidedParameter";
-import QueryBuilder from "./QueryBuilder";
 import type { ResultsTab } from "./results";
 import ResultSummary from "./ResultSummary";
 import { useWorkspace } from "./shell";
@@ -373,23 +371,6 @@ export default function Inspector({
               onChange={(next) => update(() => next)}
             />
             {!!parameters.length && <h4>{t("parameters")}</h4>}
-            {!parameters.some((p) =>
-              GUIDED_TYPES.includes(baseType(p.type)),
-            ) && (
-              <QueryBuilder
-                kind={node.preset || node.template || node.origin || ""}
-                parameters={parameters.map((p) => p.name)}
-                schemas={inputColumns}
-                variables={bindable ? snapshot.variables : null}
-                environment={environment}
-                onChange={(values) =>
-                  update((current) => ({
-                    ...current,
-                    params: { ...current.params, ...values },
-                  }))
-                }
-              />
-            )}
             {sourceKind === "load_table" &&
               !connections.some((c) => c.family === "database") && (
                 <ConnectionOnboarding

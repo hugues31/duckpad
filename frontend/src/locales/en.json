@@ -457,7 +457,6 @@
   "importComplete": "Independent copy imported",
   "noMatches": "No rows match these filters",
   "clear": "Clear",
-  "guidedConfiguration": "Guided configuration",
   "schemaHint": "Connect and run the input nodes to see their columns.",
   "column": "Column",
   "operator": "Operator",
@@ -468,7 +467,6 @@
   "function": "Function",
   "alias": "Output column name",
   "addMeasure": "Add a measure",
-  "advancedExpressionHint": "The form writes the SQL expressions below, which stay editable.",
   "executionConfiguration": "Execution configuration",
   "externalOutcome": "External write outcome",
   "completed": "Completed",
@@ -1854,16 +1852,11 @@
   "nullsLast": "Nulls last",
   "addKeyPair": "Add key pair",
   "addSortColumn": "Add sort column",
-  "importBuiltins": "Import current built-in templates",
-  "importBuiltinsHint": "Add the default templates this project lacks. Templates it already has, including customized ones, stay unchanged.",
-  "builtinsImportedOne": "{count} template imported",
-  "builtinsImportedMany": "{count} templates imported",
-  "builtinsUpToDate": "Every default template is already in this project",
   "codeTypeConditions": "conditions(input): Boolean groups and typed comparisons, or an advanced SQL predicate.",
   "codeTypeJoinKeys": "join_keys(left,right): equality key pairs from two ports. Use aliases l and r in the SQL.",
   "codeTypeJoinedColumns": "joined_columns(left,right): all columns with unique right_ aliases, left columns, or a SQL projection. Use aliases l and r.",
   "codeTypeGroupColumns": "group_columns(input): selected column names followed by a comma, or empty text for a global aggregate. Place immediately before the measures in SELECT; use GROUP BY ALL.",
   "codeTypeMeasures": "measures(input): aggregate functions, columns and unique aliases, or a SQL projection.",
   "codeTypeOrdering": "ordering(input): ordered columns with ASC/DESC and NULLS FIRST/LAST, or a SQL ordering list.",
-  "codeTypeColumns": "columns(input): one or more column names, or a SQL expression list. Use 1 as an advanced partition to group every row."
+  "codeTypeColumns": "columns(input): one or more column names, or a SQL expression list."
 }

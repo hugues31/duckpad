@@ -473,15 +473,19 @@ def render_parameter(
     if kind in PREPARATION_TYPES:
         return render_preparation(kind, value, (input_schemas or {}).get(argument))
     if kind in GUIDED_TYPES:
+        # Advanced SQL is bound before validation; a form value once rendered.
         if isinstance(value, str):
             value = bind_variables(name, value, variables or {}, placeholders or {})
         try:
-            return render_guided(
+            sql = render_guided(
                 kind, value, [(input_schemas or {}).get(port) for port in input_ports(kind, argument)]
             )
         except Problem as error:
             # Name the setting: a node has several forms and the message alone is ambiguous.
             raise Problem(f"{name}: {error}", error.status, error.detail) from error
+        return (
+            sql if isinstance(value, str) else bind_variables(name, sql, variables or {}, placeholders or {})
+        )
     if kind == "connection":
         if is_project_files(value):
             # Only file and destination parameters can resolve project files.

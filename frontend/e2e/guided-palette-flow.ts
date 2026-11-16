@@ -134,8 +134,9 @@ export async function verifyGuidedPalette(page: Page) {
   await connect("source", filter);
   await save(async () => {
     await inspector
-      .getByRole("listbox", { name: "Group by columns", exact: true })
-      .selectOption(["region"]);
+      .getByRole("group", { name: "Group by columns", exact: true })
+      .getByRole("checkbox", { name: /^region\b/ })
+      .check();
     await inspector
       .getByRole("button", { name: "Add a measure", exact: true })
       .click();

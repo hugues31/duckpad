@@ -75,10 +75,11 @@ def references(params):
 
 
 def parameter_texts(value):
-    """The texts of a parameter value that can hold expression references."""
+    """The texts of a parameter value that can hold expression references, guided settings included."""
     if isinstance(value, str):
         return [value]
-    return [item for item in value if isinstance(item, str)] if isinstance(value, list) else []
+    items = value.values() if isinstance(value, dict) else value if isinstance(value, list) else []
+    return [text for item in items for text in parameter_texts(item)]
 
 
 def expression_references(value):
@@ -98,7 +99,9 @@ def referenced(params):
 def substitute(value, replace):
     """A parameter value with each `{{ var.name }}` replaced by `replace(name)`."""
     if isinstance(value, list):
-        return [substitute(item, replace) if isinstance(item, str) else item for item in value]
+        return [substitute(item, replace) for item in value]
+    if isinstance(value, dict):
+        return {key: substitute(item, replace) for key, item in value.items()}
     return (
         EXPRESSION_REFERENCE.sub(lambda match: replace(match[1]), value) if isinstance(value, str) else value
     )

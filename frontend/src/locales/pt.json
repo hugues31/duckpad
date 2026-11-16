@@ -457,7 +457,6 @@
   "importComplete": "Cópia independente importada",
   "noMatches": "Nenhuma linha corresponde a estes filtros",
   "clear": "Limpar",
-  "guidedConfiguration": "Configuração guiada",
   "schemaHint": "Conecte e execute os nós de entrada para ver suas colunas.",
   "column": "Coluna",
   "operator": "Operador",
@@ -468,7 +467,6 @@
   "function": "Função",
   "alias": "Nome da coluna de saída",
   "addMeasure": "Adicionar uma medida",
-  "advancedExpressionHint": "O formulário escreve as expressões SQL abaixo, que continuam editáveis.",
   "executionConfiguration": "Configuração da execução",
   "externalOutcome": "Resultado da gravação externa",
   "completed": "Concluída",
@@ -1854,16 +1852,11 @@
   "nullsLast": "Nulos por último",
   "addKeyPair": "Adicionar par de chaves",
   "addSortColumn": "Adicionar coluna de ordenação",
-  "importBuiltins": "Importar os modelos integrados atuais",
-  "importBuiltinsHint": "Adiciona os modelos padrão que faltam neste projeto. Os modelos existentes, incluindo os personalizados, ficam inalterados.",
-  "builtinsImportedOne": "{count} modelo importado",
-  "builtinsImportedMany": "{count} modelos importados",
-  "builtinsUpToDate": "Todos os modelos padrão já estão neste projeto",
   "codeTypeConditions": "conditions(input): grupos booleanos e comparações tipadas, ou um predicado SQL avançado.",
   "codeTypeJoinKeys": "join_keys(left,right): pares de chaves de igualdade de duas portas. Use os aliases l e r no SQL.",
   "codeTypeJoinedColumns": "joined_columns(left,right): todas as colunas com aliases right_ únicos, as colunas da esquerda ou uma projeção SQL. Use os aliases l e r.",
   "codeTypeGroupColumns": "group_columns(input): nomes de colunas seguidos de uma vírgula, ou texto vazio para um total geral. Coloque logo antes das medidas no SELECT; use GROUP BY ALL.",
   "codeTypeMeasures": "measures(input): funções de agregação, colunas e aliases únicos, ou uma projeção SQL.",
   "codeTypeOrdering": "ordering(input): colunas ordenadas com ASC/DESC e NULLS FIRST/LAST, ou uma lista de ordenação SQL.",
-  "codeTypeColumns": "columns(input): um ou mais nomes de colunas, ou uma lista de expressões SQL. Use 1 como partição avançada para agrupar todas as linhas."
+  "codeTypeColumns": "columns(input): um ou mais nomes de colunas, ou uma lista de expressões SQL."
 }

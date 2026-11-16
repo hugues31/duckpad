@@ -30,46 +30,15 @@ import { elapsedDuration, overran, type NodeProgress } from "./runEstimate";
 import type { TemplateKind } from "./types";
 import { useNow } from "./useNow";
 
-/** The icon a template ID suggests, by the name `@icon` would give it. */
+/** The icon of a node without `@icon`: Python or SQL, by its language. */
 function defaultIcon(kind: string) {
   // Python template IDs end with ".py", whatever their name says.
-  if (kind === "python" || kind.endsWith(".py")) return "python";
-  const defaults: Record<string, string> = {
-    load_csv: "spreadsheet",
-    load_parquet: "layers",
-    load_xlsx: "table",
-    load_json: "json",
-    load_delta: "history",
-    load_table: "database",
-    select_columns: "columns",
-    clean_values: "clean",
-    export_csv: "export",
-    export_xlsx: "file",
-    export_table: "upload",
-    export_oracle: "server",
-    union: "union",
-    sort: "sort",
-    deduplicate: "deduplicate",
-    calculate: "formula",
-    pivot: "pivot",
-    unpivot: "unpivot",
-    sample: "sample",
-    rank: "number",
-    running_total: "window",
-    export_parquet: "download",
-  };
-  if (defaults[kind]) return defaults[kind];
-  if (kind.includes("export")) return "export";
-  if (kind === "join") return "join";
-  if (kind === "filter") return "filter";
-  if (kind === "aggregate" || kind.includes("metrics")) return "aggregate";
-  if (kind.startsWith("load_")) return "import";
-  return "sql";
+  return kind === "python" || kind.endsWith(".py") ? "python" : "sql";
 }
 
 /**
  * The icon of a node or palette entry: the one its code declares with `@icon`,
- * else the one its template ID suggests. Components have their own.
+ * else the Python or SQL icon. Components have their own.
  */
 export function NodeIcon({
   kind,

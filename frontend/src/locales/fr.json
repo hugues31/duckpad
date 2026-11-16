@@ -457,7 +457,6 @@
   "importComplete": "Copie indépendante importée",
   "noMatches": "Aucune ligne ne correspond aux filtres",
   "clear": "Effacer",
-  "guidedConfiguration": "Configuration guidée",
   "schemaHint": "Connectez et exécutez les entrées pour voir leurs colonnes.",
   "column": "Colonne",
   "operator": "Opérateur",
@@ -468,7 +467,6 @@
   "function": "Fonction",
   "alias": "Nom de la colonne de sortie",
   "addMeasure": "Ajouter une mesure",
-  "advancedExpressionHint": "Le formulaire écrit les expressions SQL ci-dessous, qui restent modifiables.",
   "executionConfiguration": "Configuration de l’exécution",
   "externalOutcome": "Résultat de l’écriture externe",
   "completed": "Terminée",
@@ -1854,16 +1852,11 @@
   "nullsLast": "Valeurs nulles en dernier",
   "addKeyPair": "Ajouter une paire de clés",
   "addSortColumn": "Ajouter une colonne de tri",
-  "importBuiltins": "Importer les modèles intégrés actuels",
-  "importBuiltinsHint": "Ajoute les modèles par défaut absents de ce projet. Les modèles déjà présents, y compris personnalisés, restent inchangés.",
-  "builtinsImportedOne": "{count} modèle importé",
-  "builtinsImportedMany": "{count} modèles importés",
-  "builtinsUpToDate": "Tous les modèles par défaut sont déjà dans ce projet",
   "codeTypeConditions": "conditions(entrée) : groupes booléens et comparaisons typées, ou prédicat SQL avancé.",
   "codeTypeJoinKeys": "join_keys(gauche,droite) : paires de clés égales entre deux ports. Utilisez les alias SQL l et r.",
   "codeTypeJoinedColumns": "joined_columns(gauche,droite) : toutes les colonnes avec des alias right_ uniques, les colonnes de gauche, ou une projection SQL. Utilisez les alias l et r.",
   "codeTypeGroupColumns": "group_columns(entrée) : noms de colonnes suivis d’une virgule, ou texte vide pour un total global. Placez ce paramètre avant les mesures dans SELECT ; utilisez GROUP BY ALL.",
   "codeTypeMeasures": "measures(entrée) : fonctions d’agrégation, colonnes et alias uniques, ou projection SQL.",
   "codeTypeOrdering": "ordering(entrée) : colonnes ordonnées avec ASC/DESC et NULLS FIRST/LAST, ou liste SQL de tri.",
-  "codeTypeColumns": "columns(entrée) : un ou plusieurs noms de colonnes, ou liste d’expressions SQL. La partition SQL avancée 1 regroupe toutes les lignes."
+  "codeTypeColumns": "columns(entrée) : un ou plusieurs noms de colonnes, ou liste d’expressions SQL."
 }

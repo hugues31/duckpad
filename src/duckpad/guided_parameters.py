@@ -60,8 +60,13 @@ def fields(value, allowed):
 
 def typed_literal(value, kind):
     """Keep text as text; reject invalid numeric/Boolean comparisons before execution."""
+    from .templates import VARIABLE_REFERENCE
+
     if value is None:
         raise Problem("Use IS NULL or IS NOT NULL to compare nulls")
+    if isinstance(value, str) and VARIABLE_REFERENCE.fullmatch(value.strip()):
+        # A variable is bound by DuckDB with its own type once the SQL is rendered.
+        return value.strip()
     if isinstance(value, (dict, list)):
         raise Problem("A comparison value must be a scalar")
     if NUMERIC.match(kind):
@@ -115,7 +120,7 @@ def predicate(value, schema, depth=0):
 
 
 def render_guided(kind, value, schemas):
-    # SQL strings are the advanced mode, and keep old configured nodes compatible.
+    # A SQL string is the Advanced SQL mode of every guided type.
     from .templates import expression, expression_list
 
     schema = schemas[0]

@@ -6,8 +6,14 @@ import Select from "./Select";
 import type { Column, Json } from "./types";
 import {
   ExpressionInput,
+  ExpressionValues,
   type ExpressionVariables,
 } from "./VariableExpression";
+import {
+  expressionReference,
+  formatVariableValue,
+  usableInExpressions,
+} from "./variables";
 
 export const GUIDED_TYPES = [
   "conditions",
@@ -27,6 +33,9 @@ const initial = (kind: string): Json =>
     : kind === "joined_columns"
       ? "all"
       : [];
+/** The variable a condition value references as a whole, else "". */
+const referenced = (value: Json | undefined) =>
+  /^\{\{\s*var\.(\w+)\s*\}\}$/.exec(String(value ?? "").trim())?.[1] || "";
 const record = (value: Json): value is Row =>
   !!value && typeof value === "object" && !Array.isArray(value);
 
@@ -60,6 +69,10 @@ export default function GuidedParameter({
     typeof current === "string" &&
     !(kind === "joined_columns" && ["all", "left"].includes(current));
   const [error, setError] = useState("");
+  // Only root flow nodes receive variables; a condition value can reference one.
+  const usable = Object.entries(
+    expressionVariables?.summary?.declarations || {},
+  ).filter(([, declared]) => usableInExpressions(declared.type));
   const [pending, setPending] = useState(false);
   const choose = (
     label: string,
@@ -170,6 +183,7 @@ export default function GuidedParameter({
       );
     }
     const type = columns.find((c) => c.name === data.column)?.type || "";
+    const variable = referenced(data.value);
     return (
       <div className="measure-form">
         {choose(t("column"), data.column, (column) =>
@@ -203,13 +217,51 @@ export default function GuidedParameter({
           </Select>
         </label>
         {!String(data.operator).includes("NULL") && (
-          <label className="field">
+          <div className="field">
             <span>{t("value")}</span>
-            <input
-              value={String(data.value ?? "")}
-              onChange={(e) => change({ ...data, value: e.target.value })}
-            />
-          </label>
+            <div className="filter-value">
+              {(!!usable.length || !!variable) && (
+                <Select
+                  aria-label={t("filterValueSource")}
+                  value={variable}
+                  onChange={(e) =>
+                    change({
+                      ...data,
+                      value: e.target.value
+                        ? expressionReference(e.target.value)
+                        : "",
+                    })
+                  }
+                >
+                  <option value="">{t("fixedValue")}</option>
+                  <optgroup label={t("variables")}>
+                    {variable && !usable.some(([n]) => n === variable) && (
+                      <option value={variable}>{variable}</option>
+                    )}
+                    {usable.map(([name, declared]) => {
+                      const shown =
+                        declared.values[expressionVariables?.environment || ""];
+                      return (
+                        <option key={name} value={name}>
+                          {name} ·{" "}
+                          {shown?.error
+                            ? t("noVariableValue")
+                            : formatVariableValue(shown?.value)}
+                        </option>
+                      );
+                    })}
+                  </optgroup>
+                </Select>
+              )}
+              {!variable && (
+                <input
+                  aria-label={t("value")}
+                  value={String(data.value ?? "")}
+                  onChange={(e) => change({ ...data, value: e.target.value })}
+                />
+              )}
+            </div>
+          </div>
         )}
       </div>
     );
@@ -261,13 +313,19 @@ export default function GuidedParameter({
             {name.replaceAll("_", " ")} · {t("advancedSql")}
           </label>
           {expressionVariables ? (
-            <ExpressionInput
-              id={sqlId}
-              value={current as string}
-              variables={expressionVariables}
-              onChange={onChange}
-              onBlur={onBlur}
-            />
+            <>
+              <ExpressionInput
+                id={sqlId}
+                value={current as string}
+                variables={expressionVariables}
+                onChange={onChange}
+                onBlur={onBlur}
+              />
+              <ExpressionValues
+                value={current as string}
+                variables={expressionVariables}
+              />
+            </>
           ) : (
             <textarea
               id={sqlId}
@@ -290,25 +348,35 @@ export default function GuidedParameter({
         </Select>
       ) : kind === "columns" || kind === "group_columns" ? (
         <>
-          <label className="field">
-            <span>{t(kind === "group_columns" ? "groupBy" : "columns")}</span>
-            <Select
-              multiple
-              value={settingRows.map(String)}
-              onChange={(e) =>
-                onChange(Array.from(e.target.selectedOptions, (o) => o.value))
-              }
-            >
-              {[
-                ...new Set([
-                  ...columns.map((c) => c.name),
-                  ...settingRows.map(String),
-                ]),
-              ].map((c) => (
-                <option key={c}>{c}</option>
-              ))}
-            </Select>
-          </label>
+          <fieldset className="column-choices">
+            <legend>
+              {t(kind === "group_columns" ? "groupBy" : "columns")}
+            </legend>
+            {/* Schema order; a saved name the input lacks stays visible to uncheck. */}
+            {[
+              ...columns,
+              ...settingRows
+                .map(String)
+                .filter((name) => !columns.some((c) => c.name === name))
+                .map((name) => ({ name, type: "" })),
+            ].map((column) => (
+              <label className="preparation-toggle" key={column.name}>
+                <input
+                  type="checkbox"
+                  checked={settingRows.includes(column.name)}
+                  onChange={(e) =>
+                    onChange(
+                      e.target.checked
+                        ? [...settingRows.map(String), column.name]
+                        : settingRows.filter((name) => name !== column.name),
+                    )
+                  }
+                />
+                {column.name}
+                {column.type && <small className="muted">{column.type}</small>}
+              </label>
+            ))}
+          </fieldset>
           {kind === "group_columns" && (
             <p className="muted small">{t("noGroupsHint")}</p>
           )}

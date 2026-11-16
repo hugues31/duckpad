@@ -223,7 +223,7 @@ COPY {{ source }} TO {{ destination }} (FORMAT CSV, HEADER TRUE);
 SELECT 'The report has no rows' AS problem FROM {{ source }} HAVING COUNT(*) = 0;
 """
 
-    def node(key, template, label, x, y, **params):
+    def node(key, template, label, x, y, /, **params):
         return {
             "id": key,
             "template": template,
@@ -315,18 +315,28 @@ SELECT 'The report has no rows' AS problem FROM {{ source }} HAVING COUNT(*) = 0
         node("entry", "filter", "All orders", 0, 0),
         node("append", "union", "Append twice", 260, 0),
         node("unique", "deduplicate", "Keep one order", 520, 0, keys=["order_id"], order=order),
-        node("gross", "calculate", "Add gross amount", 780, 0),
-        node("sample", "sample", "Repeatable sample", 1040, 0, percent=100),
+        node("gross", "calculate", "Add gross amount", 780, 0, calculations="amount * 1.2 AS gross_amount"),
+        node("sample", "sample", "Repeatable sample", 1040, 0, key="order_id", percent=100),
         node(
             "rank",
             "rank",
             "Rank orders",
             1300,
             0,
+            groups=["region"],
             order=[{"column": "amount", "direction": "desc"}],
             name="amount_rank",
         ),
-        node("running", "running_total", "Cumulative sales", 1560, 0, order=order),
+        node(
+            "running",
+            "running_total",
+            "Cumulative sales",
+            1560,
+            0,
+            groups=["region"],
+            order=order,
+            value="amount",
+        ),
         node("sort", "sort", "Order by identifier", 1820, 0, order=order),
         node(
             "parquet",
@@ -336,7 +346,17 @@ SELECT 'The report has no rows' AS problem FROM {{ source }} HAVING COUNT(*) = 0
             0,
             destination="preparation-tour.parquet",
         ),
-        node("pivot", "pivot", "Sales by channel", 780, 260),
+        node(
+            "pivot",
+            "pivot",
+            "Sales by channel",
+            780,
+            260,
+            groups=["region"],
+            category="channel",
+            value="amount",
+            categories=["Web", "Retail", "Partner"],
+        ),
         node("unpivot", "unpivot", "Channel rows", 1040, 260, columns=["Web", "Retail", "Partner"]),
         node(
             "summary",
