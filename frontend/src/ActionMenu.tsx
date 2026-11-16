@@ -1,0 +1,146 @@
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
+import { createPortal } from "react-dom";
+import type { LucideIcon } from "lucide-react";
+
+export interface ActionItem {
+  id: string;
+  label: string;
+  /** What the action does, under its label, when the label alone does not say. */
+  hint?: string;
+  run: () => void;
+  icon?: LucideIcon;
+  disabled?: boolean;
+  danger?: boolean;
+}
+
+/** Room kept between a menu and the edges of the window, in pixels. */
+const MARGIN = 8;
+
+/** Move focus between menu items with the arrow, Home and End keys. */
+export function moveMenuFocus(event: KeyboardEvent, items: HTMLElement[]) {
+  if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+  event.preventDefault();
+  const current = items.indexOf(document.activeElement as HTMLElement);
+  const index =
+    event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? items.length - 1
+        : (current + (event.key === "ArrowDown" ? 1 : -1) + items.length) %
+          items.length;
+  items[index]?.focus();
+}
+
+/** Keyboard and pointer actions of a context menu. */
+export function ActionMenu({
+  label,
+  items,
+  position,
+  align = "start",
+  onClose,
+}: {
+  label: string;
+  items: ActionItem[];
+  position: { x: number; y: number };
+  /** Which edge of the menu `position.x` gives: its left one, or its right one. */
+  align?: "start" | "end";
+  onClose: () => void;
+}) {
+  const menu = useRef<HTMLDivElement>(null);
+  // Measured from the left edge first: beside the right one, the menu would be squeezed.
+  const [point, setPoint] = useState({ x: MARGIN, y: position.y });
+  useLayoutEffect(() => {
+    const bounds = menu.current!.getBoundingClientRect();
+    const left = align === "end" ? position.x - bounds.width : position.x;
+    setPoint({
+      x: Math.max(
+        MARGIN,
+        Math.min(left, window.innerWidth - bounds.width - MARGIN),
+      ),
+      y: Math.max(
+        MARGIN,
+        Math.min(position.y, window.innerHeight - bounds.height - MARGIN),
+      ),
+    });
+  }, [position, align]);
+  useEffect(() => {
+    (
+      menu.current?.querySelector<HTMLButtonElement>("button:not(:disabled)") ||
+      menu.current
+    )?.focus();
+  }, []);
+  useEffect(() => {
+    const outside = (event: Event) => {
+      if (!menu.current?.contains(event.target as Node)) onClose();
+    };
+    // Zooming or scrolling would leave the menu beside another node.
+    document.addEventListener("pointerdown", outside, true);
+    document.addEventListener("wheel", outside, {
+      capture: true,
+      passive: true,
+    });
+    window.addEventListener("resize", onClose);
+    return () => {
+      document.removeEventListener("pointerdown", outside, true);
+      document.removeEventListener("wheel", outside, true);
+      window.removeEventListener("resize", onClose);
+    };
+  }, [onClose]);
+  return createPortal(
+    <div
+      ref={menu}
+      className="node-action-menu"
+      role="menu"
+      tabIndex={-1}
+      aria-label={label}
+      style={{ left: point.x, top: point.y }}
+      onContextMenu={(event) => event.preventDefault()}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) onClose();
+      }}
+      onKeyDown={(event) => {
+        event.stopPropagation();
+        if (event.key === "Escape" || event.key === "Tab") {
+          if (event.key === "Escape") event.preventDefault();
+          onClose();
+        }
+        moveMenuFocus(event, [
+          ...menu.current!.querySelectorAll<HTMLElement>(
+            "button:not(:disabled)",
+          ),
+        ]);
+      }}
+    >
+      {items.map((item) => (
+        <button
+          key={item.id}
+          role="menuitem"
+          tabIndex={-1}
+          disabled={item.disabled}
+          className={item.danger ? "danger" : undefined}
+          onClick={() => {
+            onClose();
+            item.run();
+          }}
+        >
+          {item.icon && <item.icon size={14} aria-hidden="true" />}
+          {item.hint ? (
+            <span className="action-text">
+              {item.label}
+              <small>{item.hint}</small>
+            </span>
+          ) : (
+            item.label
+          )}
+        </button>
+      ))}
+    </div>,
+    document.body,
+  );
+}
