@@ -485,6 +485,7 @@ def test_connection_creation_rejects_duplicates_without_overwriting_secrets(app,
         ("connection", {"environments": {"dev": []}}, "environments.dev"),
         ("connection", {"environments": {"dev": "oops"}}, "environments.dev"),
         ("connection", {"secret_fields": [None]}, "secret_fields[0]"),
+        ("connection", {"name": None}, "name"),
     ],
 )
 def test_malformed_catalog_edits_name_the_field_and_leave_storage_unchanged(
@@ -503,6 +504,25 @@ def test_malformed_catalog_edits_name_the_field_and_leave_storage_unchanged(
     assert f"{kind}.{field} must be" in response.json()["error"]
     assert {entity: store.all(entity) for entity in before} == before
     assert client.get("/api/catalog").json() == public
+
+
+@pytest.mark.parametrize("create", [True, False], ids=["create", "update"])
+@pytest.mark.parametrize(
+    ("body", "message"),
+    [
+        ({**FILES, "description": "Files"}, "Unknown connection fields: description"),
+        ({key: value for key, value in FILES.items() if key != "name"}, "connection.name must be a string"),
+    ],
+    ids=["unknown-field", "no-name"],
+)
+def test_connections_without_a_name_or_with_unknown_fields_are_rejected(app, client, create, body, message):
+    if not create:
+        assert client.put("/api/catalog/connection?create=true", json=FILES).status_code == 200
+    before = app.state.services.store.all("connection")
+    response = client.put("/api/catalog/connection", params={"create": create}, json=body)
+    assert response.status_code == 422, response.text
+    assert message in response.json()["error"]
+    assert app.state.services.store.all("connection") == before
 
 
 @pytest.mark.parametrize("changes", [{"environments": {"dev": None}}, {"id": []}])
@@ -638,8 +658,8 @@ def assert_rejected_admin_edit(app, client, worktrees, method, path, body, statu
         ("connector", {"id": "../invalid"}, 400),
         ("connector", {"id": "custom", "family": "database", "init_sql": "ATTACH"}, 400),
         ("connector", {"id": "custom", "family": "database", "parameters": [{"name": "alias"}]}, 400),
-        ("connection", {"id": "files", "connector": "missing", "environments": {}}, 400),
-        ("connection", {"id": "files", "connector": "folder"}, 400),
+        ("connection", {"id": "files", "name": "Files", "connector": "missing", "environments": {}}, 400),
+        ("connection", {"id": "files", "name": "Files", "connector": "folder"}, 400),
     ],
 )
 def test_invalid_catalog_save_preserves_results(app, client, executed_projects, kind, body, status):

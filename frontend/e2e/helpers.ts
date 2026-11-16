@@ -174,12 +174,15 @@ export async function replaceCode(page: Page, text: string) {
 }
 
 /**
- * Replace the text of the file open in the Code tab through the clipboard.
- * A newly selected file mounts a hidden editor, which ignores focus and
- * reports no changes until it shows.
+ * Replace the text of a Monaco editor, by default the file open in the Code
+ * tab, through the clipboard. A newly selected file mounts a hidden editor,
+ * which ignores focus and reports no changes until it shows.
  */
-export async function editCode(page: Page, text: string) {
-  const editor = page.locator(".code-workspace .monaco-editor");
+export async function editCode(
+  page: Page,
+  text: string,
+  editor = page.locator(".code-workspace .monaco-editor"),
+) {
   await expect(editor).toBeVisible();
   await editor.locator("textarea").focus();
   await page.keyboard.press("ControlOrMeta+A");

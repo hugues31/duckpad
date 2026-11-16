@@ -43,10 +43,16 @@ def check_fields(data, fields, path):
 
 def check_shape(kind, data):
     """Check containers and known fields before business rules; preserve extra metadata and values."""
-    fields: dict[str, type] = dict.fromkeys(("id", "name", "description"), str)
+    fields: dict[str, type] = dict.fromkeys(("id", "name"), str)
     if kind == "connector":
         fields.update(
-            family=str, compatibility=str, init_sql=str, parameters=list, extensions=list, capabilities=list
+            description=str,
+            family=str,
+            compatibility=str,
+            init_sql=str,
+            parameters=list,
+            extensions=list,
+            capabilities=list,
         )
     else:
         fields.update(connector=str, environments=dict, secret_fields=list)
@@ -63,6 +69,10 @@ def check_shape(kind, data):
         for index, capability in enumerate(data.get("capabilities", [])):
             require_type(capability, str, f"connector.capabilities[{index}]")
     else:
+        # Unlike a connector definition, a connection is stored in columns: no free metadata.
+        if unknown := sorted(data.keys() - fields.keys()):
+            raise Problem(f"Unknown connection fields: {', '.join(unknown)}", 422)
+        require_type(data.get("name"), str, "connection.name")
         for environment, values in data.get("environments", {}).items():
             require_type(values, dict, f"connection.environments.{environment}")
         for index, field in enumerate(data.get("secret_fields", [])):

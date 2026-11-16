@@ -1,6 +1,11 @@
 import { execFileSync } from "node:child_process";
 import { expect, test } from "@playwright/test";
-import { dragPaletteNode, openInstanceSettings, signIn } from "./helpers";
+import {
+  dragPaletteNode,
+  editCode,
+  openInstanceSettings,
+  signIn,
+} from "./helpers";
 
 test("connection IDs stay fixed and duplicate creation preserves the original", async ({
   page,
@@ -328,16 +333,12 @@ test("connector JSON validation names the malformed field and keeps the editor o
     (item: { id: string }) => item.id === "folder",
   );
   const definition = { ...original, parameters: [null] };
-  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
-  const replace = async (value: unknown) => {
-    await dialog.locator(".monaco-editor textarea").focus();
-    await page.keyboard.press("ControlOrMeta+A");
-    await page.evaluate(
-      (text) => navigator.clipboard.writeText(text),
+  const replace = (value: unknown) =>
+    editCode(
+      page,
       JSON.stringify(value, null, 2),
+      dialog.locator(".monaco-editor"),
     );
-    await page.keyboard.press("ControlOrMeta+V");
-  };
   await replace(definition);
   const response = page.waitForResponse(
     (response) =>
