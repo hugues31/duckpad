@@ -1,9 +1,13 @@
 import copy
+import json
 
 import duckdb
 import pytest
+from fastapi.testclient import TestClient
 from helpers import wait_run
 
+from duckpad import secret_references
+from duckpad.app import create_app
 from duckpad.builtin_connectors import BUILTIN_CONNECTORS
 from duckpad.catalog import redact
 from duckpad.lineage import Lineage
@@ -142,6 +146,115 @@ def test_setup_rejects_data_operations_and_referenced_connector_deletion(service
     catalog.delete("connection", "hidden")
     catalog.delete("connector", "secret_test")
     assert store.get("connector", "secret_test") is None
+
+
+def retained_connection(catalog, change, value):
+    definition = catalog.connector("folder")
+    definition["parameters"].append({"name": "password", "type": "text", "secret": True})
+    catalog.save("connector", definition)
+    catalog.save(
+        "connection",
+        {
+            "id": "retained",
+            "name": "Retained settings",
+            "connector": "folder",
+            "environments": {"dev": {"root": "", "password": value}},
+        },
+        create=True,
+    )
+    if change == "reset":
+        catalog.reset("folder")
+    else:
+        if change == "remove":
+            definition["parameters"].pop()
+        else:
+            definition["parameters"][-1].pop("secret")
+        catalog.save("connector", definition)
+
+
+@pytest.mark.parametrize("change", ["remove", "unmark", "reset"])
+def test_capture_keeps_retained_fields_private(services, change):
+    store, _, catalog, _ = services
+    secret = "retained'credential-value"
+    retained_connection(catalog, change, secret)
+    public = catalog.public()["connections"][0]
+    assert public["environments"]["dev"]["password"] == "••••"
+    captured, secrets = catalog.capture(["retained"], "dev")
+    draft, draft_secrets = catalog.capture_draft(public, "dev")
+    for connections, hidden in ((captured, secrets), (draft, draft_secrets)):
+        assert connections["retained"]["settings"] == {"root": ""}
+        assert connections["retained"]["values"]["password"] == secret
+        assert secret in hidden
+        assert redact(secret.replace("'", "''"), hidden) == "••••"
+    catalog.save("connection", public)
+    saved = store.get("connection", "retained")
+    assert saved["environments"]["dev"]["password"] == secret
+    saved["environments"]["dev"]["password"] = "rotated-credential-value"
+    catalog.save("connection", saved)
+    rotated, hidden = catalog.capture(["retained"], "dev", resolve=False)
+    assert rotated["retained"]["fingerprint"] == captured["retained"]["fingerprint"]
+    assert "rotated-credential-value" in hidden
+
+
+@pytest.mark.parametrize("change", ["remove", "unmark", "reset"])
+def test_retained_fields_do_not_authorize_server_secret_references(services, monkeypatch, change):
+    _, _, catalog, _ = services
+    reference = {"from": "env", "name": "DUCKPAD_SECRET_RETAINED"}
+    retained_connection(catalog, change, reference)
+
+    def unexpected_resolution(value):
+        pytest.fail("A retained reference must not be resolved")
+
+    monkeypatch.setattr(secret_references, "resolve", unexpected_resolution)
+    for resolve in (False, True):
+        with pytest.raises(Problem, match="password is no longer secret"):
+            catalog.capture(["retained"], "dev", resolve=resolve)
+    with pytest.raises(Problem, match="Only secret parameters can name a server secret"):
+        catalog.capture_draft(catalog.public()["connections"][0], "dev")
+
+
+@pytest.mark.parametrize("isolated", [False, True], ids=["embedded", "isolated"])
+@pytest.mark.parametrize("change", ["remove", "unmark", "reset"])
+def test_runs_keep_retained_connection_fields_private_for_readers(tmp_path, isolated, change):
+    app = create_app(tmp_path / "instance", watch=False, trusted_local=not isolated)
+    with TestClient(app) as client:
+        services = app.state.services
+        secret = "retained'credential-value"
+        retained_connection(services.catalog, change, secret)
+        tree = services.projects.create(
+            "Connection settings",
+            {
+                "flow": {"nodes": [{"id": "query", "template": "query", "params": {}}], "edges": []},
+                "templates": {
+                    "query": '-- @param connection: connection = "retained"\n-- @output result\nSELECT 42 AS value;'
+                },
+                "components": {},
+                "documentation": {},
+            },
+        )
+        app.state.access.grant_connections(tree["project"], ["retained"])
+        admin = next(user for user in services.store.all("user") if user["username"] == "admin")
+        app.state.access.member(tree["project"], admin["id"], "admin")
+        reader = app.state.auth.create_user("reader", "reader-test-password", "member")
+        app.state.access.member(tree["project"], reader["id"], "reader")
+        client.post(
+            "/api/login", json={"username": "admin", "password": app.state.auth.initial_password}
+        ).raise_for_status()
+        launched = client.post(f"/api/worktrees/{tree['id']}/runs", json={"environment": "dev"})
+        assert launched.status_code == 200, launched.text
+        run = wait_run(services.store, launched.json())
+        assert run["status"] == "success", run
+        assert run["connections"]["retained"]["settings"] == {"root": ""}
+        assert secret not in json.dumps(run)
+        assert services.engine.preview(tree["id"], "dev", "query")["rows"][0]["values"] == [42]
+        client.post("/api/logout").raise_for_status()
+        client.post(
+            "/api/login", json={"username": "reader", "password": "reader-test-password"}
+        ).raise_for_status()
+        response = client.get(f"/api/runs/{run['id']}")
+        assert response.status_code == 200, response.text
+        assert response.json()["connections"]["retained"]["settings"] == {"root": ""}
+        assert secret not in response.text
 
 
 def test_built_in_connectors_come_with_the_release_and_edits_are_overrides(services, monkeypatch):
