@@ -1,0 +1,21 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { url } from "../lib/docs";
+---
+
+<Layout
+  title="Page not found — Duckpad"
+  description="Find your way back to the Duckpad documentation."
+>
+  <main id="main" class="wrap" style="padding-block: 100px">
+    <p class="eyebrow">404 / A LOOSE CONNECTION</p>
+    <h1 style="font-size: 3.5rem">This path has no output.</h1>
+    <p style="margin-block: 25px">
+      The page may have moved. Start with the quickstart or return to the
+      homepage.
+    </p>
+    <a class="button" href={url("docs/quickstart/")}>
+      Open the quickstart ↗
+    </a>
+  </main>
+</Layout>

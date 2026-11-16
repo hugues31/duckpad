@@ -16,5 +16,6 @@ test-results
 playwright-report
 frontend/test-results
 frontend/playwright-report
-docs
+website/dist
+website/.astro
 tests
