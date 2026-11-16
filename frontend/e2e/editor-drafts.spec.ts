@@ -15,11 +15,6 @@ async function prepare(page: Page) {
     (await page.request.get(endpoint)).json();
   const snapshot = await read();
   const bundle = snapshot.bundle!;
-  // Preserve coverage of the expression helper used by existing projects.
-  bundle.templates.filter = bundle.templates.filter.replace(
-    'conditions(source) = {"mode":"and","conditions":[]}',
-    'expression(source) = "amount > 0"',
-  );
   bundle.templates.rows = `-- @label Rows
 -- @output result
 SELECT 1 AS amount;`;
@@ -86,8 +81,9 @@ for (const field of ["Display name", "condition"] as const) {
     const { endpoint, read, saved } = await prepare(page);
     await select(page, "filtered");
     const before = await read();
+    // The condition "true" is Advanced SQL text.
     const input = page.locator(".inspector").getByRole("textbox", {
-      name: field,
+      name: field === "condition" ? "condition · Advanced SQL" : field,
       exact: true,
     });
     const value =
@@ -283,6 +279,12 @@ test("Inspector saves guided expressions and uploads before another node opens",
   );
   const inspector = page.locator(".inspector");
   await select(page, "filtered");
+  await inspector
+    .getByRole("button", { name: "Reset to an empty form", exact: true })
+    .click();
+  await inspector
+    .getByRole("button", { name: "Add condition", exact: true })
+    .click();
   await inspector.getByLabel("Column", { exact: true }).selectOption("amount");
   await inspector.getByLabel("Operator", { exact: true }).selectOption(">");
   // The guided form writes the condition, saved when another node opens.
@@ -290,7 +292,10 @@ test("Inspector saves guided expressions and uploads before another node opens",
   await select(page, "upload");
   await expect
     .poll(async () => (await saved("filtered"))?.params.condition)
-    .toBe('"amount" > 100');
+    .toEqual({
+      mode: "and",
+      conditions: [{ column: "amount", operator: ">", value: "100" }],
+    });
 
   await inspector.getByLabel("Upload file", { exact: true }).setInputFiles({
     name: "orders.csv",

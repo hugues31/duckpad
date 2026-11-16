@@ -176,21 +176,21 @@ SELECT * FROM {{ source }} QUALIFY ROW_NUMBER() OVER (PARTITION BY {{ keys }} OR
 -- @icon formula
 -- @description Append SQL expressions with unique output names. Existing columns are preserved. Example: amount * 1.2 AS gross_amount changes 10 into 12. Nulls follow each expression's SQL semantics.
 -- @input source
--- @param calculations: expressions = "amount * 1.2 AS gross_amount"
+-- @param calculations: expressions = ""
 -- @output result
 SELECT *, {{ calculations }} FROM {{ source }};
 """,
     "pivot": """-- @label Pivot
 -- @icon pivot
--- @description Turn an explicit list of category values into columns and aggregate repeated group/category pairs. Unlisted categories are excluded; missing SUM groups produce nulls. Example: group region, category channel, value amount, categories Web/Retail sums each channel per region.
+-- @description Turn an explicit list of category values into columns and aggregate repeated group/category pairs. Without groups, one row aggregates the whole input. Unlisted categories are excluded; missing SUM groups produce nulls. Example: group region, category channel, value amount, categories Web/Retail sums each channel per region.
 -- @input source
--- @param groups: columns(source) = ["region"]
--- @param category: column(source) = "channel"
--- @param value: column(source) = "amount"
--- @param categories: list<text> = ["Web", "Retail", "Partner"]
+-- @param groups: group_columns(source) = []
+-- @param category: column(source) = ""
+-- @param value: column(source) = ""
+-- @param categories: list<text>
 -- @param function: keyword(SUM|AVG|MIN|MAX|COUNT) = "SUM"
 -- @output result
-SELECT * FROM (SELECT {{ groups }}, {{ category }}, {{ value }} FROM {{ source }}) PIVOT ({{ function }}({{ value }}) FOR {{ category }} IN ({{ categories }}));
+SELECT * FROM (SELECT {{ groups }}{{ category }}, {{ value }} FROM {{ source }}) PIVOT ({{ function }}({{ value }}) FOR {{ category }} IN ({{ categories }}));
 """,
     "unpivot": """-- @label Unpivot
 -- @icon unpivot
@@ -206,7 +206,7 @@ SELECT * FROM {{ source }} UNPIVOT INCLUDE NULLS ({{ value }} FOR {{ name }} IN 
 -- @icon sample
 -- @description Reproducible approximate percentage using MD5 of a key and seed. The same key (including null) is always kept or excluded together. Use a unique nonnull key for independent rows. Independent of input order; 0 keeps none and 100 keeps all. Example: order_id, 10 percent, seed 42.
 -- @input source
--- @param key: column(source) = "order_id"
+-- @param key: column(source) = ""
 -- @param percent: number = 10
 -- @param seed: text = "42"
 -- @output result
@@ -214,24 +214,24 @@ SELECT * FROM {{ source }} WHERE CASE WHEN {{ percent }} BETWEEN 0 AND 100 THEN 
 """,
     "rank": """-- @label Rank
 -- @icon number
--- @description Rank rows within key groups in the selected order. Equal ordering values share a rank and leave gaps. Null keys form a group. Example: partition region, amount descending ranks the largest sale first. Advanced SQL partition 1 ranks the whole input.
+-- @description Rank rows within key groups in the selected order. Equal ordering values share a rank and leave gaps. Null keys form a group. Without groups, the whole input is ranked. Example: partition region, amount descending ranks the largest sale first.
 -- @input source
--- @param groups: columns(source) = ["region"]
+-- @param groups: group_columns(source) = []
 -- @param order: ordering(source) = []
 -- @param name: identifier = "rank"
 -- @output result
-SELECT *, RANK() OVER (PARTITION BY {{ groups }} ORDER BY {{ order }}) AS {{ name }} FROM {{ source }};
+SELECT *, RANK() OVER (PARTITION BY {{ groups }}NULL ORDER BY {{ order }}) AS {{ name }} FROM {{ source }};
 """,
     "running_total": """-- @label Running total
 -- @icon window
--- @description Sum a numeric value from the first row to the current row in each key group. Null values are ignored. Use a unique final order key to decide ties. Example: region, order_id ascending, amount gives cumulative regional sales. Advanced SQL partition 1 uses the whole input.
+-- @description Sum a numeric value from the first row to the current row in each key group. Null values are ignored. Use a unique final order key to decide ties. Without groups, the total runs over the whole input. Example: region, order_id ascending, amount gives cumulative regional sales.
 -- @input source
--- @param groups: columns(source) = ["region"]
+-- @param groups: group_columns(source) = []
 -- @param order: ordering(source) = []
--- @param value: column(source) = "amount"
+-- @param value: column(source) = ""
 -- @param name: identifier = "running_total"
 -- @output result
-SELECT *, SUM({{ value }}) OVER (PARTITION BY {{ groups }} ORDER BY {{ order }} ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS {{ name }} FROM {{ source }};
+SELECT *, SUM({{ value }}) OVER (PARTITION BY {{ groups }}NULL ORDER BY {{ order }} ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS {{ name }} FROM {{ source }};
 """,
     "export_parquet": """-- @label Export Parquet
 -- @icon download
@@ -243,11 +243,3 @@ SELECT *, SUM({{ value }}) OVER (PARTITION BY {{ groups }} ORDER BY {{ order }} 
 COPY {{ source }} TO {{ destination }} (FORMAT PARQUET, COMPRESSION {{ compression }});
 """,
 }
-
-
-def add_builtins(bundle):
-    """Add the default templates a project lacks; existing templates keep their code."""
-    templates = bundle.setdefault("templates", {})
-    added = [name for name in BUILTINS if name not in templates]
-    templates.update({name: BUILTINS[name] for name in added})
-    return bundle, {"imported": added}

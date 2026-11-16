@@ -835,11 +835,6 @@ test("filter on a period with a variable, typed or chosen in the guided form (wo
   page,
 }) => {
   const { id, url } = await example(page, (bundle) => {
-    // Existing projects keep their original expression-based filter helper.
-    bundle.templates.filter = bundle.templates.filter.replace(
-      'conditions(source) = {"mode":"and","conditions":[]}',
-      'expression(source) = "amount > 0"',
-    );
     bundle.variables = {
       report_start: {
         type: "date",
@@ -942,9 +937,15 @@ test("filter on a period with a variable, typed or chosen in the guided form (wo
   await lineage.getByRole("button", { name: "Close", exact: true }).click();
   await expect(lineage).toHaveCount(0);
 
-  // The guided form offers the same variables as a filter value.
+  // The guided form offers the same variables as a condition value.
   await inspector
     .getByRole("button", { name: "Parameters", exact: true })
+    .click();
+  await inspector
+    .getByRole("button", { name: "Reset to an empty form", exact: true })
+    .click();
+  await inspector
+    .getByRole("button", { name: "Add condition", exact: true })
     .click();
   await inspector
     .getByLabel("Column", { exact: true })
@@ -954,8 +955,6 @@ test("filter on a period with a variable, typed or chosen in the guided form (wo
     .getByLabel("Value source", { exact: true })
     .selectOption("report_start");
   await expect(inspector.getByLabel("Value", { exact: true })).toBeHidden();
-  // The guided form writes the condition directly.
-  await expect(condition).toHaveValue('"order_date" < {{ var.report_start }}');
   await saved(page);
   await expect
     .poll(
@@ -964,7 +963,16 @@ test("filter on a period with a variable, typed or chosen in the guided form (wo
           (n) => n.id === "recent",
         )!.params.condition,
     )
-    .toBe('"order_date" < {{ var.report_start }}');
+    .toEqual({
+      mode: "and",
+      conditions: [
+        {
+          column: "order_date",
+          operator: "<",
+          value: "{{ var.report_start }}",
+        },
+      ],
+    });
   await expect(page.locator(".preview-header .badge")).toHaveText("Stale");
 });
 

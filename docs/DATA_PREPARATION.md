@@ -20,7 +20,9 @@ Run upstream nodes to populate the column choices and types.
 - **Filter** accepts comparisons and nested **All (AND)** / **Any (OR)** groups.
   A filter without conditions keeps every row, and empty groups are ignored.
   VARCHAR values remain text (`001` and `NULL` are literal text). Use IS NULL /
-  IS NOT NULL for null checks. Numeric and Boolean values are validated; LIKE requires VARCHAR.
+  IS NOT NULL for null checks. Numeric and Boolean values are validated; LIKE
+  requires VARCHAR. In the root flow, **Value source** compares with a
+  [variable](VARIABLES.md#variables-in-expressions) instead of a fixed value.
 - **Aggregate** accepts grouping columns and named measures. SUM/AVG require
   numeric columns. COUNT(*) counts rows; COUNT(column) and COUNT DISTINCT ignore
   nulls. Without grouping columns, empty input still produces one total row
@@ -29,8 +31,10 @@ Run upstream nodes to populate the column choices and types.
 
 Settings are stored in `flow.json` and restored on reload. **Advanced SQL**
 converts a valid setting to editable SQL. **Reset to an empty form** explicitly
-clears that parameter; other parameters keep their settings. Previously saved
-SQL strings remain accepted by the new parameter types.
+clears that parameter; other parameters keep their settings.
+
+New nodes start without column choices: pick them once the upstream node has
+run. Column lists use checkboxes and keep the order in which you check them.
 
 For a complete walkthrough, upload these CSVs to two Load CSV nodes:
 
@@ -61,12 +65,12 @@ and download the complete file from **Log**. No SQL entry is required.
 | Union | `ALL BY NAME` aligns names, fills missing columns with nulls and keeps duplicates: [1,2] plus [2,3] gives four rows. `BY NAME` removes duplicates; `ALL` and `DISTINCT` align by position. DuckDB coerces compatible types and rejects incompatible ones. Order is unspecified. |
 | Sort | Ordered column list with ASC/DESC and nulls first/last. Amount DESC, nulls last puts the largest amount first. Add a unique final key to decide ties; downstream SQL must specify its own ordering when needed. |
 | Deduplicate | Key columns and retention order. Key customer_id with order_id DESC keeps the latest order per customer. Null keys form one group. Add a unique final sort key to make row retention deterministic. |
-| Calculated columns | SQL expressions with unique aliases. `amount * 1.2 AS gross_amount` appends 12 for amount 10. Existing columns remain; nulls follow SQL expression semantics. |
-| Pivot | Group columns, category, value, explicit category values and aggregate function. Region/channel/SUM(amount) turns Web and Retail into columns. Repeated pairs aggregate; absent SUM cells are null. Unlisted categories do not contribute. Explicit values keep the schema stable. |
+| Calculated columns | SQL expressions with unique aliases; empty passes the input through. `amount * 1.2 AS gross_amount` appends 12 for amount 10. Existing columns remain; nulls follow SQL expression semantics. |
+| Pivot | Group columns, category, value, explicit category values and aggregate function. Without group columns, one row aggregates the whole input. Region/channel/SUM(amount) turns Web and Retail into columns. Repeated pairs aggregate; absent SUM cells are null. Unlisted categories do not contribute. Explicit values keep the schema stable. |
 | Unpivot | Selected columns, name and value output names. Web=10, Retail=NULL becomes (Web,10) and (Retail,NULL), retaining other columns. Selected columns need compatible types. Null values are retained. |
 | Sample | Key, percentage (0–100), seed. MD5 of the typed key and seed selects an approximate percentage independent of input order. Same keys and seed reproduce the selection. Duplicate and null keys are selected together; use a unique nonnull key for independent rows. Zero keeps none; 100 keeps all. |
-| Rank | Partition columns, order, output name. Amount DESC ranks the largest value first in each group. Ties share ranks and leave gaps; null keys share a group. Advanced SQL `1` as the partition ranks the entire input. |
-| Running total | Partition columns, order, numeric value, output name. Amounts 10,20 produce 10,30 in a group. The frame ends at the current row; null values are ignored. Use a unique final order key for reproducible ties. Advanced SQL partition `1` gives one global total. |
+| Rank | Partition columns, order, output name. Amount DESC ranks the largest value first in each group. Ties share ranks and leave gaps; null keys share a group. Without partition columns, the whole input is ranked. |
+| Running total | Partition columns, order, numeric value, output name. Amounts 10,20 produce 10,30 in a group. The frame ends at the current row; null values are ignored. Use a unique final order key for reproducible ties. Without partition columns, the total runs over the whole input. |
 | Export Parquet | Destination and ZSTD/SNAPPY/UNCOMPRESSED compression. Writes column types and nulls to export.parquet, replacing the destination on each run. The completed file is downloadable like CSV/XLSX. |
 
 All accept empty input once required settings are configured. Conversion or
@@ -84,18 +88,10 @@ aggregates, supported set operations and windows. **Pivot, Unpivot, Deduplicate 
 incomplete cell lineage**; their results and previews work. Custom SQL may also
 leave the supported subset. See [Lineage](LINEAGE.md).
 
-## Existing projects and reusable forms
+## Reusable forms
 
-New projects include the current defaults. In an older project, open **Import
-from a project** in the palette, then **Import current built-in templates**.
-This adds the default templates the project lacks, such as Sort or Export
-Parquet, and the normal project save records them. A template the project
-already has keeps its code, even when the current default differs: existing
-Join, Filter and Aggregate templates keep their SQL expression parameters, and
-nodes keep their code and configured parameters. Existing nodes without an
-`@icon` get the dedicated default icon of their template; explicit icons always
-win. To adopt a newer default under an existing name, delete or rename your
-template first, then import again.
+New projects include these templates. A project created with an earlier version
+keeps the templates it was created with.
 
 Use the public parameter types in any custom template:
 
@@ -110,10 +106,10 @@ SELECT * FROM {{ customers }} WHERE {{ rules }};
 
 | Type | JSON form value and SQL fragment |
 | --- | --- |
-| `conditions(input)` | `{ "mode": "and", "conditions": [...] }`, with nested groups or `{ "column": "amount", "operator": ">", "value": "10" }`; a predicate. |
+| `conditions(input)` | `{ "mode": "and", "conditions": [...] }`, with nested groups or `{ "column": "amount", "operator": ">", "value": "10" }`; a predicate. A value of exactly `{{ var.name }}` compares with a variable. |
 | `join_keys(left,right)` | `[{ "left": "id", "right": "customer_id" }]`; equality predicates joined by AND, using SQL aliases `l` and `r`. |
 | `joined_columns(left,right)` | `"all"` or `"left"`; a projection with unique right aliases, using SQL aliases `l` and `r`. |
-| `group_columns(input)` | `["region"]`; quoted columns **with a trailing comma**, or empty text for `[]`. Use `SELECT {{ groups }}{{ measures }} ... GROUP BY ALL`. |
+| `group_columns(input)` | `["region"]`; quoted columns **with a trailing comma**, or empty text for `[]`. Use `SELECT {{ groups }}{{ measures }} ... GROUP BY ALL`, or `PARTITION BY {{ groups }}NULL` so that no group means the whole input. |
 | `measures(input)` | `[{ "function": "SUM", "column": "amount", "alias": "revenue" }]`; SUM, AVG, MIN, MAX, COUNT or COUNT DISTINCT. Only COUNT accepts `*`. |
 | `ordering(input)` | `[{ "column": "id", "direction": "asc", "nulls": "last" }]`; ordered SQL list. Defaults are asc and nulls last. |
 | `columns(input)` | A nonempty list of names, quoted as a SQL list. |

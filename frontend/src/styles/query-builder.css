@@ -51,3 +51,18 @@
 .query-builder select[multiple] {
   min-height: 90px;
 }
+.column-choices {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.column-choices legend {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0;
+}
+.column-choices .preparation-toggle {
+  margin: 6px 0;
+}

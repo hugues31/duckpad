@@ -265,5 +265,5 @@ The default palette uses public `conditions(input)`, `join_keys(left,right)`,
 `joined_columns(left,right)`, `group_columns(input)`, `measures(input)`,
 `ordering(input)` and `columns(input)` types. Declare them in your own templates
 to get the same schema-aware forms. They also accept editable SQL strings. See
-[data preparation](DATA_PREPARATION.md#existing-projects-and-reusable-forms) for
+[data preparation](DATA_PREPARATION.md#reusable-forms) for
 the value formats and examples; no special template identifier is required.

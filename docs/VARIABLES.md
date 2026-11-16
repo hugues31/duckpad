@@ -146,8 +146,9 @@ in ZIP archives; keep credentials in connections.
 
 ## Variables in expressions
 
-An `expression` or `expressions` parameter of the root flow, such as the
-condition of a **Filter**, can reference a variable inside its SQL text:
+An `expression` or `expressions` parameter of the root flow, or the Advanced
+SQL of a guided parameter such as the condition of a **Filter**, can reference a
+variable inside its SQL text:
 
 ```sql
 order_date >= {{ var.report_start }} AND amount >= {{ var.high_value_threshold }}

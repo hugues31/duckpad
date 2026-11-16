@@ -9,7 +9,7 @@ from starlette.datastructures import UploadFile as FormFile
 
 from .. import schemas, source_files, variables
 from ..archive import write_archive
-from ..builtin_templates import BUILTINS, add_builtins
+from ..builtin_templates import BUILTINS
 from ..bundle import bundle_to_files
 from ..comparison import CommitContext
 from ..components import group, import_definition
@@ -186,16 +186,6 @@ def router(ctx: Context) -> APIRouter:
         worktree: str, environment: str, node: str | None = None, ancestors: bool = False
     ) -> Record:
         return engine.scope_variables(worktree, environment, node, ancestors)
-
-    @api.post(
-        "/api/worktrees/{worktree}/templates/builtins",
-        response_model=None,
-        dependencies=[Depends(worktree_role("editor"))],
-    )
-    def import_builtins(worktree: str, data: schemas.Revision) -> Record:
-        return projects.transform(
-            worktree, data.revision, add_builtins, "Reload before importing built-in templates"
-        )
 
     @api.post(
         "/api/worktrees/{worktree}/parameter-sql",

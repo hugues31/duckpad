@@ -1,13 +1,12 @@
 """The palette compiles through the same public template contract as custom nodes."""
 
-import copy
 from pathlib import Path
 
 import duckdb
 import pytest
 from helpers import pipeline
 
-from duckpad.builtin_templates import BUILTINS, add_builtins
+from duckpad.builtin_templates import BUILTINS
 from duckpad.guided_parameters import render_guided
 from duckpad.templates import compile_template, parse_template
 from duckpad.util import Problem
@@ -141,9 +140,16 @@ def test_sort_and_deduplication_select_first_ordered_row_including_null_keys(db)
 
 
 def test_calculate_pivot_and_unpivot_null_retention(db):
-    assert execute(db, "calculate").fetchone()[-1] == 12
-    pivot = execute(db, "pivot").fetchall()
-    assert sorted(pivot) == [("North", 10, 20, None), ("South", 20, None, None)]
+    assert execute(db, "calculate", {"calculations": "amount * 1.2 AS gross"}).fetchone()[-1] == 12
+    # Without calculations the node passes its input through.
+    assert len(execute(db, "calculate").fetchone()) == 5
+    pivot = {"category": "channel", "value": "amount", "categories": ["Web", "Retail", "Partner"]}
+    assert sorted(execute(db, "pivot", {**pivot, "groups": ["region"]}).fetchall()) == [
+        ("North", 10, 20, None),
+        ("South", 20, None, None),
+    ]
+    # Without groups, one row aggregates the whole input.
+    assert execute(db, "pivot", pivot).fetchall() == [(30, 20, None)]
     db.execute(
         "CREATE OR REPLACE TABLE input AS SELECT 'North' AS region, 10 AS Web, NULL::INTEGER AS Retail"
     )
@@ -168,24 +174,33 @@ def test_union_alignment_missing_columns_duplicates_and_incompatible_types(db):
 
 
 def test_sampling_is_reproducible_across_input_order_and_checks_bounds(db):
+    def sample(**params):
+        return execute(db, "sample", {"key": "order_id", **params}).fetchall()
+
     db.execute("CREATE OR REPLACE TABLE input AS SELECT range AS order_id FROM range(1000)")
-    selected = {r[0] for r in execute(db, "sample", {"percent": 50}).fetchall()}
+    selected = {r[0] for r in sample(percent=50)}
     assert 400 < len(selected) < 600
     db.execute("CREATE OR REPLACE TABLE input AS SELECT * FROM input ORDER BY order_id DESC")
-    assert {r[0] for r in execute(db, "sample", {"percent": 50}).fetchall()} == selected
-    assert {r[0] for r in execute(db, "sample", {"percent": 50, "seed": "43"}).fetchall()} != selected
-    assert len(execute(db, "sample", {"percent": 100}).fetchall()) == 1000
-    assert execute(db, "sample", {"percent": 0}).fetchall() == []
+    assert {r[0] for r in sample(percent=50)} == selected
+    assert {r[0] for r in sample(percent=50, seed="43")} != selected
+    assert len(sample(percent=100)) == 1000
+    assert sample(percent=0) == []
     with pytest.raises(duckdb.Error, match="between 0 and 100"):
-        execute(db, "sample", {"percent": 101})
+        sample(percent=101)
 
 
 def test_rank_ties_and_running_total_row_frame(db):
     db.execute("UPDATE input SET amount = 20 WHERE order_id = 1")
-    ranks = execute(db, "rank", {"order": [{"column": "amount", "direction": "desc"}]}).fetchall()
+    by_amount = [{"column": "amount", "direction": "desc"}]
+    ranks = execute(db, "rank", {"groups": ["region"], "order": by_amount}).fetchall()
     assert {r[0]: r[-1] for r in ranks} == {1: 1, 2: 1, 3: 1, 4: 2}
-    totals = execute(db, "running_total", {"order": ORDER}).fetchall()
-    assert {r[0]: r[-1] for r in totals} == {1: 20, 2: 40, 3: 20, 4: 20}
+    # Without groups, the whole input is ranked.
+    ranks = execute(db, "rank", {"order": by_amount}).fetchall()
+    assert {r[0]: r[-1] for r in ranks} == {1: 1, 2: 1, 3: 1, 4: 4}
+    totals = execute(db, "running_total", {"groups": ["region"], "order": ORDER, "value": "amount"})
+    assert {r[0]: r[-1] for r in totals.fetchall()} == {1: 20, 2: 40, 3: 20, 4: 20}
+    totals = execute(db, "running_total", {"order": ORDER, "value": "amount"}).fetchall()
+    assert {r[0]: r[-1] for r in totals} == {1: 20, 2: 40, 3: 60, 4: 60}
 
 
 def test_parquet_export_is_downloadable_and_preserves_types_and_nulls(db, tmp_path):
@@ -207,11 +222,11 @@ def test_parquet_export_is_downloadable_and_preserves_types_and_nulls(db, tmp_pa
         ("sort", {"order": ORDER}),
         ("deduplicate", {"keys": ["customer_id"], "order": ORDER}),
         ("calculate", {}),
-        ("pivot", {}),
+        ("pivot", {"groups": ["region"], "category": "channel", "value": "amount", "categories": ["Web"]}),
         ("unpivot", {"columns": ["order_id", "amount"]}),
-        ("sample", {}),
+        ("sample", {"key": "order_id"}),
         ("rank", {"order": ORDER}),
-        ("running_total", {"order": ORDER}),
+        ("running_total", {"order": ORDER, "value": "amount"}),
     ],
 )
 def test_new_transformations_accept_empty_input(db, name, params):
@@ -266,24 +281,6 @@ def test_custom_template_reuses_forms_without_builtin_identity_and_quotes_column
 def test_single_column_choices_keep_dots_inside_identifiers(db):
     db.execute('ALTER TABLE input RENAME order_id TO "order.id"')
     assert len(execute(db, "sample", {"key": "order.id", "percent": 100}).fetchall()) == 4
-
-
-def test_import_adds_missing_templates_and_preserves_existing_ones():
-    customized = BUILTINS["filter"] + "\n-- custom annotation\n"
-    bundle = {
-        "templates": {"filter": customized},
-        "flow": {"nodes": [{"id": "existing", "template": "filter"}]},
-    }
-    before = copy.deepcopy(bundle)
-    _, metadata = add_builtins(bundle)
-    assert bundle["templates"]["filter"] == customized
-    assert bundle["flow"] == before["flow"]
-    # An existing name is kept as is, so the palette never shows two "Filter" entries.
-    assert set(bundle["templates"]) == set(BUILTINS)
-    assert metadata["imported"] == [name for name in BUILTINS if name != "filter"]
-    first = copy.deepcopy(bundle)
-    assert add_builtins(bundle)[1] == {"imported": []}
-    assert bundle == first
 
 
 @pytest.mark.parametrize(
@@ -351,3 +348,30 @@ def test_group_by_all_lineage_limits_contributions_to_the_actual_group(
     assert result["complete"], result
     assert result["total"] == count
     assert sorted(item["value"] for item in result["contributions"]) == values
+
+
+def test_a_filter_condition_value_can_be_a_variable_bound_with_its_type(db):
+    from duckpad import variables
+
+    condition = {"column": "amount", "operator": ">=", "value": "{{ var.threshold }}"}
+    with pytest.raises(Problem, match="threshold, which has no value"):
+        compile_node(db, "filter", {"condition": condition})
+    statement = compile_template(
+        parse_template(BUILTINS["filter"]),
+        {"condition": condition},
+        {"source": '"input"'},
+        {"result": "out"},
+        {},
+        Path(),
+        input_schemas={"source": schema(db, "input")},
+        variables={"threshold": {"type": "number", "value": 20}},
+    )[0]
+    assert "{{" not in statement["sql"]
+    assert [r[0] for r in db.execute(statement["sql"], statement["bindings"]).fetchall()] == [2, 3]
+    bundle = {
+        "variables": {"threshold": {"type": "number", "default": 20}},
+        "flow": {"nodes": [{"id": "f", "template": "filter", "params": {"condition": condition}}]},
+    }
+    assert [u["param"] for u in variables.usages(bundle)["threshold"]] == ["condition"]
+    renamed = variables.rename(bundle, "threshold", "minimum")
+    assert renamed["flow"]["nodes"][0]["params"]["condition"]["value"] == "{{ var.minimum }}"

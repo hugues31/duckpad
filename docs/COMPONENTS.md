@@ -10,8 +10,8 @@ input has one source; an output can feed many inputs. `flow.json` stores nodes
 and edges by stable IDs. A normal node owns `nodes/<node-id>.sql`; a linked node
 names a local `template` and a component instance a local `component`. An
 optional `origin` records where normal code came from without linking it; an
-optional `preset` keeps the palette icon and guided form but never selects
-executable code. Edges use `source`, `sourceHandle`, `target` and `targetHandle`.
+optional `preset` keeps the palette label but never selects executable code.
+Edges use `source`, `sourceHandle`, `target` and `targetHandle`.
 
 Drag a port onto empty canvas space to **Add a connected node**. Choose a
 compatible template/component and port to create and connect it in one save.

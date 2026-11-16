@@ -123,7 +123,6 @@ ROUTE_ACCESS = {
         "POST /api/worktrees/{worktree}/branches",
         "POST /api/worktrees/{worktree}/group",
         "POST /api/worktrees/{worktree}/import",
-        "POST /api/worktrees/{worktree}/templates/builtins",
         "POST /api/worktrees/{worktree}/parameter-sql",
         "POST /api/worktrees/{worktree}/variables/{name}/rename",
         "POST /api/worktrees/{worktree}/lineage/rename",

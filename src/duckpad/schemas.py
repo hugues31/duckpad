@@ -26,10 +26,6 @@ class Login(BaseModel):
     password: str
 
 
-class Revision(BaseModel):
-    revision: str
-
-
 class RenderParameter(BaseModel):
     type: str
     value: Any
