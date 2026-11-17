@@ -1977,5 +1977,6 @@
   "destinationTestAfterSave": "Enregistrez pour tester cette destination",
   "destinationTestSent": "Notification de test remise à {name}.",
   "addDestination": "Ajouter une destination",
-  "removeDestination": "Retirer la destination"
+  "removeDestination": "Retirer la destination",
+  "allJobs": "Tous les Jobs"
 }

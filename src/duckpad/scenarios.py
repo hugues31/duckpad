@@ -352,12 +352,16 @@ class Scenarios:
         finished = now()
         run.update(status=outcome, finished=finished)
         for step in run["steps"]:
-            if step["status"] in ("pending", "running"):
-                step["status"] = "interrupted" if outcome == "interrupted" else "skipped"
+            if step["status"] == "running":
+                step["status"] = "interrupted" if outcome == "interrupted" else "failed"
+            elif step["status"] == "pending":
+                step["status"] = "skipped"
         with self.lock:
-            self.store.put("scenario_run", run["id"], run)
-            if self.active.get(scenario["id"]) is token:
-                del self.active[scenario["id"]]
+            try:
+                self.store.put("scenario_run", run["id"], run)
+            finally:
+                if self.active.get(scenario["id"]) is token:
+                    del self.active[scenario["id"]]
         if outcome != "interrupted":
             self.notify(run)
 
@@ -486,42 +490,47 @@ class Scenarios:
         """Launch due occurrences and record missed ones; the next occurrence is saved first."""
         instant = instant or datetime.now(UTC)
         for scenario in self.store.scenarios():
-            due = []
-            with self.lock:
-                scenario = self.store.get("scenario", scenario["id"])
-                if not scenario or not scenario["enabled"]:
+            try:
+                self.tick_scenario(scenario["id"], instant)
+            except Exception:
+                logger.exception("Schedules of scenario %s failed", scenario["id"])
+
+    def tick_scenario(self, slug, instant):
+        """Launch the due occurrences of one scenario and record the missed ones."""
+        due = []
+        with self.lock:
+            scenario = self.store.get("scenario", slug)
+            if not scenario or not scenario["enabled"]:
+                return
+            for entry in scenario["schedules"]:
+                if not entry.get("next") or parse_instant(entry["next"]) > instant:
                     continue
-                for entry in scenario["schedules"]:
-                    if not entry.get("next") or parse_instant(entry["next"]) > instant:
-                        continue
-                    schedule = Schedule.parse(entry["cron"], entry["timezone"])
-                    occurrences = schedule.between(
-                        parse_instant(entry["next"]), instant + timedelta(seconds=1)
-                    )
-                    following = schedule.next_after(instant)
-                    due.append((dict(entry), occurrences))
-                    entry["next"] = iso(following) if following else None
-                if not due:
-                    continue
-                self.store.put("scenario", scenario["id"], scenario)
-            for entry, occurrences in due:
-                late = [item for item in occurrences if instant - item > MISSED_AFTER]
-                current = occurrences[len(late) :]
-                if current:
-                    # Several occurrences due at once can only run once.
-                    late.extend(current[:-1])
-                if late:
-                    self.missed(scenario, entry, late)
-                if current:
-                    trigger = {
-                        "source": "schedule",
-                        "cron": entry["cron"],
-                        "timezone": entry["timezone"],
-                        "occurrence": iso(current[-1]),
-                    }
-                    # Launch records its refusals.
-                    with suppress(Problem):
-                        self.launch(scenario["id"], trigger=trigger, requester=SCHEDULER)
+                schedule = Schedule.parse(entry["cron"], entry["timezone"])
+                occurrences = schedule.between(parse_instant(entry["next"]), instant + timedelta(seconds=1))
+                following = schedule.next_after(instant)
+                due.append((dict(entry), occurrences))
+                entry["next"] = iso(following) if following else None
+            if not due:
+                return
+            self.store.put("scenario", scenario["id"], scenario)
+        for entry, occurrences in due:
+            late = [item for item in occurrences if instant - item > MISSED_AFTER]
+            current = occurrences[len(late) :]
+            if current:
+                # Several occurrences due at once can only run once.
+                late.extend(current[:-1])
+            if late:
+                self.missed(scenario, entry, late)
+            if current:
+                trigger = {
+                    "source": "schedule",
+                    "cron": entry["cron"],
+                    "timezone": entry["timezone"],
+                    "occurrence": iso(current[-1]),
+                }
+                # Launch records its refusals.
+                with suppress(Problem):
+                    self.launch(scenario["id"], trigger=trigger, requester=SCHEDULER)
 
     def start(self):
         self.scheduler = threading.Thread(target=self.schedule, name="scenario-scheduler", daemon=True)

@@ -211,7 +211,7 @@ function ProjectJobs({ project }: { project: Project }) {
           onDelete={() => setDeletingScenario(scenario)}
         />
       )}
-      <h2 className="jobs-section">{t("jobs")}</h2>
+      <h2 className="jobs-section">{t("allJobs")}</h2>
       <p className="muted">{t("jobsSectionHint")}</p>
       {jobs.error && (
         <p className="notice error" role="alert">

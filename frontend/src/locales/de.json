@@ -1977,5 +1977,6 @@
   "destinationTestAfterSave": "Speichern, um dieses Ziel zu testen",
   "destinationTestSent": "Testbenachrichtigung an {name} zugestellt.",
   "addDestination": "Ziel hinzufügen",
-  "removeDestination": "Ziel entfernen"
+  "removeDestination": "Ziel entfernen",
+  "allJobs": "Alle Jobs"
 }
