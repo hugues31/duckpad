@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="940" viewBox="0 0 1440 940" role="img" aria-labelledby="title desc">
+<title id="title">Conditional branches: run history and version comparison</title><desc id="desc">Run history separates success from inactive nodes and records reasons. Compare versions shows changed condition definitions and predicted effects without executing data.</desc>
+<style>text {font-family: Inter, ui-sans-serif, system-ui, sans-serif;}</style>
+<rect x="0" y="0" width="1440" height="940" rx="0" fill="#f5f7fb" stroke="#f5f7fb"/>
+<rect x="0" y="0" width="1440" height="54" rx="0" fill="#19283d" stroke="#19283d"/>
+<text x="24" y="35" font-size="23" fill="white" font-weight="700">duckpad</text>
+<text x="155" y="34" font-size="14" fill="#d7e0ee" font-weight="400">/  Order processing</text>
+<rect x="1205" y="14" width="210" height="26" rx="5" fill="#eef1f5" stroke="#eef1f5"/>
+<text x="1215" y="32" font-size="12" fill="#566679" font-weight="600">DESIGN PROPOSAL</text>
+<rect x="0" y="54" width="180" height="886" rx="0" fill="white" stroke="#dce3ed"/>
+<text x="22" y="89" font-size="10" fill="#566679" font-weight="700">WORKSPACE</text>
+<text x="26" y="126" font-size="14" fill="#566679" font-weight="400">Flow</text>
+<text x="26" y="170" font-size="14" fill="#566679" font-weight="400">Code</text>
+<text x="26" y="214" font-size="14" fill="#566679" font-weight="400">Documentation</text>
+<text x="26" y="258" font-size="14" fill="#566679" font-weight="400">Variables</text>
+<rect x="12" y="278" width="156" height="35" rx="6" fill="#edf2ff" stroke="#edf2ff"/>
+<text x="26" y="302" font-size="14" fill="#315cce" font-weight="600">History</text>
+<rect x="180" y="54" width="1260" height="65" rx="0" fill="white" stroke="#dce3ed"/>
+<rect x="204" y="68" width="132" height="36" rx="8" fill="white" stroke="#dce3ed"/>
+<text x="218" y="91" font-size="13" fill="#202c3e" font-weight="600">main  ▾</text>
+<rect x="348" y="68" width="132" height="36" rx="8" fill="white" stroke="#dce3ed"/>
+<text x="362" y="91" font-size="13" fill="#202c3e" font-weight="600">prod  ▾</text>
+<text x="501" y="91" font-size="13" fill="#566679" font-weight="400">Current plan · source = warehouse</text>
+<rect x="1248" y="68" width="163" height="36" rx="8" fill="#315cce" stroke="#315cce"/>
+<text x="1261" y="91" font-size="13" fill="white" font-weight="600">Run pipeline  ▾</text>
+<text x="205" y="917" font-size="12" fill="#566679" font-weight="400">Design mockup · Synthetic data · Conditions are evaluated once per run.</text>
+<text x="208" y="160" font-size="24" fill="#202c3e" font-weight="600">Run 42</text>
+<text x="208" y="188" font-size="14" fill="#566679" font-weight="400">prod · reviewed version · conditions frozen at launch</text>
+<rect x="1017" y="143" width="398" height="26" rx="5" fill="#e9f6ee" stroke="#e9f6ee"/>
+<text x="1027" y="161" font-size="12" fill="#19734d" font-weight="600">SUCCESS · 2 executed · 3 inactive</text>
+<rect x="205" y="212" width="1214" height="280" rx="8" fill="white" stroke="#dce3ed"/>
+<text x="226" y="244" font-size="11" fill="#566679" font-weight="700">NODE</text>
+<text x="534" y="244" font-size="11" fill="#566679" font-weight="700">OUTCOME</text>
+<text x="741" y="244" font-size="11" fill="#566679" font-weight="700">DETAIL</text>
+<path d="M225 259 L1396 259" fill="none" stroke="#dce3ed" stroke-width="2"/>
+<text x="226" y="292" font-size="14" fill="#202c3e" font-weight="600">Warehouse orders</text>
+<text x="534" y="292" font-size="14" fill="#19734d" font-weight="600">Success</text>
+<text x="741" y="292" font-size="13" fill="#566679" font-weight="400">1,240 rows · 0.8 s</text>
+<text x="226" y="337" font-size="14" fill="#202c3e" font-weight="600">Orders</text>
+<text x="534" y="337" font-size="14" fill="#19734d" font-weight="600">Success</text>
+<text x="741" y="337" font-size="13" fill="#566679" font-weight="400">Active inputs: right → warehouse_orders.result</text>
+<text x="226" y="382" font-size="14" fill="#202c3e" font-weight="600">Legacy orders</text>
+<text x="534" y="382" font-size="14" fill="#566679" font-weight="600">Inactive</text>
+<text x="741" y="382" font-size="13" fill="#566679" font-weight="400">source = warehouse · condition evaluated false</text>
+<text x="226" y="472" font-size="14" fill="#202c3e" font-weight="600">Debug export</text>
+<text x="534" y="427" font-size="14" fill="#566679" font-weight="600">Inactive</text>
+<text x="741" y="472" font-size="13" fill="#566679" font-weight="400">export_debug = false · Not written</text>
+<text x="226" y="427" font-size="14" fill="#202c3e" font-weight="600">Normalize orders</text>
+<text x="534" y="472" font-size="14" fill="#566679" font-weight="600">Inactive</text>
+<text x="741" y="427" font-size="13" fill="#566679" font-weight="400">Input inactive · Legacy orders</text>
+<rect x="205" y="513" width="574" height="355" rx="8" fill="white" stroke="#dce3ed"/>
+<text x="227" y="548" font-size="18" fill="#202c3e" font-weight="600">Legacy orders · decision evidence</text>
+<text x="227" y="587" font-size="12" fill="#566679" font-weight="600">Condition</text>
+<rect x="227" y="601" width="529" height="43" rx="8" fill="#f8faff" stroke="#dce3ed"/>
+<text x="240" y="628" font-size="14" fill="#202c3e" font-weight="400">{{ var.source }} = &#x27;legacy&#x27;</text>
+<text x="227" y="676" font-size="12" fill="#566679" font-weight="600">Bound value</text>
+<text x="227" y="703" font-size="14" fill="#202c3e" font-weight="400">source = warehouse · choice · prod value</text>
+<text x="227" y="742" font-size="14" fill="#202c3e" font-weight="600">Result: false → inactive</text>
+<text x="227" y="773" font-size="12" fill="#566679" font-weight="400">Reason code: condition_false</text>
+<text x="227" y="828" font-size="13" fill="#315cce" font-weight="400">Prior result: run 41 · available for inspection</text>
+<rect x="799" y="513" width="620" height="355" rx="8" fill="white" stroke="#dce3ed"/>
+<text x="821" y="548" font-size="18" fill="#202c3e" font-weight="600">Compare versions · activation</text>
+<text x="821" y="583" font-size="13" fill="#566679" font-weight="400">Legacy orders → enabled</text>
+<rect x="821" y="599" width="575" height="42" rx="8" fill="#fff0ef" stroke="#efcfcb"/>
+<text x="833" y="626" font-size="14" fill="#9c3c35" font-weight="400">− {{ var.source }} = &#x27;legacy&#x27;</text>
+<rect x="821" y="650" width="575" height="62" rx="8" fill="#e9f6ee" stroke="#cfe6d9"/>
+<text x="833" y="675" font-size="14" fill="#19734d" font-weight="400">+ {{ var.source }} = &#x27;legacy&#x27;</text>
+<text x="851" y="699" font-size="14" fill="#19734d" font-weight="400">AND {{ var.allow_legacy }}</text>
+<text x="821" y="749" font-size="13" fill="#202c3e" font-weight="600">Predicted effects from ordinary values</text>
+<text x="821" y="778" font-size="13" fill="#566679" font-weight="400">dev: Active → Inactive     prod: Inactive → Inactive</text>
+<text x="821" y="823" font-size="13" fill="#936011" font-weight="400">Computed conditions: Depends on run values</text>
+<text x="821" y="848" font-size="12" fill="#566679" font-weight="400">Version comparison does not execute value sources.</text>
+</svg>

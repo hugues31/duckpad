@@ -1,11 +1,46 @@
 import copy
+import json
 
 import duckdb
 import pytest
-from conftest import wait_run
+from fastapi.testclient import TestClient
+from helpers import wait_run
 
+from duckpad import secret_references
+from duckpad.app import create_app
+from duckpad.builtin_connectors import BUILTIN_CONNECTORS
+from duckpad.catalog import redact
 from duckpad.lineage import Lineage
 from duckpad.util import Problem
+
+
+def test_absent_numeric_connection_values_use_defaults_without_overriding_explicit_zero(services):
+    store, _, catalog, _ = services
+    definition = {
+        "id": "numeric",
+        "family": "database",
+        "parameters": [{"name": "port", "type": "number", "default": 5432}],
+        "capabilities": ["read"],
+        "init_sql": "",
+    }
+    catalog.save("connector", definition)
+    catalog.save(
+        "connection",
+        {
+            "id": "numeric",
+            "name": "Numeric connection",
+            "connector": "numeric",
+            "environments": {"dev": {}, "prod": {"port": 0}},
+        },
+        create=True,
+    )
+    assert catalog.capture(["numeric"], "dev")[0]["numeric"]["values"]["port"] == 5432
+    assert catalog.capture(["numeric"], "prod")[0]["numeric"]["values"]["port"] == 0
+    assert store.get("connection", "numeric")["environments"]["dev"] == {}
+    definition["parameters"][0].pop("default")
+    catalog.save("connector", definition)
+    with pytest.raises(Problem, match="requires port"):
+        catalog.capture(["numeric"], "dev")
 
 
 def test_declarative_attached_connector_native_insert_and_environment_capture(services, tmp_path):
@@ -19,6 +54,7 @@ def test_declarative_attached_connector_native_insert_and_environment_capture(se
         paths[environment] = {"database": str(path)}
     definition = {
         "id": "native",
+        "family": "database",
         "name": "Attached DuckDB",
         "parameters": [{"name": "database", "type": "file"}],
         "capabilities": ["read", "write"],
@@ -26,7 +62,9 @@ def test_declarative_attached_connector_native_insert_and_environment_capture(se
     }
     catalog.save("connector", definition)
     catalog.save(
-        "connection", {"id": "warehouse", "name": "Warehouse", "connector": "native", "environments": paths}
+        "connection",
+        {"id": "warehouse", "name": "Warehouse", "connector": "native", "environments": paths},
+        create=True,
     )
     bundle = {
         "flow": {
@@ -45,8 +83,8 @@ def test_declarative_attached_connector_native_insert_and_environment_capture(se
             ],
         },
         "templates": {
-            "source": '-- @kind source\n-- @param connection: connection = "warehouse"\n-- @param resource: identifier = "orders"\n-- @output result\nSELECT * FROM {{ connection }}.{{ resource }};',
-            "export": '-- @kind export\n-- @input source\n-- @param connection: connection = "warehouse"\n-- @param resource: identifier = "totals"\nINSERT INTO {{ connection }}.{{ resource }} SELECT amount * 2 FROM {{ source }};',
+            "source": '-- @param connection: connection = "warehouse"\n-- @param resource: identifier = "orders"\n-- @output result\nSELECT * FROM {{ connection }}.{{ resource }};',
+            "export": '-- @input source\n-- @param connection: connection = "warehouse"\n-- @param resource: identifier = "totals"\nINSERT INTO {{ connection }}.{{ resource }} SELECT amount * 2 FROM {{ source }};',
         },
         "components": {},
         "documentation": {},
@@ -74,13 +112,16 @@ def test_declarative_attached_connector_native_insert_and_environment_capture(se
     assert engine.preview(branch, "prod", "source")["rows"][0]["values"] == [1, 100]
 
 
-def test_setup_rejects_data_operations_and_secret_redaction_survives_definition_deletion(services):
+def test_setup_rejects_data_operations_and_referenced_connector_deletion(services):
     store, _, catalog, _ = services
     for sql in ("SELECT 1;", "CREATE TABLE hidden AS SELECT 1;", "COPY t TO 'hidden.csv';"):
         with pytest.raises(Problem):
-            catalog.save("connector", {"id": "invalid", "parameters": [], "init_sql": sql})
+            catalog.save(
+                "connector", {"id": "invalid", "family": "database", "parameters": [], "init_sql": sql}
+            )
     definition = {
         "id": "secret_test",
+        "family": "database",
         "name": "Secret test",
         "parameters": [{"name": "password", "type": "text", "secret": True}],
         "capabilities": ["read"],
@@ -94,11 +135,223 @@ def test_setup_rejects_data_operations_and_secret_redaction_survives_definition_
         "connector": "secret_test",
         "environments": {"dev": {"password": secret}},
     }
-    catalog.save("connection", copy.deepcopy(connection))
+    catalog.save("connection", copy.deepcopy(connection), create=True)
     _, secrets = catalog.capture(["hidden"], "dev")
     assert secret not in str(catalog.public())
-    assert secret.replace("'", "''") not in catalog.redact(secret.replace("'", "''"), secrets)
-    store.delete("connector", "secret_test")
+    assert secret.replace("'", "''") not in redact(secret.replace("'", "''"), secrets)
+    with pytest.raises(Problem, match="Remove this connector's connections"):
+        catalog.delete("connector", "secret_test")
     assert secret not in str(catalog.public())
-    with pytest.raises(Problem, match="Missing connector"):
-        catalog.capture(["hidden"], "dev")
+    assert catalog.capture(["hidden"], "dev")[0]
+    catalog.delete("connection", "hidden")
+    catalog.delete("connector", "secret_test")
+    assert store.get("connector", "secret_test") is None
+
+
+def retained_connection(catalog, change, value):
+    definition = catalog.connector("folder")
+    definition["parameters"].append({"name": "password", "type": "text", "secret": True})
+    catalog.save("connector", definition)
+    catalog.save(
+        "connection",
+        {
+            "id": "retained",
+            "name": "Retained settings",
+            "connector": "folder",
+            "environments": {"dev": {"root": "", "password": value}},
+        },
+        create=True,
+    )
+    if change == "reset":
+        catalog.reset("folder")
+    else:
+        if change == "remove":
+            definition["parameters"].pop()
+        else:
+            definition["parameters"][-1].pop("secret")
+        catalog.save("connector", definition)
+
+
+@pytest.mark.parametrize("change", ["remove", "unmark", "reset"])
+def test_capture_keeps_retained_fields_private(services, change):
+    store, _, catalog, _ = services
+    secret = "retained'credential-value"
+    retained_connection(catalog, change, secret)
+    public = catalog.public()["connections"][0]
+    assert public["environments"]["dev"]["password"] == "••••"
+    captured, secrets = catalog.capture(["retained"], "dev")
+    draft, draft_secrets = catalog.capture_draft(public, "dev")
+    for connections, hidden in ((captured, secrets), (draft, draft_secrets)):
+        assert connections["retained"]["settings"] == {"root": ""}
+        assert connections["retained"]["values"]["password"] == secret
+        assert secret in hidden
+        assert redact(secret.replace("'", "''"), hidden) == "••••"
+    catalog.save("connection", public)
+    saved = store.get("connection", "retained")
+    assert saved["environments"]["dev"]["password"] == secret
+    saved["environments"]["dev"]["password"] = "rotated-credential-value"
+    catalog.save("connection", saved)
+    rotated, hidden = catalog.capture(["retained"], "dev", resolve=False)
+    assert rotated["retained"]["fingerprint"] == captured["retained"]["fingerprint"]
+    assert "rotated-credential-value" in hidden
+
+
+@pytest.mark.parametrize("change", ["remove", "unmark", "reset"])
+def test_retained_fields_do_not_authorize_server_secret_references(services, monkeypatch, change):
+    _, _, catalog, _ = services
+    reference = {"from": "env", "name": "DUCKPAD_SECRET_RETAINED"}
+    retained_connection(catalog, change, reference)
+
+    def unexpected_resolution(value):
+        pytest.fail("A retained reference must not be resolved")
+
+    monkeypatch.setattr(secret_references, "resolve", unexpected_resolution)
+    for resolve in (False, True):
+        with pytest.raises(Problem, match="password is no longer secret"):
+            catalog.capture(["retained"], "dev", resolve=resolve)
+    with pytest.raises(Problem, match="Only secret parameters can name a server secret"):
+        catalog.capture_draft(catalog.public()["connections"][0], "dev")
+
+
+@pytest.mark.parametrize("isolated", [False, True], ids=["embedded", "isolated"])
+@pytest.mark.parametrize("change", ["remove", "unmark", "reset"])
+def test_runs_keep_retained_connection_fields_private_for_readers(tmp_path, isolated, change):
+    app = create_app(tmp_path / "instance", watch=False, trusted_local=not isolated)
+    with TestClient(app) as client:
+        services = app.state.services
+        secret = "retained'credential-value"
+        retained_connection(services.catalog, change, secret)
+        tree = services.projects.create(
+            "Connection settings",
+            {
+                "flow": {"nodes": [{"id": "query", "template": "query", "params": {}}], "edges": []},
+                "templates": {
+                    "query": '-- @param connection: connection = "retained"\n-- @output result\nSELECT 42 AS value;'
+                },
+                "components": {},
+                "documentation": {},
+            },
+        )
+        app.state.access.grant_connections(tree["project"], ["retained"])
+        admin = next(user for user in services.store.all("user") if user["username"] == "admin")
+        app.state.access.member(tree["project"], admin["id"], "admin")
+        reader = app.state.auth.create_user("reader", "reader-test-password", "member")
+        app.state.access.member(tree["project"], reader["id"], "reader")
+        client.post(
+            "/api/login", json={"username": "admin", "password": app.state.auth.initial_password}
+        ).raise_for_status()
+        launched = client.post(f"/api/worktrees/{tree['id']}/runs", json={"environment": "dev"})
+        assert launched.status_code == 200, launched.text
+        run = wait_run(services.store, launched.json())
+        assert run["status"] == "success", run
+        assert run["connections"]["retained"]["settings"] == {"root": ""}
+        assert secret not in json.dumps(run)
+        assert services.engine.preview(tree["id"], "dev", "query")["rows"][0]["values"] == [42]
+        client.post("/api/logout").raise_for_status()
+        client.post(
+            "/api/login", json={"username": "reader", "password": "reader-test-password"}
+        ).raise_for_status()
+        response = client.get(f"/api/runs/{run['id']}")
+        assert response.status_code == 200, response.text
+        assert response.json()["connections"]["retained"]["settings"] == {"root": ""}
+        assert secret not in response.text
+
+
+def test_built_in_connectors_come_with_the_release_and_edits_are_overrides(services, monkeypatch):
+    store, _, catalog, _ = services
+    assert store.all("connector") == []
+    listed = {c["id"]: c for c in catalog.connectors()}
+    assert listed["s3"]["origin"] == "built-in"
+    # Saving a built-in unchanged, even with its listing's origin, stores nothing.
+    catalog.save("connector", copy.deepcopy(listed["s3"]))
+    assert store.all("connector") == []
+    customized = {**catalog.connector("s3"), "name": "Company S3"}
+    customized["parameters"] = [*customized["parameters"], {"name": "session_token", "type": "text"}]
+    catalog.save("connector", copy.deepcopy(customized))
+    # A later release changes the shipped definition; the administrator's version is kept.
+    shipped = {**BUILTIN_CONNECTORS["s3"], "description": "Fixed in a later release."}
+    monkeypatch.setitem(BUILTIN_CONNECTORS, "s3", shipped)
+    s3 = next(c for c in catalog.connectors() if c["id"] == "s3")
+    assert s3["origin"] == "customized"
+    assert s3["name"] == "Company S3"
+    assert catalog.connector("s3") == customized
+    catalog.reset("s3")
+    assert store.all("connector") == []
+    assert catalog.connector("s3") == shipped
+    assert next(c for c in catalog.connectors() if c["id"] == "s3")["origin"] == "built-in"
+    # Resetting an unedited built-in changes nothing; custom types have nothing to reset to.
+    catalog.reset("s3")
+    with pytest.raises(Problem, match="Only built-in connectors can be reset") as missing:
+        catalog.reset("custom")
+    assert missing.value.status == 404
+    with pytest.raises(Problem, match="Built-in connectors cannot be deleted") as builtin:
+        catalog.delete("connector", "folder")
+    assert builtin.value.status == 409
+
+
+def test_duplicates_are_custom_types_under_a_new_identifier(services):
+    store, _, catalog, _ = services
+    duplicate = {**catalog.connector("folder"), "id": "finance_folder", "name": "Finance folder"}
+    with pytest.raises(Problem, match="already exists") as exists:
+        catalog.save("connector", {**duplicate, "id": "folder"}, create=True)
+    assert exists.value.status == 409
+    catalog.save("connector", copy.deepcopy(duplicate), create=True)
+    with pytest.raises(Problem, match="already exists"):
+        catalog.save("connector", copy.deepcopy(duplicate), create=True)
+    listed = {c["id"]: c["origin"] for c in catalog.connectors()}
+    assert (listed["folder"], listed["finance_folder"]) == ("built-in", "custom")
+    assert store.get("connector", "finance_folder") == duplicate
+
+
+def test_shape_validation_preserves_unknown_metadata_and_json_values(services):
+    store, _, catalog, _ = services
+    definition = {
+        "id": "documented",
+        "name": "Documented connector",
+        "family": "database",
+        "documentation": {"examples": ["Example"]},
+        "parameters": [{"name": "options", "default": None, "hint": {"advanced": True}}],
+        "extensions": [{"name": "json", "notes": ["Bundled extension"]}],
+    }
+    catalog.save("connector", copy.deepcopy(definition), create=True)
+    assert store.get("connector", "documented") == definition
+    connection = {
+        "id": "documented",
+        "name": "Documented connection",
+        "connector": "documented",
+        "environments": {"dev": {"options": None}},
+    }
+    catalog.save("connection", copy.deepcopy(connection), create=True)
+    assert catalog.public()["connections"] == [connection]
+
+
+@pytest.mark.parametrize("changes", [{"parameters": [None]}, {"extensions": [None]}, {"init_sql": 3}])
+def test_definition_validation_checks_shape_outside_save(services, changes):
+    _, _, catalog, _ = services
+    with pytest.raises(Problem) as invalid:
+        catalog.validate_definition({"family": "database", **changes})
+    assert invalid.value.status == 422
+    assert next(iter(changes)) in str(invalid.value)
+
+
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({"family": None}, "Connector family must be database or storage"),
+        ({"family": "files"}, "Connector family must be database or storage"),
+        (
+            {"parameters": [{"name": "path", "type": "text"}]},
+            "Storage connectors must declare a text root parameter",
+        ),
+        (
+            {"parameters": [{"name": "root", "type": "number"}]},
+            "Storage connectors must declare a text root parameter",
+        ),
+    ],
+)
+def test_definitions_declare_their_family_without_inference(services, changes, message):
+    _, _, catalog, _ = services
+    definition = {**catalog.connector("folder"), "id": "share", **changes}
+    definition = {key: value for key, value in definition.items() if value is not None}
+    with pytest.raises(Problem, match=message):
+        catalog.save("connector", definition)
