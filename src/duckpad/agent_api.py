@@ -6,14 +6,16 @@ import secrets
 import threading
 import time
 from datetime import UTC, datetime
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 from fastapi import APIRouter, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse
 from pydantic import ValidationError
+from starlette.routing import Route
 
-from . import agent_tools
+from . import agent_tools, mcp_server
+from .api.http import problem_response
 from .assistant.runs import proposal, run_summary
 from .auth import session_key
 from .uploads import limited_body
@@ -21,6 +23,7 @@ from .util import Problem, uid
 
 PREFIX = "/api/agent"
 LIFETIME = 15 * 60
+MAX_REQUEST = 256 * 1024
 
 
 def bearer(request):
@@ -177,6 +180,31 @@ class AgentAPI:
         self.context.access.worktree(user, record["worktree"], "editor")
         return user, record
 
+    def listing(self, token):
+        self.context.auth.check_api_token(token)
+        return [tool.public() for tool in self.tools.values()]
+
+    async def mcp(self, scope, receive, send):
+        """Streamable HTTP MCP for API tokens: the tools of /tools, without a bridge on the client."""
+        request = Request(scope, receive)
+        if request.method != "POST":
+            # Stateless: no session to resume or delete, and no stream of server messages.
+            response = problem_response(
+                Problem("This MCP endpoint only accepts POST", 405), {"Allow": "POST"}
+            )
+            await response(scope, receive, send)
+            return
+        await limited_body(MAX_REQUEST, "request")(request)
+        token = bearer(request)
+
+        async def listing():
+            return await run_in_threadpool(self.listing, token)
+
+        async def call(name, arguments):
+            return await run_in_threadpool(self.call, token, name, arguments)
+
+        await mcp_server.serve_http(mcp_server.server(listing, call), scope, receive, send)
+
     def call(self, token, name, arguments):
         hidden = agent_tools.secrets(self.context, token)
         try:
@@ -202,12 +230,11 @@ class AgentAPI:
 
         @api.get("/tools")
         def listing(request: Request):
-            self.context.auth.check_api_token(bearer(request))
-            return [tool.public() for tool in self.tools.values()]
+            return self.listing(bearer(request))
 
         @api.post("/tools/{name}")
         async def call(name: str, request: Request):
-            await limited_body(256 * 1024)(request)
+            await limited_body(MAX_REQUEST, "request")(request)
             token = bearer(request)
             try:
                 data = await request.json()
@@ -263,7 +290,8 @@ class AgentAPI:
                     "dt{font-weight:600}dd{margin:0 0 1rem;overflow-wrap:anywhere}pre{white-space:pre-wrap}"
                     "button{font:inherit;padding:.6rem 1rem;cursor:pointer}h2{font-size:1.2rem}</style>"
                     "<body><main><h1>Review agent execution</h1>"
-                    '<p><a href="/" target="_blank" rel="noopener">Open Duckpad</a> and inspect this branch before approving. '
+                    f'<p><a href="/worktrees/{quote(record["worktree"], safe="")}/history" target="_blank" rel="noopener">'
+                    "Open this branch's history</a> and inspect the agent's changes before approving. "
                     "Exports and external writes cannot be undone.</p>"
                     f"<dl>{details}</dl>{effects}{form}</main></body></html>",
                     headers={
@@ -273,7 +301,7 @@ class AgentAPI:
 
         @api.post("/approvals/{identity}/decision", response_class=HTMLResponse)
         async def decide(identity: str, request: Request):
-            await limited_body(4096)(request)
+            await limited_body(4096, "decision")(request)
             async with request.form() as form:
                 decision, csrf = form.get("decision"), form.get("csrf")
 
@@ -294,4 +322,15 @@ class AgentAPI:
 
             return await run_in_threadpool(save)
 
+        api.routes.append(Route(PREFIX + "/mcp", ASGIEndpoint(self.mcp), include_in_schema=False))
         return api
+
+
+class ASGIEndpoint:
+    """Mounts a handler as a raw ASGI app: Starlette wraps functions and methods as request handlers."""
+
+    def __init__(self, handle):
+        self.handle = handle
+
+    async def __call__(self, scope, receive, send):
+        await self.handle(scope, receive, send)

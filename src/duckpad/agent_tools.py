@@ -1,6 +1,7 @@
 """External-agent tools over the assistant's bounded views and application services."""
 
 import inspect
+from copy import deepcopy
 from types import SimpleNamespace
 from typing import Any, get_type_hints
 
@@ -164,14 +165,16 @@ class Tool:
         self.arguments = create_model(
             function.__name__ + "Arguments", __config__=ConfigDict(extra="forbid"), **fields
         )
+        # Built once: a stateless MCP request lists the tools again before every call.
+        self.definition = {
+            "name": function.__name__,
+            "description": inspect.getdoc(function) or "",
+            "inputSchema": self.arguments.model_json_schema(),
+            "annotations": {"readOnlyHint": not write, "openWorldHint": write},
+        }
 
     def public(self):
-        return {
-            "name": self.function.__name__,
-            "description": inspect.getdoc(self.function) or "",
-            "inputSchema": self.arguments.model_json_schema(),
-            "annotations": {"readOnlyHint": not self.write, "openWorldHint": self.write},
-        }
+        return deepcopy(self.definition)
 
     def call(self, ctx, token, raw, hidden):
         args = self.arguments.model_validate(raw)

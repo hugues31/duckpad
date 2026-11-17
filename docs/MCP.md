@@ -2,15 +2,20 @@
 
 ## Contract
 
-Duckpad provides a **stdio** Model Context Protocol server with `duckpad mcp`.
-The client starts that process locally. It forwards tools to a running Duckpad
-instance over its authenticated HTTP API; it never opens the instance directory
-or starts a second execution engine. Use HTTPS for remote instances. The MCP
-wire protocol is handled by the [official Python SDK](https://github.com/modelcontextprotocol/python-sdk/tree/v1.x).
-There is no remote MCP HTTP/SSE listener and no OAuth discovery endpoint.
+Duckpad serves the Model Context Protocol itself, over **Streamable HTTP**, at
+`/api/agent/mcp` on the instance address. Clients connect with an address and an
+API token; nothing is installed on the client machine. The endpoint is stateless:
+each POST gets one JSON response, with no session to resume and no server-initiated
+stream (GET and DELETE answer 405). For clients that only start local processes,
+`duckpad mcp` is a **stdio** bridge that forwards the same tools to the instance's
+HTTP API. Neither transport opens the instance directory or starts a second
+execution engine. Use HTTPS for remote instances. The MCP wire protocol is handled
+by the [official Python SDK](https://github.com/modelcontextprotocol/python-sdk/tree/v1.x).
 
-Authentication uses an existing Duckpad API token, provided through
-`DUCKPAD_TOKEN` or `--token-file`. Tokens inherit their account's current project
+Authentication uses an existing Duckpad API token, sent as
+`Authorization: Bearer <token>` (or given to the bridge through `DUCKPAD_TOKEN` or
+`--token-file`). There is no OAuth flow, and a browser session cannot call the
+tools. Tokens inherit their account's current project
 memberships and roles; they do not have independent scopes. For project-scoped
 access, use a Member account granted only the intended projects. A Reader can
 inspect definitions and existing results; an Editor can
@@ -36,25 +41,46 @@ environment settings or Python policy require a fresh proposal. Pending approval
 expire after 15 minutes and are revoked on server restart. They are bound to the
 requesting token, branch and configuration. Run records follow normal retention.
 
+This decision governs the MCP tools. The token also opens Duckpad's HTTP API with
+its account's role, where an Editor can launch runs directly, as automation
+clients do. An agent that can read the token (for example from a configuration
+file on a machine where it runs shell commands) could bypass the review: keep the
+token out of the agent's reach, and give inspection-only agents a Reader's token.
+
 ## Connect a client
 
-Install Duckpad on the client machine and start the target instance normally:
+Create a token in User settings (or a service-account token as an administrator)
+and keep it outside project Git. Then point the client at the endpoint. For
+example, a project `.mcp.json` for Claude Code that reads the token from the
+environment of the client process:
 
-```sh
-pip install duckpad
-duckpad start
+```json
+{
+  "mcpServers": {
+    "duckpad": {
+      "type": "http",
+      "url": "https://duckpad.example.com/api/agent/mcp",
+      "headers": { "Authorization": "Bearer ${DUCKPAD_TOKEN}" }
+    }
+  }
+}
 ```
 
-Create a token in User settings (or a service-account token as an administrator).
-Store it in a private file outside project Git. A client supporting stdio MCP can
-use this configuration, substituting its own token-file path and server address:
+The equivalent command is
+`claude mcp add --transport http duckpad https://duckpad.example.com/api/agent/mcp --header "Authorization: Bearer $DUCKPAD_TOKEN"`,
+which stores the expanded token in Claude Code's user configuration. Other clients
+take the same URL and header; use their secret storage for the token. A local
+instance answers at `http://127.0.0.1:8765/api/agent/mcp`.
+
+A client that only supports stdio starts the bridge, which needs Duckpad installed
+on the client machine (`pip install duckpad`):
 
 ```json
 {
   "mcpServers": {
     "duckpad": {
       "command": "duckpad",
-      "args": ["mcp", "--server", "http://127.0.0.1:8765", "--token-file", "/path/to/private/token"]
+      "args": ["mcp", "--server", "https://duckpad.example.com", "--token-file", "/path/to/private/token"]
     }
   }
 }
@@ -62,9 +88,9 @@ use this configuration, substituting its own token-file path and server address:
 
 Alternatively set `DUCKPAD_SERVER` and `DUCKPAD_TOKEN` in the client process's
 private environment. Do not paste credentials into prompts, project files or
-client configuration committed to Git. Standard output is reserved for MCP;
-diagnostics use standard error. Redirects are refused, and failed mutations are
-never automatically retried.
+client configuration committed to Git. The bridge reserves standard output for
+MCP and writes diagnostics to standard error. It refuses redirects, never retries
+failed mutations, and adds the full `review_url` to run requests.
 
 ## Tools and workflow
 
@@ -82,8 +108,9 @@ Responses have a size limit; use smaller pages when a response is too large.
 5. `edit_flow` adds, updates or removes nodes and edges; `write_sql` changes code.
    Both require that revision. Read the returned revision before the next edit.
 6. Validate again, then `request_run` with the worktree, environment and optional
-   node. Share the returned review path with a human; open it on the same Duckpad
-   server after signing in. Poll `read_approval`, then `launch_approved_run`.
+   node. Share the returned review path with a human, who opens it on the same
+   Duckpad address after signing in. Poll `read_approval`, then
+   `launch_approved_run`.
 7. `wait_for_run` and `inspect_run` read status and bounded diagnostics.
    `read_schemas`, `preview_output` and `explain_value` read results and lineage.
    `cancel_run` requests cancellation through the same service as the UI.
@@ -94,7 +121,9 @@ remain subject to current project connection grants. Connection credentials are
 redacted from all tool outputs, including errors and logs. External writes that
 have already happened cannot be undone by cancellation.
 
-Validate without the UI using the same server-side validator:
+Validate without the UI using the same server-side validator. The worktree ID is
+the `worktree_...` segment of the branch's page address, or the `worktree` that
+`list_projects` returns:
 
 ```sh
 duckpad validate WORKTREE_ID --server http://127.0.0.1:8765 --token-file /path/to/private/token
