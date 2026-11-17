@@ -1,0 +1,145 @@
+/*
+ * The connection browser: a filter, the path, then one level of folders and
+ * files, or of schemas and tables. Its list keeps a fixed height, so the
+ * dialog does not move while levels of different lengths load.
+ */
+.modal:has(> .resource-browser) {
+  width: 600px;
+}
+.resource-browser {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 16px 16px 14px;
+}
+.resource-browser .search {
+  flex-shrink: 0;
+  margin: 0 0 10px;
+}
+.resource-browser .search input {
+  font-size: 12px;
+}
+.resource-path {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  padding: 0 2px 8px;
+  font-size: 12px;
+}
+.resource-path > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+.resource-path button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  padding: 3px 6px;
+  overflow: hidden;
+  border-radius: 5px;
+  color: var(--accent);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.resource-path button svg {
+  flex-shrink: 0;
+}
+.resource-path button:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+.resource-path button[aria-current] {
+  color: var(--text);
+  font-weight: 600;
+  opacity: 1;
+}
+.resource-entries {
+  height: min(380px, 50vh);
+  padding: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.resource-entry {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto 15px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 6px;
+  text-align: left;
+}
+.resource-entry[aria-selected="true"] {
+  background: var(--accent-soft);
+}
+/* The previous level stays readable, but not clickable, while the next one loads. */
+.resource-entries[aria-busy="true"] .resource-entry {
+  opacity: 0.55;
+  pointer-events: none;
+}
+.resource-entry.folder > svg:first-child,
+.resource-entry.schema > svg:first-child {
+  color: var(--accent);
+}
+.resource-entry.pattern > svg:first-child {
+  color: var(--tag);
+}
+.resource-entry-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.resource-entry.folder .resource-entry-name,
+.resource-entry.schema .resource-entry-name {
+  font-weight: 550;
+}
+.resource-entry-name code {
+  margin-left: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.resource-entry-detail {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.resource-status {
+  margin: 0;
+  padding: 28px 16px;
+  color: var(--muted);
+  text-align: center;
+}
+.resource-status .notice {
+  margin: 0 0 12px;
+  text-align: left;
+  white-space: pre-wrap;
+}
+.resource-truncated {
+  margin: 8px 4px 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.resource-folder-choice {
+  margin-right: auto;
+}
+/* A path or a name, then the button that browses its connection. */
+.browse-field {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+.browse-field > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+.browse-field > .button {
+  flex-shrink: 0;
+}

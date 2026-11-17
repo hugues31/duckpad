@@ -212,15 +212,21 @@ export default function Inspector({
       else params[name] = value;
       return { ...current, params };
     });
-  const { valueOf, listedSchema, listedConnection, database, objectNames } =
-    useDatabaseObjects(
-      parameters,
-      draft,
-      connections,
-      tab === "parameters",
-      worktree,
-      environment,
-    );
+  const {
+    valueOf,
+    listedSchema,
+    listedConnection,
+    database,
+    objectNames,
+    listed,
+  } = useDatabaseObjects(
+    parameters,
+    draft,
+    connections,
+    tab === "parameters",
+    worktree,
+    environment,
+  );
   // Connection parameters naming where file and destination parameters live.
   const locations = new Set(
     parameters
@@ -406,6 +412,8 @@ export default function Inspector({
               valueOf={valueOf}
               csvSource={csvSource}
               objectNames={objectNames}
+              database={database}
+              databaseObjects={listed}
               inputColumns={inputColumns}
               schemas={schemas}
             />

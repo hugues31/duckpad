@@ -1,10 +1,17 @@
 import { useT } from "./i18n";
 import { applyParameterChange } from "./nodeParameters";
 import ParameterField from "./ParameterField";
-import { typeArgument } from "./parameterType";
-import type { RefObject } from "react";
+import { baseType, typeArgument } from "./parameterType";
+import ResourceBrowser from "./ResourceBrowser";
+import {
+  databaseSource,
+  openingFolder,
+  storageSource,
+} from "./resourceBrowsing";
+import { useMemo, useState, type RefObject } from "react";
 import type {
   Column,
+  DatabaseObjects,
   Diagnostic,
   FlowNode,
   Json,
@@ -46,6 +53,8 @@ export default function InspectorParameters({
   valueOf,
   csvSource,
   objectNames,
+  database,
+  databaseObjects,
   inputColumns,
   schemas,
 }: {
@@ -80,12 +89,90 @@ export default function InspectorParameters({
   }) =>
     | { complete: boolean; pending: boolean; error: string; names: string[] }
     | undefined;
+  /** The database connection whose schemas and tables are listed, and its listing once loaded. */
+  database: string;
+  databaseObjects: DatabaseObjects | null;
   inputColumns: Record<string, Column[]>;
   schemas: Record<string, string[]>;
 }) {
   const t = useT();
+  // The parameter whose connection is being browsed.
+  const [browsed, setBrowsed] = useState<string | null>(null);
+  const browsedParameter = parameters.find((p) => p.name === browsed);
+  const browsedFile =
+    !!browsedParameter && baseType(browsedParameter.type) === "file";
+  const storage = browsedFile
+    ? valueOf(typeArgument(browsedParameter!.type))
+    : "";
+  const source = useMemo(
+    () =>
+      storage
+        ? storageSource(worktree, storage, environment)
+        : databaseObjects && databaseSource(databaseObjects),
+    [storage, worktree, environment, databaseObjects],
+  );
+  const connectionName = (id: string) =>
+    connections.find((c) => c.id === id)?.name ?? id;
+  const chooseFile = (path: string) => {
+    update((current) =>
+      applyParameterChange(current, browsed!, path, {
+        fileSource,
+        typesInPreview,
+        listedConnection,
+        listedSchema,
+        listedTable,
+        parameters,
+      }),
+    );
+    setBrowsed(null);
+    blur();
+  };
+  const filePath = browsedFile ? valueOf(browsed!) : "";
   return (
     <>
+      {browsedParameter && source && browsedFile && (
+        <ResourceBrowser
+          title={t("browseChooseFile")}
+          family="storage"
+          root={connectionName(storage)}
+          source={source}
+          initialPath={openingFolder(filePath)}
+          current={filePath.split("/").filter(Boolean)}
+          onChoose={(entry) => chooseFile(entry.path.join("/"))}
+          onChooseFolder={(path) => chooseFile(path.join("/"))}
+          onClose={() => setBrowsed(null)}
+        />
+      )}
+      {browsedParameter && source && !browsedFile && databaseObjects && (
+        <ResourceBrowser
+          title={t("browseChooseTable")}
+          family="database"
+          root={connectionName(database)}
+          source={source}
+          initialPath={
+            databaseObjects.schemas.includes(valueOf(listedSchema))
+              ? [valueOf(listedSchema)]
+              : databaseObjects.schemas.length === 1
+                ? databaseObjects.schemas
+                : []
+          }
+          current={[valueOf(listedSchema), valueOf(listedTable)]}
+          onChoose={(entry) => {
+            const [schema, table] = entry.path;
+            update((current) => ({
+              ...current,
+              params: {
+                ...current.params,
+                [listedSchema!]: schema,
+                [listedTable!]: table,
+              },
+            }));
+            setBrowsed(null);
+            blur();
+          }}
+          onClose={() => setBrowsed(null)}
+        />
+      )}
       {parameters
         .filter((p) => !(typesInPreview && p.name === "types"))
         .map((parameter) => {
@@ -96,6 +183,16 @@ export default function InspectorParameters({
           // Column parameters name the input port they choose from.
           const port = typeArgument(parameter.type);
           const folder = !!folderSource && type.startsWith("file");
+          const base = baseType(type);
+          // A file below a storage connection, or a table of the listed database.
+          const browsable =
+            base === "file"
+              ? connections.some(
+                  (c) => c.id === valueOf(port) && c.family === "storage",
+                )
+              : parameter.name === listedTable &&
+                !!objectNames(parameter) &&
+                !!databaseObjects;
           return (
             <ParameterField
               key={parameter.name}
@@ -178,6 +275,9 @@ export default function InspectorParameters({
               projectFile={type.startsWith("file") && !valueOf(port) && !folder}
               csv={csvSource}
               objects={objectNames(parameter)}
+              onBrowse={
+                browsable ? () => setBrowsed(parameter.name) : undefined
+              }
               inputColumns={inputColumns}
               columns={port ? inputColumns[port] : undefined}
               schemas={(port && schemas[port]) || Object.values(schemas).flat()}

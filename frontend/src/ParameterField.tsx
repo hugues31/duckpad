@@ -1,3 +1,4 @@
+import { FolderSearch } from "lucide-react";
 import { useId, type ReactNode } from "react";
 import GuidedParameter, { GUIDED_TYPES } from "./GuidedParameter";
 import ColumnPreparation from "./ColumnPreparation";
@@ -32,6 +33,7 @@ export default function ParameterField({
   worktree,
   variable,
   expressionVariables,
+  onBrowse,
 }: {
   parameter: Parameter;
   /** The value set on the node, or else the declared default. */
@@ -63,6 +65,8 @@ export default function ParameterField({
   variable?: { control: ReactNode; bound: ReactNode };
   /** The variables an expression can reference; only root flow expressions can. */
   expressionVariables?: ExpressionVariables;
+  /** Opens the browser of the connection the field resolves against. */
+  onBrowse?: () => void;
 }) {
   const t = useT();
   const columnList = useId();
@@ -100,6 +104,133 @@ export default function ParameterField({
         onBlur={onBlur}
       />
     );
+  const control = variable?.bound ? (
+    variable.bound
+  ) : base === "file" && projectFile && worktree ? (
+    <SourceFileField
+      id={id}
+      worktree={worktree}
+      value={text}
+      onChange={onChange}
+      onBlur={onBlur}
+      csv={csv}
+      expressionVariables={expressionVariables}
+    />
+  ) : objects?.complete ? (
+    <Select
+      id={id}
+      value={text}
+      disabled={objects.pending}
+      onChange={(e) => onChange(e.target.value)}
+      onBlur={onBlur}
+    >
+      <option value="">{t("chooseSourceObject")}</option>
+      {text && !objects.names.includes(text) && (
+        <option value={text}>{text}</option>
+      )}
+      {objects.names.map((name) => (
+        <option key={name}>{name}</option>
+      ))}
+    </Select>
+  ) : base === "boolean" ? (
+    <Select
+      id={id}
+      value={String(value ?? false)}
+      onChange={(e) => onChange(e.target.value === "true")}
+      onBlur={onBlur}
+    >
+      <option value="true">true</option>
+      <option value="false">false</option>
+    </Select>
+  ) : base === "connection" ? (
+    <Select
+      id={id}
+      value={text}
+      onChange={(e) => onChange(e.target.value)}
+      onBlur={onBlur}
+    >
+      {location ? (
+        <option value="">{t("projectFiles")}</option>
+      ) : (
+        !text && <option value="">{t("notConnected")}</option>
+      )}
+      {text && !choices.some((c) => c.id === text) && (
+        <option value={text} disabled>
+          {text} · {t("unavailableConnection")}
+        </option>
+      )}
+      {choices.map((c) => (
+        <option key={c.id} value={c.id}>
+          {c.name}
+        </option>
+      ))}
+    </Select>
+  ) : base === "choice" || base === "keyword" ? (
+    <Select
+      id={id}
+      value={text}
+      onChange={(e) => onChange(e.target.value)}
+      onBlur={onBlur}
+    >
+      {typeOptions(type).map((x: string) => (
+        <option key={x}>{x}</option>
+      ))}
+    </Select>
+  ) : base === "list" ? (
+    <ListInput
+      id={id}
+      key={type}
+      type={type}
+      value={value}
+      onChange={onChange}
+      onBlur={onBlur}
+      suggestions={listItemType(type) === "column" ? schemas : undefined}
+    />
+  ) : base === "number" ? (
+    <ParameterInput
+      id={id}
+      limits={parameter}
+      value={value}
+      onChange={onChange}
+      onBlur={onBlur}
+      commitOnChange
+    />
+  ) : ["expressions", "expression", "file", "destination"].includes(base) &&
+    expressionVariables &&
+    (value == null || typeof value !== "object") ? (
+    <ExpressionInput
+      id={id}
+      value={text}
+      variables={expressionVariables}
+      onChange={onChange}
+      onBlur={onBlur}
+      singleLine={base === "file" || base === "destination"}
+    />
+  ) : base === "expressions" || base === "expression" || base === "schema" ? (
+    <textarea
+      id={id}
+      rows={3}
+      className="code-input"
+      value={typeof value === "object" ? JSON.stringify(value, null, 2) : text}
+      onChange={(e) => onChange(e.target.value)}
+      onBlur={onBlur}
+    />
+  ) : (
+    <input
+      id={id}
+      type="text"
+      value={text}
+      onChange={(e) => onChange(e.target.value)}
+      onBlur={onBlur}
+      list={
+        base === "column" && schemas
+          ? columnList
+          : objects
+            ? objectList
+            : undefined
+      }
+    />
+  );
   return (
     <div className="field">
       <span>
@@ -120,136 +251,20 @@ export default function ParameterField({
             .join("")}
         </small>
       </span>
-      {variable?.bound ? (
-        variable.bound
-      ) : base === "file" && projectFile && worktree ? (
-        <SourceFileField
-          id={id}
-          worktree={worktree}
-          value={text}
-          onChange={onChange}
-          onBlur={onBlur}
-          csv={csv}
-          expressionVariables={expressionVariables}
-        />
-      ) : objects?.complete ? (
-        <Select
-          id={id}
-          value={text}
-          disabled={objects.pending}
-          onChange={(e) => onChange(e.target.value)}
-          onBlur={onBlur}
-        >
-          <option value="">{t("chooseSourceObject")}</option>
-          {text && !objects.names.includes(text) && (
-            <option value={text}>{text}</option>
-          )}
-          {objects.names.map((name) => (
-            <option key={name}>{name}</option>
-          ))}
-        </Select>
-      ) : base === "boolean" ? (
-        <Select
-          id={id}
-          value={String(value ?? false)}
-          onChange={(e) => onChange(e.target.value === "true")}
-          onBlur={onBlur}
-        >
-          <option value="true">true</option>
-          <option value="false">false</option>
-        </Select>
-      ) : base === "connection" ? (
-        <Select
-          id={id}
-          value={text}
-          onChange={(e) => onChange(e.target.value)}
-          onBlur={onBlur}
-        >
-          {location ? (
-            <option value="">{t("projectFiles")}</option>
-          ) : (
-            !text && <option value="">{t("notConnected")}</option>
-          )}
-          {text && !choices.some((c) => c.id === text) && (
-            <option value={text} disabled>
-              {text} · {t("unavailableConnection")}
-            </option>
-          )}
-          {choices.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </Select>
-      ) : base === "choice" || base === "keyword" ? (
-        <Select
-          id={id}
-          value={text}
-          onChange={(e) => onChange(e.target.value)}
-          onBlur={onBlur}
-        >
-          {typeOptions(type).map((x: string) => (
-            <option key={x}>{x}</option>
-          ))}
-        </Select>
-      ) : base === "list" ? (
-        <ListInput
-          id={id}
-          key={type}
-          type={type}
-          value={value}
-          onChange={onChange}
-          onBlur={onBlur}
-          suggestions={listItemType(type) === "column" ? schemas : undefined}
-        />
-      ) : base === "number" ? (
-        <ParameterInput
-          id={id}
-          limits={parameter}
-          value={value}
-          onChange={onChange}
-          onBlur={onBlur}
-          commitOnChange
-        />
-      ) : ["expressions", "expression", "file", "destination"].includes(base) &&
-        expressionVariables &&
-        (value == null || typeof value !== "object") ? (
-        <ExpressionInput
-          id={id}
-          value={text}
-          variables={expressionVariables}
-          onChange={onChange}
-          onBlur={onBlur}
-          singleLine={base === "file" || base === "destination"}
-        />
-      ) : base === "expressions" ||
-        base === "expression" ||
-        base === "schema" ? (
-        <textarea
-          id={id}
-          rows={3}
-          className="code-input"
-          value={
-            typeof value === "object" ? JSON.stringify(value, null, 2) : text
-          }
-          onChange={(e) => onChange(e.target.value)}
-          onBlur={onBlur}
-        />
+      {onBrowse && !variable?.bound ? (
+        <div className="browse-field">
+          {control}
+          <button
+            type="button"
+            className="button secondary small"
+            onClick={onBrowse}
+          >
+            <FolderSearch size={13} aria-hidden="true" />
+            {t("browse")}
+          </button>
+        </div>
       ) : (
-        <input
-          id={id}
-          type="text"
-          value={text}
-          onChange={(e) => onChange(e.target.value)}
-          onBlur={onBlur}
-          list={
-            base === "column" && schemas
-              ? columnList
-              : objects
-                ? objectList
-                : undefined
-          }
-        />
+        control
       )}
       {objects && !variable?.bound && (
         <>

@@ -27,6 +27,8 @@ To read a shared folder, an instance admin creates a **Server folder** connectio
 
 ![Load XLSX reads inbox/budget.xlsx from the Finance share Server folder](images/server-folder-location.png)
 
+With a storage connection as the Location, **Browse** next to the file field lists the folders and files below the root of the selected environment. Open a folder, type to filter it, then choose a file, an **All CSV files** pattern (`*.csv`) when a folder holds several files of one format, or **Use this folder** for a table folder such as Delta. The path is written relative to the root, so the node keeps working in every environment. Server folders are listed on the Duckpad server, without hidden files or links leaving the root. S3-compatible roots (`s3://`) are listed through the storage's own API, with the endpoint and credentials of the connection's S3 secret, custom storage types included; the credentials need the `s3:ListBucket` permission. A level shows its first 1,000 names, and typing the beginning of a name finds the others. Without the listing permission, or for other storage types, type the path.
+
 With project files, the inspector previews a reader's first 20 rows before any run; a preview neither runs the flow nor publishes results. Choosing or dropping a CSV fills its delimiter and header from DuckDB's `sniff_csv`. The preview's column table overrides CSV types, and **Auto** keeps the detected type; an invalid conversion shows an error and leaves every column editable. Changing the delimiter or header clears the overrides, since the columns change. Without overrides, CSV keeps DuckDB's native inference. Parquet uses native types.
 
 A CSV export replaces its destination file on each run, following DuckDB's native `COPY` behavior.
@@ -133,6 +135,8 @@ INSERT INTO {{ connection }}.{{ schema }}.{{ table }} BY NAME SELECT * FROM {{ s
 Select a connection, then a schema and a table of the selected environment; Load table previews their columns, types and first 20 rows before any run. When no database connection is authorized for the project, instance administrators can choose **Create a connection**: saving it authorizes it for this project and returns to the source node. They can also authorize an existing connection from project settings. Other members can choose **Ask an administrator** to see the project's participants and their roles. The schema defaults to `public`, PostgreSQL's default. DuckDB and SQLite files use `main`, and MySQL the database name.
 
 ![Load table reads public.orders from a PostgreSQL connection](images/load-table.png)
+
+**Browse** next to the table opens the same browser over the database: its schemas, then their tables and views. Typing searches the tables of every schema, and choosing one sets both the schema and the table.
 
 Export table matches columns by name: every input column must exist in the destination, and destination columns absent from the input take their default value, such as `NULL`. Each run appends its rows. Duckpad never truncates, creates or replaces the table; prepare or clear it in the database itself. Oracle keeps **Export Oracle**, whose OraDuck `COPY` is not an `INSERT`; Load table reads Oracle like any other database.
 

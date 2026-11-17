@@ -57,5 +57,13 @@ export function useDatabaseObjects(
     return undefined;
   };
 
-  return { valueOf, listedSchema, listedConnection, database, objectNames };
+  return {
+    valueOf,
+    listedSchema,
+    listedConnection,
+    database,
+    objectNames,
+    /** The whole listing, for the table browser. */
+    listed: objects.error ? null : objects.data,
+  };
 }
