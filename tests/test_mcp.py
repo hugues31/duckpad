@@ -19,6 +19,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.client.streamable_http import streamable_http_client
 
+from duckpad import agent_api
 from duckpad.app import create_app
 
 
@@ -192,6 +193,10 @@ def test_busy_cancellation_and_replay(instance, monkeypatch):
     finally:
         release.set()
     assert result(instance, "wait_for_run", run=run["id"], seconds=10)["status"] == "canceled"
+    # Nothing started for the busy refusal: its approval still launches once the worktree is free.
+    assert not result(instance, "read_approval", approval=second["id"])["consumed"]
+    later = result(instance, "launch_approved_run", approval=second["id"])
+    assert result(instance, "wait_for_run", run=later["id"], seconds=10)["status"] == "success"
 
 
 def test_secrets_redacted_in_definitions_results_and_errors(instance):
@@ -237,6 +242,123 @@ def test_approval_token_binding_and_environment_change(instance):
     environment["confirm_before_run"] = not environment["confirm_before_run"]
     store.put("environment", environment["id"], environment)
     assert call(instance, "launch_approved_run", approval=pending["id"])["error"]["status"] == 409
+
+
+def test_approval_covers_the_reviewed_commit(instance):
+    _, browser, _, _, _ = instance
+    benign, other = (
+        "-- @output result\nSELECT 'benign' AS value;",
+        "-- @output result\nSELECT 'other' AS value;",
+    )
+    seed(instance, benign)
+    # The branch moves before the decision: the reviewer would inspect something else.
+    pending = result(instance, "request_run")
+    result(
+        instance,
+        "write_sql",
+        node="answer",
+        sql=other,
+        revision=result(instance, "validate_project")["revision"],
+    )
+    page = browser.get(pending["review_path"])
+    assert "branch changed" in page.text and 'value="approve"' not in page.text
+    csrf = re.search(r'name="csrf" value="([^"]+)"', page.text)[1]
+    decision = pending["review_path"].replace("/review", "/decision")
+    assert browser.post(decision, data={"csrf": csrf, "decision": "approve"}).status_code == 409
+    assert browser.post(decision, data={"csrf": csrf, "decision": "decline"}).status_code == 200
+    # Changed after the decision, then restored: the content matches, the reviewed commit does not.
+    pending = result(instance, "request_run")
+    approve(browser, pending)
+    for sql in (benign, other):
+        revision = result(instance, "validate_project")["revision"]
+        result(instance, "write_sql", node="answer", sql=sql, revision=revision)
+    refused = call(instance, "launch_approved_run", approval=pending["id"])
+    assert (refused["error"]["status"], refused["error"]["message"]) == (409, agent_api.MOVED)
+
+
+def test_pending_requests_and_concurrent_calls_are_bounded_per_account(instance, monkeypatch):
+    app, browser, tree, _, _ = instance
+    seed(instance)
+    monkeypatch.setattr(agent_api, "PENDING_PER_ACCOUNT", 2)
+    first = result(instance, "request_run")
+    result(instance, "request_run")
+    assert call(instance, "request_run")["error"]["status"] == 429
+    # Another account keeps its own quota, and a decision frees a slot.
+    other = app.state.auth.create_user("other", "other-test-password")
+    app.state.access.member(tree["project"], other["id"], "editor")
+    second = app.state.auth.create_api_token(other, other["id"], "Other")
+    assert call((*instance[:4], second), "request_run")["ok"]
+    approve(browser, first, "decline")
+    assert call(instance, "request_run")["ok"]
+
+    api, entered, release = app.state.agent_api, threading.Event(), threading.Event()
+    threads = []
+
+    def held(token, name, arguments):
+        threads.append(threading.current_thread().name)
+        entered.set()
+        assert release.wait(10)
+        return {"ok": True, "result": None}
+
+    monkeypatch.setattr(agent_api, "CALLS_PER_TOKEN", 1)
+    monkeypatch.setattr(api, "call", held)
+
+    async def concurrent():
+        slow = asyncio.create_task(api.dispatch("dpk_one", "read_flow", {}))
+        await asyncio.to_thread(entered.wait, 10)
+        refused = await api.dispatch("dpk_one", "read_flow", {})
+        other_token = asyncio.create_task(api.dispatch("dpk_two", "read_flow", {}))
+        release.set()
+        return refused, await slow, await other_token
+
+    refused, slow, other_token = asyncio.run(concurrent())
+    assert refused["error"]["status"] == 429
+    assert slow["ok"] and other_token["ok"]
+    # Calls that wait never hold the application's shared threads.
+    assert all(name.startswith("duckpad-agent") for name in threads)
+    assert not api.calls
+
+
+def test_definitions_are_masked_before_pagination_and_truncation(instance):
+    app, _, tree, _, _ = instance
+    store, projects = app.state.services.store, app.state.services.projects
+    secret = 'kq"7vault\\token-zz'
+    store.put(
+        "connection",
+        "private",
+        {
+            "id": "private",
+            "name": "Secret",
+            "connector": "local",
+            "secret_fields": ["password"],
+            "environments": {"dev": {"password": secret}},
+        },
+    )
+    seed(instance)
+    snapshot = projects.snapshot(tree["id"])
+    files = dict(snapshot["files"])
+    files["README.md"] = "# Notes\nPassword: " + secret + "\n"
+    projects.write(tree["id"], snapshot["revision"], files)
+    revision = result(instance, "validate_project")["revision"]
+    # A long label: page() cuts strings at 2,000 characters, here inside the secret.
+    label = "x" * 1990 + secret
+    result(
+        instance,
+        "edit_flow",
+        revision=revision,
+        nodes=[{"operation": "update", "id": "answer", "label": label}],
+    )
+    escaped = json.dumps(secret)[1:-1]
+    position = files["README.md"].index(secret)
+    reads = [
+        result(instance, "read_documentation", section="project", offset=position + 1),
+        result(instance, "read_flow", section="nodes"),
+        *(result(instance, "read_file", path=path) for path in projects.snapshot(tree["id"])["files"]),
+    ]
+    text = json.dumps(reads)
+    assert escaped in json.dumps(files["README.md"]) and "[redacted]" in text
+    for fragment in ("7vault", "token-zz", escaped):
+        assert fragment not in text
 
 
 def test_numeric_secret_redaction_preserves_json():

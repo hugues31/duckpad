@@ -34,12 +34,18 @@ Every execution requires a human decision, including previews and environments
 that do not normally ask for confirmation. `request_run` creates a bounded,
 expiring proposal and returns a review path. A human signs in to Duckpad, opens
 that path, reviews the environment, scope, exports and Python nodes, and approves
-or declines. API tokens and MCP tools cannot approve. `launch_approved_run` then
-uses the existing execution service, rechecks permissions and the approved
-configuration, and consumes the approval once. Changed definitions, connections,
-environment settings or Python policy require a fresh proposal. Pending approvals
-expire after 15 minutes and are revoked on server restart. They are bound to the
-requesting token, branch and configuration. Run records follow normal retention.
+or declines. API tokens and MCP tools cannot approve. The approval covers the
+commit shown on the review page: once the branch has a newer commit, even one
+that restores earlier content, the page no longer offers approval and the launch
+is refused. `launch_approved_run` then uses the existing execution service,
+rechecks permissions and the approved configuration, and consumes the approval
+once. Changed definitions, connections, environment settings or Python policy
+require a fresh proposal. A launch refused because another execution holds the
+branch starts nothing and keeps the approval for a later attempt. Pending
+approvals expire after 15 minutes and are revoked on server restart. They are
+bound to the requesting token, branch and configuration. Each account can have
+20 requests awaiting a decision, and each token runs up to 4 tool calls at a
+time. Run records follow normal retention.
 
 This decision governs the MCP tools. The token also opens Duckpad's HTTP API with
 its account's role, where an Editor can launch runs directly, as automation

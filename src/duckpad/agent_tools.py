@@ -1,6 +1,7 @@
 """External-agent tools over the assistant's bounded views and application services."""
 
 import inspect
+import json
 from copy import deepcopy
 from types import SimpleNamespace
 from typing import Any, get_type_hints
@@ -59,7 +60,19 @@ def secrets(ctx, token):
                     except Problem:
                         continue
                 if value is not None and str(value):
-                    values.extend((str(value), str(value).replace("'", "''")))
+                    text = str(value)
+                    values.append(text)
+    # Also the forms a secret takes inside a SQL literal or a JSON file of the project.
+    values = [
+        form
+        for text in values
+        for form in (
+            text,
+            text.replace("'", "''"),
+            json.dumps(text, ensure_ascii=False)[1:-1],
+            json.dumps(text, ensure_ascii=True)[1:-1],
+        )
+    ]
     return sorted(set(values), key=len, reverse=True)
 
 
@@ -147,6 +160,14 @@ READS = (
     list_templates,
 )
 EDITS = (editing.edit_flow, editing.write_sql)
+# Definition reads that page or truncate text: they read masked files and bundle.
+MASKED_READS = (
+    tools.read_flow,
+    tools.read_file,
+    tools.read_sql,
+    tools.read_documentation,
+    tools.read_variables,
+)
 
 
 class Tool:
@@ -182,18 +203,21 @@ class Tool:
         values = {name: getattr(args, name) for name in type(args).model_fields}
         deps = dependencies(ctx, token, values.pop("worktree"), values.pop("environment"), hidden)
         deps.check(write=self.write)
-        if self.function in (tools.read_file, tools.read_sql):
-            # Mask complete file contents before character pagination; otherwise an offset could
-            # split a credential and reveal it in pieces. Keep the raw bundle for path resolution.
+        if self.function in MASKED_READS:
+            # Mask complete definitions before pagination and truncation; otherwise an offset or a
+            # cut long string could split a credential and reveal it in pieces.
             branch = deps.branch()
             snapshot = branch.snapshot()
             snapshot["files"] = deps.safe(snapshot["files"])
+            snapshot["bundle"] = deps.safe(snapshot["bundle"])
             deps.snapshots[branch.worktree] = snapshot
         revision = values.pop("revision", None)
         if self.edit:
             projects = deps.services.projects
 
             def writer(call, before, files, details):
+                # `uv lock` can take long and use the network: resolve before taking any lock.
+                files = projects.lock_dependencies(deps.context["worktree"], files)
                 with projects.locked(deps.context["worktree"]):
                     deps.check(write=True)
                     current = projects.snapshot(deps.context["worktree"])
@@ -210,6 +234,7 @@ class Tool:
                         files,
                         validate=True,
                         message="feat(project): apply external agent edit",
+                        relock=False,
                     )
                 return {
                     "revision": result["revision"],
