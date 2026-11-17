@@ -1,7 +1,9 @@
 # Automate Jobs
 
 Launch approved project versions from an orchestrator, wait for their results, cancel
-them and collect their logs. The `duckpad run` command does all of this in one line
+them and collect their logs. To schedule Jobs inside Duckpad instead, or to start
+them when an event occurs elsewhere, use a [scenario](JOBS.md#scenarios) and its
+[webhook](#trigger-a-scenario-with-a-webhook). The `duckpad run` command does all of this in one line
 and exits with a code schedulers act on. It is a client of the stable `/api/v1` API,
 which Airflow, Control-M, cron and CI can also call directly. The authenticated
 OpenAPI description is available at `/api/v1/openapi.json`. Other API routes serve
@@ -133,6 +135,65 @@ keep its output for diagnosis.
 0 2 * * * DUCKPAD_SERVER=https://duckpad.example.com /opt/duckpad/bin/duckpad run sales-daily-prod --token-file /etc/duckpad/sales.token --source cron --timeout 2h >> /var/log/duckpad/sales-daily.log 2>&1
 ```
 
+## Trigger a scenario with a webhook
+
+A [scenario](JOBS.md#scenarios) whose **Accept webhook deliveries** trigger is on
+accepts deliveries at `POST /api/v1/scenarios/{scenario}/webhook`. Authenticate
+with the token of an account with Operator access, as for Jobs, and identify the
+event with a `Webhook-Id` header of 1 to 256 characters, such as the sender's
+event or delivery identifier.
+
+```bash
+printf 'header = "Authorization: Bearer %s"\n' "$DUCKPAD_TOKEN" |
+  curl --silent --show-error --fail-with-body --config - \
+  -H 'Content-Type: application/json' \
+  -H 'Webhook-Id: orders-uploaded-2026-11-17' \
+  -d '{"parameters":{"business_date":"2026-11-17"}}' \
+  "$DUCKPAD_SERVER/api/v1/scenarios/nightly-sales/webhook"
+```
+
+The optional body accepts only `parameters`: values for the scenario's launch
+values, typed like their variables. An unknown name or field, or a value of the
+wrong type, returns **422** `invalid_request`. A delivery carries no SQL,
+connection settings or credentials; each accepted one runs the scenario, its
+Jobs and their versions as they are at that moment.
+
+An accepted delivery returns **202** with the scenario run:
+
+```json
+{
+  "id": "scn_example",
+  "scenario": "nightly-sales",
+  "status": "running",
+  "duplicate": false,
+  "trigger": {"source": "webhook", "delivery": "orders-uploaded-2026-11-17"},
+  "requester": {"id": "user_example", "username": "uploader", "token_name": "Storage events"},
+  "parameters": {"business_date": "2026-11-17"},
+  "started": "2026-11-17T06:00:01+00:00",
+  "finished": null,
+  "steps": [
+    {"job": "load-orders", "status": "running", "run": "run_example"},
+    {"job": "publish-report", "status": "pending", "run": null}
+  ]
+}
+```
+
+Statuses are `running`, `canceling`, `success`, `failed`, `canceled`,
+`interrupted`, `rejected` and `missed`. A step's `run` is an ordinary Job run:
+follow it with `GET /api/v1/runs/{run_id}` and read its `/log`.
+
+- **Duplicates.** A `Webhook-Id` that already started a run of the scenario
+  returns that run, with `"duplicate": true` and its current status, and starts
+  nothing. Concurrent duplicates also start a single run. Identifiers are kept
+  with the run, in the scenario's 500 most recent runs.
+- **Refusals.** While the scenario or one of its Jobs runs, a delivery returns
+  **409** `scenario_busy` or `job_busy` with the active run's ID; a disabled
+  scenario returns `scenario_disabled`, and one whose webhook trigger is off
+  returns `webhook_disabled`. Duckpad records the delivery as **Rejected** in
+  the scenario's history and never queues or replays it. A refused delivery
+  starts no run, so a sender that retries later with the same `Webhook-Id` can
+  start one.
+
 ## Without installing Duckpad
 
 A scheduler can also call the API directly: see the `curl` examples below. It then
@@ -234,8 +295,8 @@ flow; otherwise the launch returns 422 with `invalid_project`. See
 `source` is required when a trigger is supplied (1–128 characters); `reference`
 is optional (up to 2048 characters). The trigger is caller-declared metadata, while
 `requester` records the authenticated account and token name. Unknown fields are
-rejected: selecting a version or supplying runtime variable values at launch is
-not supported. `tag` and `trigger` can be `null`, and so can `finished` while the
+rejected: a Job launch cannot select a version or set variable values; a
+scenario's webhook accepts its launch values. `tag` and `trigger` can be `null`, and so can `finished` while the
 run is active.
 
 A Job response contains its `slug`, `name`, `description`, `project`, `target`,
@@ -319,12 +380,15 @@ message. Additional detail can include validation errors or an active run ID.
 | --- | --- | --- |
 | 401 | `unauthenticated` | Missing, invalid, expired or revoked credentials |
 | 403 | `forbidden` | Insufficient project role, or a cross-origin browser write |
-| 404 | `job_not_found`, `run_not_found` | Unknown resource or one the caller cannot see |
+| 404 | `job_not_found`, `run_not_found`, `scenario_not_found` | Unknown resource or one the caller cannot see |
 | 409 | `job_busy` | An execution is active; `detail.run` contains its ID |
+| 409 | `scenario_busy` | A run of the scenario is active; `detail.run` contains its ID |
+| 409 | `scenario_disabled`, `webhook_disabled` | The scenario, or its webhook trigger, is off |
 | 409 | `target_unavailable` | The target commit or branch, or required environment, is unavailable |
 | 422 | `invalid_project` | The Job's project version or execution scope is invalid |
 | 422 | `invalid_request` | Invalid input, wait value or idempotency key reuse |
 
-Refused launches create no run record; busy refusals appear in the server log.
+Refused Job launches create no run record; busy refusals appear in the server log.
+Refused webhook deliveries appear in the scenario's history.
 Check a failed run's `/log` before scheduling another attempt, especially when it
 contains exports to external systems.

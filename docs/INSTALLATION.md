@@ -442,7 +442,8 @@ Instance administrators can list and revoke any account's tokens through its **A
 to supply a name and description. These accounts have no password or SSO identity and cannot
 sign in interactively. They are always instance Members, cannot create projects, and may only
 be granted Reader or Operator access to existing projects. Administrators create and revoke their tokens
-from the account's **API tokens** view. Service Operators can run and cancel Jobs.
+from the account's **API tokens** view. Service Operators can run and cancel Jobs and
+scenarios, and deliver scenario webhooks.
 Every HTTP-launched run records its requesting account and, when applicable,
 the token name; **History** displays this attribution even after the token is revoked.
 
@@ -456,11 +457,11 @@ Project roles form a hierarchy: Reader < Operator < Editor < Project Admin.
 
 | Action | Reader | Operator | Editor | Project Admin |
 | --- | :-: | :-: | :-: | :-: |
-| View flow, SQL, documentation, history, run logs, results and lineage, including Job results | ✓ | ✓ | ✓ | ✓ |
-| Run, cancel or rerun a Job | – | ✓ | ✓ | ✓ |
+| View flow, SQL, documentation, history, run logs, results and lineage, including Job results and scenario runs | ✓ | ✓ | ✓ | ✓ |
+| Run, cancel or rerun a Job or a scenario | – | ✓ | ✓ | ✓ |
 | Run or cancel ad hoc on a branch, for the project or a node | – | – | ✓ | ✓ |
 | Edit, create branches, merge, publish and create tags | – | – | ✓ | ✓ |
-| Create, edit or delete Jobs, change their version, manage members and the origin, delete the project | – | – | – | ✓ |
+| Create, edit or delete Jobs and scenarios, change Job versions, manage members and the origin, delete the project | – | – | – | ✓ |
 
 Instance administrators have every project right. Job result worktrees remain
 read-only for everyone, including instance administrators. Jobs execute a pinned

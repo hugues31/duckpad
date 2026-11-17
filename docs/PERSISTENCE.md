@@ -2,9 +2,10 @@
 
 Duckpad stores instance metadata in SQLite through SQLModel. Alembic applies the
 packaged revisions in `src/duckpad/migrations/versions/` before the application
-starts serving requests. The single `0001_v0_baseline` revision creates the
+starts serving requests. The single `0001_v0_scenarios` revision creates the
 business tables, including assistant conversations, API tokens, Jobs,
-idempotency keys, partitions and explicit artifact storage locations. It seeds
+idempotency keys, scenarios and their runs, partitions and explicit artifact
+storage locations. It seeds
 the `dev` and `prod` environments, but no connector or connection.
 
 Duckpad is in v0: earlier instance schemas are not upgraded. Startup rejects a
@@ -23,6 +24,14 @@ serializes retries per Job, and the initial run and key are persisted in the
 same transaction before starting the execution thread. Expired entries are
 ignored on lookup and removed when another accepted key is written. Deleting
 a Job removes its keys while retaining its run history.
+
+`scenario`, keyed by its instance-wide slug, belongs to a project and stores its
+steps, launch values, schedules with their next occurrence, webhook switch and
+notification rules as JSON; steps name Jobs without foreign keys, and deleting a
+used Job is refused. `scenario_run` cascades from its scenario and keeps the
+accepted webhook delivery identifier in an indexed column for duplicate
+detection; its snapshot holds the trigger, requester, launch values, steps and
+notification deliveries. Each scenario keeps its 500 most recent runs.
 
 Built-in connector definitions come with the release and are not stored: the
 `connector` table holds custom connector types and administrators' overrides of
@@ -49,6 +58,8 @@ erDiagram
     worktree ||--o{ revision : snapshots
     worktree ||--o{ conflict : retains
     worktree ||--o{ run : executes
+    project ||--o{ scenario : schedules
+    scenario ||--o{ scenario_run : records
     run ||--o{ artifact : captures
     run ||--o{ export_result : updates
     artifact |o--o{ export_result : downloadable
@@ -87,6 +98,27 @@ erDiagram
         string started
         string finished
         float duration
+        json snapshot
+    }
+    scenario {
+        string id PK
+        string project FK
+        string name
+        boolean enabled
+        json steps
+        json parameters
+        json schedules
+        boolean webhook
+        json notifications
+        string revision
+    }
+    scenario_run {
+        string id PK
+        string scenario FK
+        string status
+        string started
+        string finished
+        string delivery
         json snapshot
     }
     setting {
@@ -135,7 +167,8 @@ JSON columns hold variable connector definitions, connection parameters,
 revision files, conflict/run snapshots, Git mappings, provider metadata and
 settings. Secrets remain private instance configuration. `Store` encrypts them on
 write and decrypts them on read: secret connection parameters, the `oidc` client
-secret, `assistant` provider API keys and `ssh_key.private_key`. A sealed value
+secret, `assistant` provider API keys, the `notifications` SMTP password and
+webhook destination URLs, and `ssh_key.private_key`. A sealed value
 reads `dpenc:1:<key id>:<data>`. Public responses are
 assembled and redacted by the existing service/API schemas, never by returning
 database models containing credentials. Empty values and references to server

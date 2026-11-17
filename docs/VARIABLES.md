@@ -127,7 +127,9 @@ identifiers or escaped paths, never as SQL text, including inside expressions.
 ## Runs, history and Git
 
 A launch resolves the variables of its scope from the committed files and the
-selected environment. Results depend on the resolved values only. Changing the `prod` value makes the `prod` results of the
+selected environment. A [scenario](JOBS.md#create-a-scenario) can also set the
+values of ordinary variables for one run; they apply to that run only, with the
+source *launch*. Results depend on the resolved values only. Changing the `prod` value makes the `prod` results of the
 nodes that use it and of their descendants stale. Other environments and
 unrelated nodes stay valid. Renaming a variable, editing its description, or
 binding a parameter to a variable that holds its current value leaves results

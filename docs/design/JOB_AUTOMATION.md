@@ -2,19 +2,17 @@
 
 Single-instance Jobs are implemented: API tokens, service accounts, Operator
 access, annotated tags, pinned versions, reviewed promotion, read-only results,
-API v1 and `duckpad run`. Use [Jobs](../JOBS.md), [automation](../AUTOMATION.md)
-and [Git](../GIT.md) for those features.
+API v1 and `duckpad run`. Scenarios are implemented too: ordered Job steps with
+conditions, typed launch values, cron schedules in a time zone, an authenticated
+webhook trigger with duplicate detection, and email or webhook notifications.
+Use [Jobs and scenarios](../JOBS.md), [automation](../AUTOMATION.md) and
+[Git](../GIT.md) for those features.
 
-## Constraints for schedules and webhooks
-
-A schedule or webhook must launch through the same execution service and
-worktree admission as manual runs: a scheduler's
-per-job concurrency setting is not enough. It records its trigger identity and
-occurrence or delivery ID, captures fresh configuration, carries no SQL,
-connection settings or credentials, and is refused on a busy worktree, never
-queued, retried or replayed. Schedules must survive restarts. Time zones and DST,
-missed occurrences, webhook authentication, duplicate deliveries and the outcome
-of rejected triggers must be specified first.
+Schedules and webhooks launch through the same admission as manual runs. They
+record their trigger identity and occurrence or delivery identifier, read fresh
+configuration, carry no SQL, connection settings or credentials, and are refused
+while the scenario or one of its Jobs runs, never queued, retried or replayed;
+refusals and missed occurrences are recorded.
 
 ## Proposed deployment between instances
 
@@ -58,7 +56,5 @@ Two instances add machine isolation (a large preview on A cannot slow down or bl
 The following work remains proposed, not available:
 
 1. **Two instances.** Projects created from a Git URL, the deployed project mode, per-project read-only deploy keys, publishing and fetching tags, new versions listed for promotion.
-2. **Run-time values and notifications.** Variables marked `"runtime": true` in `variables.json` and allowed by a Job can be set at launch (typed, validated, bound, captured and fingerprinted); signed outgoing webhooks when a run ends; a History filter by trigger.
-3. **Ready-made integrations.** An Airflow provider in a separate repository (operator, hook, sensor, deferrable mode, OpenLineage events), a Control-M Application Integrator template, then an internal scheduler and an inbound webhook once time zones, missed occurrences and rejected triggers are specified.
-
-Steps 1 and 2 can swap if orchestrators need business dates before a dedicated execution instance.
+2. **Automation follow-ups.** Launch values for direct Job launches through API v1 and `duckpad run`; signed outgoing notification webhooks and delivery retries; an in-app notification inbox; a History filter by trigger.
+3. **Ready-made integrations.** An Airflow provider in a separate repository (operator, hook, sensor, deferrable mode, OpenLineage events) and a Control-M Application Integrator template.
