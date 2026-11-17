@@ -22,6 +22,7 @@ export const settingsSections = [
   ["assistant", "assistant"],
   ["git-hosts", "gitHosts"],
   ["environments", "environments"],
+  ["notifications", "notifications"],
   ["connections", "connections"],
   ["extensions", "extensions"],
   ["sql-resources", "sqlResources"],

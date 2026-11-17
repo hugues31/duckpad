@@ -46,6 +46,8 @@ dependencies = [
     "sqlalchemy>=2.0,<3",
     "pydantic-ai-slim[anthropic,google,mistral,openai]>=2.64,<3",
     "mcp>=1.26,<2",
+    # Schedule time zones; Windows has no system time zone database.
+    "tzdata>=2025.2; sys_platform == 'win32'",
 ]
 
 [project.urls]

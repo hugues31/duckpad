@@ -413,6 +413,7 @@ def test_openapi_only_documents_public_routes_and_error_contract(api):
         "/api/v1/runs/{run_id}/cancel",
         "/api/v1/runs/{run_id}/log",
         "/api/v1/runs/{run_id}/partitions",
+        "/api/v1/scenarios/{scenario}/webhook",
     }
     assert schema["security"] == [{"BearerAuth": []}, {"SessionCookie": []}]
     assert schema["paths"]["/api/v1/jobs/{slug}/runs"]["post"]["responses"]["422"]["content"][

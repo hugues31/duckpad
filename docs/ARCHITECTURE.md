@@ -56,7 +56,7 @@ Project repositories contain the [declarative files](AUTHORING.md#project-layout
 They exclude source data, results, virtual environments and instance settings.
 Running an old project commit still uses the current connection catalog.
 
-SQLite stores accounts, access grants, configuration, Jobs, conversations, save
+SQLite stores accounts, access grants, configuration, Jobs, scenarios, conversations, save
 conflicts and execution history. `Store` encrypts connection secrets, provider
 keys, the SSO client secret and SSH private keys on write; services decrypt them
 on read. Passwords, sessions and API tokens are hashed. See
@@ -202,8 +202,12 @@ interrupted; it never resumes computations or repeats exports automatically.
 
 ### Scheduling decision
 
-[Jobs and the automation API](AUTOMATION.md) support external schedulers. Duckpad
-has no built-in calendar scheduler, webhook trigger or persistent execution queue.
+[Jobs and the automation API](AUTOMATION.md) support external schedulers.
+[Scenarios](JOBS.md#scenarios) add an in-process scheduler: a thread checks the
+stored next occurrence of each enabled schedule every 10 seconds and launches
+through the same admission as a manual run. Webhook deliveries use the versioned
+API. There is no persistent execution queue: a busy trigger is refused and
+recorded, and a scenario run interrupted by a restart is not resumed.
 Unimplemented automation proposals are tracked separately in the
 [design record](../docs/design/JOB_AUTOMATION.md#delivery-plan).
 

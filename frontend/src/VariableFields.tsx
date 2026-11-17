@@ -112,7 +112,7 @@ export function VariableValueInput({
   );
 }
 
-/** Where a resolved value comes from: the default, or the environment's own value. */
+/** Where a resolved value comes from: the default, the environment's own value or the launch. */
 function useSourceLabel() {
   const t = useT();
   return (source: string | undefined, environment: string) =>
@@ -120,7 +120,9 @@ function useSourceLabel() {
       ? fill(t("environmentValue"), { environment })
       : source === "default"
         ? t("defaultValueSource")
-        : "";
+        : source === "launch"
+          ? t("launchValueSource")
+          : "";
 }
 
 /**

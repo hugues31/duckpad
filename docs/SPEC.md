@@ -80,8 +80,10 @@ and [security](../SECURITY.md).
 Jobs run pinned tags or branch heads in read-only worktrees. Operators can launch
 Jobs without editing projects; project administrators configure and promote them.
 The versioned automation API provides idempotent launch, waiting, cancellation and
-logs. External schedulers choose when to run; built-in schedules, webhooks and
-caller-supplied variable overrides remain unimplemented. See [Jobs](JOBS.md),
+logs. Scenarios run Jobs in order with success, failure or always conditions,
+start them manually, on cron schedules in a time zone or from authenticated
+webhooks, set typed launch values for one run and notify configured destinations.
+Busy triggers are refused and recorded, never queued. See [Jobs](JOBS.md),
 [automation](AUTOMATION.md) and the [remaining proposals](design/JOB_AUTOMATION.md#delivery-plan).
 
 ## AI assistant

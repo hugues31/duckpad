@@ -3,7 +3,8 @@
 Open a project from **Projects** to enter its working branch. **Flow** is the
 canvas; **Code** edits its files; **Documentation** explains the project;
 **Variables** configures shared values; **History** lists executions;
-**Jobs** manages repeatable runs; **Project settings** contains access, connections,
+**Jobs** manages repeatable runs and the scenarios that chain and schedule them;
+**Project settings** contains access, connections,
 Python, partitions, extensions and general settings. Partition and extension
 settings apply to the branch shown in the top bar.
 

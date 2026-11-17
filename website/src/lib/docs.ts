@@ -154,15 +154,15 @@ export const sections = [
       },
       {
         slug: "jobs",
-        title: "Jobs",
+        title: "Jobs & scenarios",
         description:
-          "Run reviewed versions and inspect their results and version history.",
+          "Run reviewed versions, chain them, schedule them and get notified.",
       },
       {
         slug: "automation",
         title: "CLI & automation",
         description:
-          "Launch Jobs from schedulers with duckpad run or the HTTP API.",
+          "Launch Jobs with duckpad run or the HTTP API, and scenarios from webhooks.",
       },
       {
         slug: "mcp",

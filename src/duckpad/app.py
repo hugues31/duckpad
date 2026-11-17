@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import __version__, automation
 from .agent_api import AgentAPI
-from .api import account, admin, git, http, jobs, projects, results, session, worktrees
+from .api import account, admin, git, http, jobs, projects, results, scenarios, session, worktrees
 from .api.context import Context
 from .api.security import authorize_unknown_route
 from .assistant.api import router as assistant_router
@@ -20,21 +20,29 @@ from .assistant.service import Assistant
 from .auth import Auth
 from .jobs import Jobs
 from .monitoring import Monitoring
+from .notifications import Notifications
 from .oidc import OIDC
+from .scenarios import Scenarios
 from .services import Services
 from .util import Problem
 
 STATIC = Path(__file__).parent / "static"
 
 
-def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -> FastAPI:
+def create_app(
+    home: Path, watch: bool = True, *, trusted_local: bool = False, schedule: bool = True
+) -> FastAPI:
+    """`schedule` starts the scenario scheduler with the application."""
     services = Services.open(home, isolated=not trusted_local)
     auth = Auth(services.store)
+    jobs_service, notifications = Jobs(services), Notifications(services.store)
     ctx = Context(
         services=services,
         auth=auth,
         oidc=OIDC(services.store, auth),
-        jobs=Jobs(services),
+        jobs=jobs_service,
+        scenarios=Scenarios(services, jobs_service, notifications),
+        notifications=notifications,
         monitoring=Monitoring(services.store.paths.home),
         assistant=Assistant(services, auth),
     )
@@ -45,8 +53,11 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
             try:
                 if watch:
                     services.projects.start_watcher()
+                if schedule:
+                    ctx.scenarios.start()
                 yield
             finally:
+                ctx.scenarios.close()
                 services.close()
 
     app = FastAPI(
@@ -63,12 +74,13 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
     app.state.access = ctx.access
     app.state.assistant = ctx.assistant
     app.state.jobs = ctx.jobs
+    app.state.scenarios = ctx.scenarios
     app.state.agent_api = AgentAPI(ctx)
     http.install(app, auth)
     app.include_router(app.state.agent_api.router())
     app.include_router(assistant_router(ctx.assistant))
-    app.include_router(automation.router(ctx.jobs, ctx.access))
-    for module in (session, account, admin, projects, worktrees, git, jobs, results):
+    app.include_router(automation.router(ctx.jobs, ctx.scenarios, ctx.access))
+    for module in (session, account, admin, projects, worktrees, git, jobs, scenarios, results):
         # Keep the internal route inventory flat for access audits and application tooling.
         app.router.routes.extend(module.router(ctx).routes)
 

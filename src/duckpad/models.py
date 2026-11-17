@@ -104,9 +104,41 @@ class Job(SQLModel, table=True):
     environment: str
     scope: str | None = None
     target: dict = Field(sa_type=JSON)
-    runtime_variables: list = Field(default_factory=list, sa_type=JSON)
     versions: list = Field(default_factory=list, sa_type=JSON)
     revision: str
+
+
+class Scenario(SQLModel, table=True):
+    __tablename__ = "scenario"
+    # The immutable instance-wide slug is the primary key.
+    id: str = Field(primary_key=True)
+    project: str = Field(foreign_key="project.id", ondelete="CASCADE", index=True)
+    name: str
+    description: str
+    enabled: bool
+    # Ordered Job steps, launch parameters, cron schedules and notification rules.
+    steps: list = Field(default_factory=list, sa_type=JSON)
+    parameters: list = Field(default_factory=list, sa_type=JSON)
+    schedules: list = Field(default_factory=list, sa_type=JSON)
+    webhook: bool = False
+    notifications: list = Field(default_factory=list, sa_type=JSON)
+    revision: str
+
+
+class ScenarioRun(SQLModel, table=True):
+    __tablename__ = "scenario_run"
+    __table_args__ = (
+        Index("scenario_run_started", "scenario", "started"),
+        Index("scenario_run_delivery", "scenario", "delivery"),
+    )
+    id: str = Field(primary_key=True)
+    scenario: str = Field(foreign_key="scenario.id", ondelete="CASCADE")
+    status: str = Field(index=True)
+    started: str
+    finished: str | None = None
+    # The webhook delivery identifier of an accepted run, which a duplicate delivery returns.
+    delivery: str | None = None
+    snapshot: dict = Field(sa_type=JSON)
 
 
 class ProjectMember(SQLModel, table=True):

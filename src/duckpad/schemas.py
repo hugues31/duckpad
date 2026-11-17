@@ -104,7 +104,6 @@ class JobFields(BaseModel):
 class NewJob(JobFields):
     slug: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=80)
     target: JobTarget
-    runtime_variables: list[str] = Field(default_factory=list, max_length=0)
 
 
 class JobChanges(JobFields):
@@ -117,6 +116,51 @@ class JobPromotion(BaseModel):
     revision: str
     previous_commit: str
     commit: str
+
+
+class ScenarioStep(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    job: str = Field(min_length=1, max_length=80)
+    run_if: Literal["success", "failure", "always"] = "success"
+
+
+class ScenarioSchedule(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    cron: str = Field(min_length=1, max_length=200)
+    timezone: str = Field(default="UTC", min_length=1, max_length=64)
+
+
+class ScenarioNotification(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    destination: str = Field(min_length=1, max_length=40)
+    on: Literal["failure", "success", "always"] = "failure"
+
+
+class ScenarioFields(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    name: str = Field(min_length=1, max_length=120)
+    description: str = Field(default="", max_length=2000)
+    enabled: StrictBool = True
+    steps: list[ScenarioStep] = Field(min_length=1, max_length=20)
+    # Names of project variables a launch can set.
+    parameters: list[str] = Field(default_factory=list, max_length=20)
+    schedules: list[ScenarioSchedule] = Field(default_factory=list, max_length=10)
+    webhook: StrictBool = False
+    notifications: list[ScenarioNotification] = Field(default_factory=list, max_length=10)
+
+
+class NewScenario(ScenarioFields):
+    slug: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=80)
+
+
+class ScenarioChanges(ScenarioFields):
+    revision: str
+
+
+class ScenarioLaunch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    parameters: dict[str, Any] = Field(default_factory=dict, max_length=20)
+    confirmed: StrictBool = False
 
 
 class PartitionKey(BaseModel):

@@ -116,8 +116,9 @@ also [push and pull](docs/GIT.md#origin-fetch-pull-and-push) them.
   define a value once and adapt it for development and production.
 - **[Charts](docs/CHARTS.md)** of any result, declared with Vega-Lite and
   versioned with the project.
-- **[Jobs](docs/JOBS.md)** that run a reviewed version, launched from the
-  interface, `duckpad run` or the [automation API](docs/AUTOMATION.md).
+- **[Jobs and scenarios](docs/JOBS.md)** that run a reviewed version, launched
+  from the interface, `duckpad run`, the [automation API](docs/AUTOMATION.md), a
+  built-in schedule or a webhook, with notifications of the outcome.
 - **An [AI assistant](docs/ASSISTANT.md)** that explains a flow, makes edits
   you can undo and asks before running anything. It is off until you connect a
   provider of your choice, including a local model.
@@ -214,8 +215,6 @@ Duckpad is probably not what you need for:
 - **Data that requires a cluster.** DuckDB computes on a single machine.
 - **Streaming.** Pipelines run as batches.
 - **Dashboards.** Charts illustrate a result; Duckpad is not a BI tool.
-- **Scheduling.** There is no built-in scheduler: cron, Airflow or another
-  orchestrator [starts the Jobs](docs/AUTOMATION.md).
 
 Duckpad is young and moves fast. Releases are frequent, and a breaking one can
 require a fresh instance: read the

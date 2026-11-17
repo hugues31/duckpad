@@ -26,6 +26,8 @@ ROUTE_ACCESS = {
     ],
     SESSION: [
         "GET /api/v1/jobs",
+        "GET /api/schedule-preview",
+        "GET /api/notification-destinations",
         "GET /api/v1/openapi.json",
         "POST /api/logout",
         "GET /api/session",
@@ -48,6 +50,10 @@ ROUTE_ACCESS = {
     ],
     READER: [
         "GET /api/v1/jobs/{slug}",
+        "GET /api/projects/{project}/scenarios",
+        "GET /api/scenarios/{scenario}",
+        "GET /api/scenarios/{scenario}/runs",
+        "GET /api/jobs/{slug}/variables",
         "GET /api/v1/runs/{run_id}",
         "GET /api/v1/runs/{run_id}/log",
         "GET /api/v1/runs/{run_id}/partitions",
@@ -99,6 +105,9 @@ ROUTE_ACCESS = {
     ],
     OPERATOR: [
         "POST /api/jobs/{slug}/runs",
+        "POST /api/scenarios/{scenario}/runs",
+        "POST /api/scenario-runs/{scenario_run}/cancel",
+        "POST /api/v1/scenarios/{scenario}/webhook",
         "POST /api/v1/jobs/{slug}/runs",
         "POST /api/v1/runs/{run_id}/cancel",
     ],
@@ -134,6 +143,9 @@ ROUTE_ACCESS = {
     ],
     PROJECT_ADMIN: [
         "POST /api/projects/{project}/jobs",
+        "POST /api/projects/{project}/scenarios",
+        "PATCH /api/scenarios/{scenario}",
+        "DELETE /api/scenarios/{scenario}",
         "PATCH /api/jobs/{slug}",
         "DELETE /api/jobs/{slug}",
         "POST /api/jobs/{slug}/version",
@@ -143,6 +155,9 @@ ROUTE_ACCESS = {
         "PUT /api/worktrees/{worktree}/git/remote",
     ],
     INSTANCE_ADMIN: [
+        "GET /api/notification-settings",
+        "PUT /api/notification-settings",
+        "POST /api/notification-settings/test",
         "GET /api/sso",
         "PUT /api/sso",
         "GET /api/resources",
@@ -180,6 +195,7 @@ AUTHORIZATION_ERRORS = {
     "Worktree not found",
     "Resource not found",
     "Job not found",
+    "Scenario not found",
     "Run not found",
     "Your project role does not allow this action",
     "Instance administrator access required",
@@ -415,7 +431,27 @@ def test_every_api_route_requires_its_classified_access_level(instance):
     from duckpad.schemas import JobLaunch
 
     job_run = wait_run(store, jobs.launch("probe-job", JobLaunch(), None))
+    from duckpad.schemas import NewScenario
+
+    for slug in ("probe-scenario", "disposable-scenario"):
+        app.state.scenarios.create(
+            worktree["project"], NewScenario(slug=slug, name=slug, steps=[{"job": "probe-job"}])
+        )
+    store.put(
+        "scenario_run",
+        "scn_probe",
+        {
+            "scenario": "probe-scenario",
+            "status": "success",
+            "started": "2026-01-01T00:00:00+00:00",
+            "finished": "2026-01-01T00:00:01+00:00",
+            "delivery": None,
+            "steps": [],
+        },
+    )
     values = {
+        "scenario": "probe-scenario",
+        "scenario_run": "scn_probe",
         "run_id": job_run["id"],
         "slug": "probe-job",
         "project": worktree["project"],
@@ -430,6 +466,8 @@ def test_every_api_route_requires_its_classified_access_level(instance):
         ids = {**values, "project": disposable["project"]} if path == "/api/projects/{project}" else values
         if method == "DELETE" and path == "/api/jobs/{slug}":
             ids = {**ids, "slug": "disposable-job"}
+        if method == "DELETE" and path == "/api/scenarios/{scenario}":
+            ids = {**ids, "scenario": "disposable-scenario"}
         url = re.sub(r"\{(\w+)\}", lambda match, ids=ids: ids.get(match[1], "missing"), path)
         # An unknown environment keeps the permitted launch probe from starting a run.
         body = {"environment": "missing"} if path.endswith("/runs") else {}
