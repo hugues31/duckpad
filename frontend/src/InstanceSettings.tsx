@@ -2,6 +2,7 @@ import SettingsLayout from "./SettingsLayout";
 import { NavLink } from "react-router";
 import {
   Activity,
+  Bell,
   Blocks,
   Cpu,
   MessageSquare,
@@ -19,6 +20,7 @@ import EnvironmentsPanel from "./EnvironmentsPanel";
 import ExtensionSettings from "./ExtensionSettings";
 import GitHostsSettings from "./GitHostsSettings";
 import InstanceMonitoring from "./InstanceMonitoring";
+import NotificationSettings from "./NotificationSettings";
 import { useT } from "./i18n";
 import SQLResourceSettings from "./SQLResourceSettings";
 import SSOSettings from "./SSOSettings";
@@ -31,6 +33,7 @@ const sectionIcons = {
   ssoSettings: KeyRound,
   gitHosts: GitBranch,
   environments: Server,
+  notifications: Bell,
   connections: Database,
   extensions: Blocks,
   sqlResources: Cpu,
@@ -79,6 +82,7 @@ export default function InstanceSettings({
       {section === "sqlResources" && <SQLResourceSettings />}
       {section === "ssoSettings" && <SSOSettings />}
       {section === "gitHosts" && <GitHostsSettings />}
+      {section === "notifications" && <NotificationSettings />}
       {section === "environments" && (
         <EnvironmentsPanel
           environments={workspace.catalog.environment_details}

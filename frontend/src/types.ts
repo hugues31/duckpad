@@ -496,7 +496,11 @@ export interface Run {
     tag: string | null;
     branch: string | null;
     commit: string;
+    /** The scenario run that launched this Job run. */
+    scenario?: { slug: string; name: string; run: string };
   };
+  /** Variable values set for this run only, by a scenario launch. */
+  launch_values?: Record<string, Json>;
   tag?: string | null;
   requester?: {
     id: string;

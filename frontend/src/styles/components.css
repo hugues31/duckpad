@@ -329,7 +329,10 @@ a.button {
 .badge.stale,
 .badge.incomplete,
 .badge.blocked,
-.badge.partial_failure {
+.badge.partial_failure,
+.badge.rejected,
+.badge.missed,
+.badge.refused {
   background: #fff0d4;
   color: #79551d;
 }
@@ -339,12 +342,14 @@ a.button {
   color: #b14c46;
 }
 .badge.running,
+.badge.canceling,
 .badge.preparing {
   background: #e8eefc;
   color: #5b77be;
 }
 .badge.neutral,
 .badge.canceled,
+.badge.skipped,
 .badge.pending {
   background: var(--surface-alt);
   color: var(--muted);

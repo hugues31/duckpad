@@ -4,25 +4,30 @@ import type { Run } from "./types";
 import { useResource } from "./useApiResource";
 import { useAsyncAction } from "./useAsyncAction";
 
-async function page(path: string, signal?: AbortSignal) {
+type Entry = { id: string; status: string };
+
+async function page<T extends Entry>(path: string, signal?: AbortSignal) {
   let next: string | null = null;
-  const items = await api<Run[]>(path, { signal }, (response) => {
+  const items = await api<T[]>(path, { signal }, (response) => {
     next = response.headers.get("X-Next-Cursor");
   });
   return { items, next };
 }
 
 /** Poll only the newest summaries; older pages are fetched explicitly. */
-export function useRunHistory(path: string, interval?: number) {
+export function useRunHistory<T extends Entry = Run>(
+  path: string,
+  interval?: number,
+) {
   const [older, setOlder] = useState<{
     path: string;
-    items: Run[];
+    items: T[];
     next: string | null;
   } | null>(null);
   const first = useResource(
     path,
     async (signal) => {
-      const result = await page(path, signal);
+      const result = await page<T>(path, signal);
       if (!signal.aborted)
         setOlder((previous) =>
           previous?.path === path
@@ -55,7 +60,7 @@ export function useRunHistory(path: string, interval?: number) {
     loadMore: () =>
       more.run(async () => {
         if (!next) return;
-        const result = await page(
+        const result = await page<T>(
           `${path}${path.includes("?") ? "&" : "?"}cursor=${encodeURIComponent(next)}`,
         );
         setOlder((previous) => ({
@@ -70,7 +75,7 @@ export function useRunHistory(path: string, interval?: number) {
   };
 }
 
-function merge(latest: Run[], previous: Run[]) {
+function merge<T extends Entry>(latest: T[], previous: T[]) {
   const seen = new Set(latest.map((run) => run.id));
   return [...latest, ...previous.filter((run) => !seen.has(run.id))];
 }

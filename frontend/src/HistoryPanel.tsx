@@ -351,6 +351,12 @@ function RunDetailsContent({
         <p>
           {t("job")}: <strong>{run.job.name}</strong> ·{" "}
           {run.tag || run.job.branch} · <code>{run.commit.slice(0, 8)}</code>
+          {run.job.scenario && (
+            <>
+              {" · "}
+              {t("scenario")}: <strong>{run.job.scenario.name}</strong>
+            </>
+          )}
         </p>
       )}
       {run.error && (
