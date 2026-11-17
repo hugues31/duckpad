@@ -1,0 +1,137 @@
+import { nodeInterface, resolveNodePath } from "./graph";
+import type { Bundle, FlowNode, ParsedTemplate, Snapshot } from "./types";
+
+export const nodeCodePath = (id: string, parent?: string, language = "sql") => {
+  const extension = language === "python" ? "py" : "sql";
+  return parent
+    ? `components/${parent}/${id}.${extension}`
+    : `nodes/${id}.${extension}`;
+};
+export const templateCodePath = (template: string) =>
+  `templates/${template}${template.endsWith(".py") ? "" : ".sql"}`;
+/** The project file holding a node's code: its shared template or its own file. */
+export const nodeSourcePath = (node: FlowNode, parent?: string) =>
+  node.template
+    ? templateCodePath(node.template)
+    : nodeCodePath(node.id, parent, node.language);
+/** A node's element ID in Git comparisons and histories. */
+export const nodeEntity = (id: string, parent?: string) =>
+  `${parent ? `component/${parent}/` : ""}node/${id}`;
+export const nodeGraph = (bundle: Bundle, parent?: string) =>
+  parent ? bundle.components[parent] : bundle.flow;
+export const nodeCode = (bundle: Bundle, node: FlowNode, parent?: string) =>
+  node.template
+    ? bundle.templates[node.template]
+    : bundle.node_sql?.[nodeCodePath(node.id, parent, node.language)] || "";
+
+/** Write the code owned by a node or its shared template. */
+export function setNodeCode(
+  bundle: Bundle,
+  node: FlowNode,
+  code: string,
+  parent?: string,
+) {
+  if (node.component) throw new Error("A component instance has no code");
+  if (node.template) bundle.templates[node.template] = code;
+  else
+    (bundle.node_sql ||= {})[nodeCodePath(node.id, parent, node.language)] =
+      code;
+}
+
+/** Locate the authored definition of a node inside component instances. */
+export function nodeLocation(bundle: Bundle, fullNode: string) {
+  const location = resolveNodePath(bundle, fullNode);
+  return location ? { node: location.node, parent: location.parent } : null;
+}
+
+/** Parsed local definitions of the opened graph, keyed by stable node ID. */
+export function localDefinitions(
+  snapshot: Snapshot,
+  parent?: string,
+): Record<string, ParsedTemplate> {
+  return Object.fromEntries(
+    (snapshot.bundle
+      ? nodeGraph(snapshot.bundle, parent)?.nodes || []
+      : []
+    ).map((node) => [
+      node.id,
+      snapshot.parsed_nodes?.[nodeCodePath(node.id, parent, node.language)] ||
+        (node.template
+          ? snapshot.parsed_templates[node.template]
+          : undefined) ||
+        {},
+    ]),
+  );
+}
+
+/** Whether muting can pass the node's inputs through: sources have none. */
+export function canMute(snapshot: Snapshot, node: FlowNode, parent?: string) {
+  return (
+    !!node.muted ||
+    nodeInterface(
+      node,
+      snapshot.parsed_templates,
+      snapshot.bundle?.components,
+      localDefinitions(snapshot, parent),
+    ).inputs.length > 0
+  );
+}
+
+export function detachNode(bundle: Bundle, node: FlowNode, parent?: string) {
+  const code = nodeCode(bundle, node, parent);
+  node.preset ||= node.template || node.origin;
+  if (node.template) node.origin = node.template;
+  delete node.template;
+  setNodeCode(bundle, node, code, parent);
+}
+
+/**
+ * Give a new node's own SQL no `@description`: copied from its template, it
+ * describes the palette entry, not this node.
+ */
+export function freshNodeCode(bundle: Bundle, node: FlowNode, parent?: string) {
+  if (node.language === "python") return;
+  const path = nodeCodePath(node.id, parent, node.language);
+  const code = bundle.node_sql?.[path];
+  if (code !== undefined)
+    bundle.node_sql![path] = code.replace(
+      /^[ \t]*--[ \t]*@description\b.*(?:\r?\n|$)/gm,
+      "",
+    );
+}
+
+export function linkNode(
+  bundle: Bundle,
+  node: FlowNode,
+  template: string,
+  parent?: string,
+) {
+  node.template = template;
+  node.origin = template;
+  delete bundle.node_sql?.[nodeCodePath(node.id, parent, node.language)];
+}
+
+/** Count placed instances, including every use of a component containing linked nodes. */
+export function templateUsage(bundle: Bundle, template: string): number {
+  function count(
+    graph: Bundle["flow"] | Bundle["components"][string],
+    seen: string[],
+  ): number {
+    return graph.nodes.reduce(
+      (total, node) =>
+        total +
+        (node.template === template
+          ? 1
+          : node.component &&
+              bundle.components[node.component] &&
+              !seen.includes(node.component)
+            ? count(bundle.components[node.component], [
+                ...seen,
+                node.component,
+              ])
+            : 0),
+      0,
+    );
+  }
+  return count(bundle.flow, []);
+}
