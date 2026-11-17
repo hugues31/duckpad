@@ -103,15 +103,16 @@ def list_level(settings: Record, root: str, path: str, prefix: str, limit: int) 
     }
     answer = request(settings, bucket, query)
     entries: list[tuple[bool, str, Record]] = []
-    marker = False
+    # Any key below the folder proves it exists, even a hidden one or the console's `folder/` marker.
+    found = False
     for item in answer.iter("CommonPrefixes"):
         name = decoded(text(item, "Prefix"))[len(folder) :].rstrip("/")
+        found = True
         if name and not name.startswith("."):
             entries.append((False, name, {"name": name, "kind": "folder", "size": None, "modified": None}))
     for item in answer.iter("Contents"):
         name = decoded(text(item, "Key"))[len(folder) :]
-        # A console's empty `folder/` object marks the folder itself.
-        marker = marker or not name
+        found = True
         if not name or "/" in name or name.startswith("."):
             continue
         size = text(item, "Size")
@@ -128,7 +129,7 @@ def list_level(settings: Record, root: str, path: str, prefix: str, limit: int) 
             )
         )
     truncated = text(answer, "IsTruncated").lower() == "true"
-    if path and not prefix and not entries and not marker and not truncated:
+    if path and not prefix and not found and not truncated:
         raise Problem("This folder does not exist in the bucket", 404)
     entries.sort(key=lambda item: (item[0], item[1].casefold(), item[1]))
     return {"entries": [entry for *_, entry in entries], "truncated": truncated}

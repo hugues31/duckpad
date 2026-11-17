@@ -137,12 +137,14 @@ it("narrows a level too large to list by the beginning of a name, on the server"
 it("opens at the folder of a plain relative path, else at the root", () => {
   expect(openingFolder("inbox/2024/orders.csv")).toEqual(["inbox", "2024"]);
   expect(openingFolder("orders.csv")).toEqual([]);
+  // A pattern chosen in the browser reopens its folder.
+  expect(openingFolder("inbox/2024/*.csv")).toEqual(["inbox", "2024"]);
   for (const value of [
     "",
     "/srv/data/orders.csv",
     "s3://lake/raw/orders.csv",
     "inbox/{{ var.month }}/orders.csv",
-    "inbox/*.csv",
+    "*/orders.csv",
   ])
     expect(openingFolder(value)).toEqual([]);
 });

@@ -174,13 +174,16 @@ def test_virtual_hosted_requests_name_the_bucket_in_the_host(storage):
     assert requests[0].url.params["prefix"] == "ord"
 
 
-def test_an_empty_folder_marker_is_a_folder_and_a_missing_prefix_is_not(storage):
+def test_an_empty_folder_marker_or_a_hidden_file_is_a_folder_and_a_missing_prefix_is_not(storage):
     answers, _ = storage
     answers.append((200, page("raw/empty/", prefix="raw/empty/")))
     assert s3_listing.list_level(settings(), "s3://lake/raw", "empty", "", 10) == {
         "entries": [],
         "truncated": False,
     }
+    # A folder holding hidden files only exists, even with nothing to show.
+    answers.append((200, page("raw/kept/.keep", prefix="raw/kept/")))
+    assert s3_listing.list_level(settings(), "s3://lake/raw", "kept", "", 10)["entries"] == []
     answers.append((200, page(prefix="raw/missing/")))
     with pytest.raises(Problem, match="This folder does not exist in the bucket") as missing:
         s3_listing.list_level(settings(), "s3://lake/raw", "missing", "", 10)

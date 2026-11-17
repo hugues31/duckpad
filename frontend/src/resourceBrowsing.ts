@@ -176,13 +176,14 @@ export function databaseSource(objects: DatabaseObjects): BrowserSource {
 
 /**
  * Where the browser opens for a path already written in a file field: the
- * folder of a plain relative path, or the root for an expression, a pattern,
- * an absolute path or a URI.
+ * folder of a relative path, such as the `*.csv` pattern the browser writes,
+ * or the root for an expression, a pattern over folders, an absolute path or
+ * a URI.
  */
 export function openingFolder(value: string): string[] {
-  if (!value || /[{}*?[\]\\]|^\/|^[a-z][a-z0-9+.-]*:\/\//i.test(value))
-    return [];
-  return value.split("/").filter(Boolean).slice(0, -1);
+  if (!value || /[{}\\]|^\/|^[a-z][a-z0-9+.-]*:\/\//i.test(value)) return [];
+  const folder = value.split("/").filter(Boolean).slice(0, -1);
+  return folder.some((part) => /[*?[\]]/.test(part)) ? [] : folder;
 }
 
 const UNITS = ["byte", "kilobyte", "megabyte", "gigabyte", "terabyte"];
