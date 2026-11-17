@@ -185,16 +185,23 @@ export function openingFolder(value: string): string[] {
   return value.split("/").filter(Boolean).slice(0, -1);
 }
 
-const UNITS = ["B", "kB", "MB", "GB", "TB"];
+const UNITS = ["byte", "kilobyte", "megabyte", "gigabyte", "terabyte"];
 
-/** A file size with at most three significant digits, such as 1.2 MB. */
+/**
+ * A file size with at most three significant digits, in the units of the
+ * interface language: 1.2 MB in English, 1,2 Mo in French.
+ */
 export function fileSize(bytes: number, language: string) {
   const unit = Math.min(
     UNITS.length - 1,
     bytes < 1 ? 0 : Math.floor(Math.log(bytes) / Math.log(1000)),
   );
   const value = bytes / 1000 ** unit;
-  return `${new Intl.NumberFormat(language, {
+  return new Intl.NumberFormat(language, {
+    style: "unit",
+    unit: UNITS[unit],
+    // "5 byte" reads oddly in English: bytes are spelled out.
+    unitDisplay: unit ? "short" : "long",
     maximumFractionDigits: value < 10 && unit ? 1 : 0,
-  }).format(value)} ${UNITS[unit]}`;
+  }).format(value);
 }

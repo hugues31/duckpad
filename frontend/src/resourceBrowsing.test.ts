@@ -147,10 +147,16 @@ it("opens at the folder of a plain relative path, else at the root", () => {
     expect(openingFolder(value)).toEqual([]);
 });
 
-it("writes file sizes with at most three significant digits", () => {
-  expect(fileSize(0, "en")).toBe("0 B");
-  expect(fileSize(999, "en")).toBe("999 B");
-  expect(fileSize(1234, "en")).toBe("1.2 kB");
-  expect(fileSize(45_600_000, "en")).toBe("46 MB");
-  expect(fileSize(3_400_000_000, "fr")).toBe("3,4 GB");
+it("writes file sizes with at most three significant digits, in the interface language", () => {
+  // Intl separates numbers and units with no-break spaces in some languages.
+  const size = (bytes: number, language: string) =>
+    fileSize(bytes, language).replace(/\s/g, " ");
+  expect(size(0, "en")).toBe("0 bytes");
+  expect(size(999, "en")).toBe("999 bytes");
+  expect(size(1234, "en")).toBe("1.2 kB");
+  expect(size(45_600_000, "en")).toBe("46 MB");
+  expect(size(3_400_000_000, "fr")).toBe("3,4 Go");
+  expect(size(4_800, "fr")).toBe("4,8 ko");
+  expect(size(1, "fr")).toBe("1 octet");
+  expect(size(4_800, "de")).toBe("4,8 kB");
 });

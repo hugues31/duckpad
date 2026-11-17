@@ -61,8 +61,8 @@ it("walks folders with the pointer and the path, then chooses a file", async () 
   expect(options()).toEqual([
     "2024",
     "All CSV files*.csv2 files",
-    "january.csv10 B",
-    "february.csv20 B",
+    "january.csv10 bytes",
+    "february.csv20 bytes",
   ]);
   const path = screen.getByRole("navigation", { name: "Path" });
   expect(path.textContent).toBe("Finance shareinbox");
@@ -88,7 +88,7 @@ it("is driven from the filter with the keyboard", async () => {
   await screen.findByRole("option", { name: /january/ });
   fireEvent.change(filter, { target: { value: "uary" } });
   await screen.findByRole("option", { name: /february/ });
-  expect(options()).toEqual(["january.csv10 B", "february.csv20 B"]);
+  expect(options()).toEqual(["january.csv10 bytes", "february.csv20 bytes"]);
   fireEvent.keyDown(filter, { key: "ArrowDown" });
   expect(filter.getAttribute("aria-activedescendant")).toBe(
     screen.getByRole("option", { name: /february/ }).id,
