@@ -164,6 +164,12 @@ export const sections = [
         description:
           "Launch Jobs from schedulers with duckpad run or the HTTP API.",
       },
+      {
+        slug: "mcp",
+        title: "External agents & MCP",
+        description:
+          "Connect agents to project tools, validate edits and approve execution.",
+      },
     ],
   },
   {

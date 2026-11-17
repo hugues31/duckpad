@@ -249,7 +249,7 @@ how other people find it.
 | Create my own nodes and reuse them | [SQL syntax](docs/SQL.md) · [Python nodes](docs/PYTHON.md) · [Components](docs/COMPONENTS.md) |
 | Read from S3 or a database | [Connections](docs/CONNECTORS.md) |
 | Check or explain a result | [Results](docs/RESULTS.md) · [Data tests](docs/TESTS.md) · [Lineage](docs/LINEAGE.md) |
-| Review changes and automate a version | [Git](docs/GIT.md) · [Jobs](docs/JOBS.md) · [CLI and automation](docs/AUTOMATION.md) |
+| Review changes and automate a version | [Git](docs/GIT.md) · [Jobs](docs/JOBS.md) · [CLI and automation](docs/AUTOMATION.md) · [External agents and MCP](docs/MCP.md) |
 | Fix a startup, source or execution problem | [Troubleshooting](docs/TROUBLESHOOTING.md) |
 
 The [documentation index](https://hugues31.github.io/duckpad/docs/) also covers

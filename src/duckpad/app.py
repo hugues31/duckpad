@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__, automation
+from .agent_api import AgentAPI
 from .api import account, admin, git, http, jobs, projects, results, session, worktrees
 from .api.context import Context
 from .api.security import authorize_unknown_route
@@ -62,7 +63,9 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
     app.state.access = ctx.access
     app.state.assistant = ctx.assistant
     app.state.jobs = ctx.jobs
+    app.state.agent_api = AgentAPI(ctx)
     http.install(app, auth)
+    app.include_router(app.state.agent_api.router())
     app.include_router(assistant_router(ctx.assistant))
     app.include_router(automation.router(ctx.jobs, ctx.access))
     for module in (session, account, admin, projects, worktrees, git, jobs, results):
