@@ -88,6 +88,9 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
         if path == "api" or path.startswith("api/"):
             authorize_unknown_route(request)
             raise Problem("Not found", 404)
+        if path.startswith(".well-known/"):
+            # Discovery clients probe several documents; only those Duckpad serves answer 200.
+            raise Problem("Not found", 404)
         if (STATIC / "index.html").exists():
             return FileResponse(STATIC / "index.html")
         return JSONResponse(

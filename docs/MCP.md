@@ -226,7 +226,8 @@ Responses have a size limit; use smaller pages when a response is too large.
    Both require that revision. Read the returned revision before the next edit.
 6. Validate again, then `request_run` with the worktree, environment and optional
    node. Share the returned review path with a human, who opens it on the same
-   Duckpad address after signing in. Poll `read_approval`, then
+   Duckpad address after signing in. Apps connected through OAuth also receive the
+   full `review_url`. Poll `read_approval`, then
    `launch_approved_run`.
 7. `wait_for_run` and `inspect_run` read status and bounded diagnostics.
    `read_schemas`, `preview_output` and `explain_value` read results and lineage.

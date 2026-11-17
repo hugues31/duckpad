@@ -167,6 +167,8 @@ def test_discovery_documents_and_challenges(instance, monkeypatch):
     assert server["client_id_metadata_document_supported"] is True
     assert server["authorization_response_iss_parameter_supported"] is True
     assert "none" in server["token_endpoint_auth_methods_supported"]
+    # Other discovery documents do not exist, rather than answering with the interface.
+    assert anonymous.get("/.well-known/openid-configuration").status_code == 404
 
     # OAuth needs HTTPS outside loopback: no discovery, and 401s do not point to it.
     plain = TestClient(app, base_url="http://duckpad.test")
@@ -258,6 +260,8 @@ def test_mcp_client_signs_in_with_oauth_and_runs_after_approval(instance):
                     ],
                 )
                 pending = await tool("request_run")
+                # The token is bound to this origin, so the app gets a link it can show.
+                assert pending["review_url"] == address + pending["review_path"]
                 # Approvals stay human: the app's token cannot open the review page.
                 review = await client.get(address + pending["review_path"])
                 assert review.status_code == 403
