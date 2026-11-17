@@ -48,7 +48,7 @@ def test_main_commands_lead_the_help_and_info_replaces_duplicate_commands(monkey
         cli.main()
     assert exit.value.code == 0
     text = capsys.readouterr().out
-    assert "{start,run,info,backup,restore,reset-password,service-unit}" in text
+    assert "{start,run,validate,mcp,info,backup,restore,reset-password,service-unit}" in text
     assert "{version," not in text and "paths," not in text
 
 

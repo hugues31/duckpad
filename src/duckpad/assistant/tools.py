@@ -11,13 +11,12 @@ import json
 from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic_ai import RunContext
 
 from .. import variables, views
-from ..auth import Auth
 from ..components import expand_for
 from ..execution.samples import Sample
 from ..graph import connection_references, reachable
@@ -25,7 +24,6 @@ from ..node_code import code_path, find_node, template_path
 from ..search import node_entries
 from ..services import Services
 from ..util import Problem, clean
-from .config import Configuration
 from .registry import tool
 
 LOST_ACCESS = "This conversation read content you can no longer open. Start a new conversation."
@@ -50,12 +48,22 @@ class PageContext(BaseModel):
     run: str = Field(default="", max_length=100)
 
 
+class ToolAuth(Protocol):
+    def check(self, token: str) -> dict: ...
+
+
+class ToolPolicy(Protocol):
+    def get(self) -> dict: ...
+
+    def secrets(self) -> list[str]: ...
+
+
 @dataclass
 class Dependencies:
     services: Services
-    auth: Auth
+    auth: ToolAuth
     token: str
-    configuration: Configuration
+    configuration: ToolPolicy
     revision: str
     context: dict
     writer: Callable | None = None

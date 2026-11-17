@@ -26,6 +26,11 @@ def browser_url(host, port):
 
 
 def main():
+    if sys.argv[1:2] in (["mcp"], ["validate"]):
+        # Client commands, like `run`: they never open an instance directory.
+        from .mcp_server import main as agent_main
+
+        sys.exit(agent_main(sys.argv[1], sys.argv[2:]))
     if sys.argv[1:2] == ["run"]:
         # Dispatch before the server's imports: schedulers start this command for every task.
         sys.exit(client.main(sys.argv[2:]))
@@ -38,6 +43,10 @@ def main():
     commands.add_parser(
         "run", help="Launch a Job, wait for its outcome and exit with its code", add_help=False
     )
+    commands.add_parser(
+        "validate", help="Validate a branch through a running server without executing it", add_help=False
+    )
+    commands.add_parser("mcp", help="Bridge a stdio MCP client to a running server", add_help=False)
     info = commands.add_parser("info", help="Show versions, platform and instance configuration")
     home_option(info)
     info.add_argument("--json", action="store_true", help="Print diagnostics as JSON")
