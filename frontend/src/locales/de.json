@@ -1900,6 +1900,7 @@
   "authorizeAppInvalid": "Diese Verbindungsanfrage kann nicht verwendet werden",
   "authorizeAppInvalidHint": "Starten Sie die Verbindung erneut in der App. Wenn der Fehler bleibt, wenden Sie sich an den Herausgeber der App oder Ihre Duckpad-Administration.",
   "authorizeAppOpenDuckpad": "Duckpad öffnen",
+  "authorizeAppReturnToApp": "Zurück zu {host}",
   "authorizedApps": "Autorisierte Apps",
   "authorizedAppsHint": "Apps wie claude.ai oder ChatGPT, die die Agent-Tools von Duckpad mit diesem Konto verwenden dürfen. Ein Widerruf trennt die App sofort.",
   "authorizedApp": "App",

@@ -10,6 +10,7 @@ account's current roles.
 """
 
 import base64
+import contextlib
 import hashlib
 import hmac
 import http.client
@@ -30,7 +31,6 @@ from .util import Problem, uid
 SCOPE = "agent"
 # Accepted and echoed for clients that ask for it; refresh tokens are always issued.
 OFFLINE = "offline_access"
-ACCESS_PREFIX = OAUTH_TOKEN_PREFIX
 REFRESH_PREFIX = "dpr_"
 ACCESS_LIFETIME = 3600
 # Sliding: each refresh extends the authorization, so an app used at least monthly stays connected.
@@ -251,7 +251,7 @@ def host_of(uri):
 def document_problem(url):
     """Why a client ID cannot name a metadata document: HTTPS on port 443, with a path, nothing else."""
     message = "The app's client ID must be an HTTPS address with a path, without query, fragment or port"
-    if len(url) > 2000 or CONTROL.search(url) or " " in url or "\\" in url:
+    if len(url) > 2000 or not url.isascii() or CONTROL.search(url) or " " in url or "\\" in url:
         return message
     try:
         parts = urlsplit(url)
@@ -290,6 +290,19 @@ class PinnedHTTPSConnection(http.client.HTTPSConnection):
         self.sock = self.pinned_context.wrap_socket(sock, server_hostname=self.host)
 
 
+def network(peer):
+    """Whom registration limits count: an IPv4 address, or the /64 network of an IPv6 address."""
+    try:
+        address = ipaddress.ip_address(peer)
+    except ValueError:
+        return peer
+    if address.version == 6:
+        if address.ipv4_mapped:
+            return str(address.ipv4_mapped)
+        return str(ipaddress.ip_network(f"{address}/64", strict=False))
+    return str(address)
+
+
 def public_address(value):
     address = ipaddress.ip_address(value.partition("%")[0])
     mapped = getattr(address, "ipv4_mapped", None)
@@ -308,22 +321,35 @@ def fetch_document(url):
             f"{host} does not resolve to a public address; Duckpad only reads public metadata documents"
         )
     connection = PinnedHTTPSConnection(host, addresses[0], ssl.create_default_context(), DOCUMENT_TIMEOUT)
-    deadline = time.monotonic() + 2 * DOCUMENT_TIMEOUT
+
+    expired = threading.Event()
+
+    def expire():
+        # Socket timeouts bound each read, not a server that sends a byte at a time: cut it off.
+        expired.set()
+        with contextlib.suppress(OSError, AttributeError):
+            connection.sock.shutdown(socket.SHUT_RDWR)
+
+    watchdog = threading.Timer(2 * DOCUMENT_TIMEOUT, expire)
+    watchdog.start()
     try:
         path = urlsplit(url).path
         connection.request("GET", path, headers={"Accept": "application/json", "User-Agent": "Duckpad"})
         response = connection.getresponse()
         if response.status != 200:
             raise Problem(f"The app's metadata document answered HTTP {response.status}")
-        body = b""
-        while chunk := response.read(1024):
-            body += chunk
-            if len(body) > DOCUMENT_BYTES or time.monotonic() > deadline:
-                raise Problem("The app's metadata document is too large or too slow")
+        body = response.read(DOCUMENT_BYTES + 1)
+        if len(body) > DOCUMENT_BYTES:
+            raise Problem("The app's metadata document is too large")
     except (OSError, http.client.HTTPException):
-        raise Problem(f"Could not read the app's metadata document from {host}") from None
+        body = None
     finally:
+        watchdog.cancel()
         connection.close()
+    if expired.is_set():
+        raise Problem(f"The app's metadata document from {host} took too long to arrive")
+    if body is None:
+        raise Problem(f"Could not read the app's metadata document from {host}")
     try:
         return json.loads(body)
     except ValueError:
@@ -373,7 +399,7 @@ class OAuth:
                 for address, times in self.registrations.items()
                 if (recent := [t for t in times if t > now - REGISTRATION_WINDOW])
             }
-            recent = self.registrations.setdefault(peer, [])
+            recent = self.registrations.setdefault(network(peer), [])
             if len(recent) >= REGISTRATIONS:
                 raise OAuthError("too_many_requests", "Too many registrations. Try again later.", 429)
             recent.append(now)
@@ -418,7 +444,8 @@ class OAuth:
         }
         with self.store.transaction():
             self.store.purge_oauth(now, now - IDLE_CLIENT)
-            if self.store.count_oauth_clients() >= MAX_CLIENTS:
+            # A flood of registrations evicts apps nobody authorized rather than blocking new ones.
+            if self.store.count_oauth_clients() >= MAX_CLIENTS and not self.store.evict_oauth_client():
                 raise OAuthError("too_many_requests", "Too many registered apps. Try again later.", 429)
             self.store.put("oauth_client", client["id"], client)
         response = {
@@ -520,14 +547,18 @@ class OAuth:
     def request(self, query, base, user):
         """Check an authorization request for the consent page of a signed-in person.
 
-        Returns the consent details, or `{"redirect"}` to send an error back to the app. Requests
-        whose app or redirect URI cannot be trusted raise instead: their errors stay on Duckpad.
+        Returns the consent details, or `{"redirect"}` carrying an error for the app, which the
+        page follows only on a click (anyone can register a redirect URI). Requests whose app or
+        redirect URI are unknown raise instead: their errors stay on Duckpad.
         """
         if base is None:
             raise Problem(HTTPS_REQUIRED)
         if user.get("auth_method") == "service":
             raise Problem("Service accounts cannot authorize apps", 403)
-        pairs = parse_qsl(query, keep_blank_values=True, max_num_fields=50)
+        try:
+            pairs = parse_qsl(query, keep_blank_values=True, max_num_fields=50)
+        except ValueError:
+            raise Problem("This authorization request has too many parameters") from None
         keys = [key for key, _ in pairs]
         values = dict(pairs)
         for key in ("client_id", "redirect_uri"):
@@ -639,7 +670,7 @@ class OAuth:
         raise OAuthError("unsupported_grant_type", "Use authorization_code or refresh_token")
 
     def issue(self, grant, now):
-        access = ACCESS_PREFIX + secrets.token_urlsafe(32)
+        access = OAUTH_TOKEN_PREFIX + secrets.token_urlsafe(32)
         refresh = REFRESH_PREFIX + secrets.token_urlsafe(32)
         for secret, kind, lifetime in (
             (access, "access", ACCESS_LIFETIME),

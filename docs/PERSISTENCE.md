@@ -35,7 +35,8 @@ deactivating the account removes them; a rotated refresh token stays, marked
 used, to detect its replay. `oauth_code` stores single-use authorization codes by
 hash, with their PKCE challenge, until they expire. Expired rows are removed when
 codes are exchanged and apps register; apps idle for 30 days without an
-authorization are deleted.
+authorization are deleted, and a full table evicts the least recently used app
+without one.
 
 Built-in connector definitions come with the release and are not stored: the
 `connector` table holds custom connector types and administrators' overrides of

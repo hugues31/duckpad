@@ -1900,6 +1900,7 @@
   "authorizeAppInvalid": "Este pedido de ligação não pode ser usado",
   "authorizeAppInvalidHint": "Inicie novamente a ligação a partir da aplicação. Se continuar a falhar, contacte o editor da aplicação ou o administrador do Duckpad.",
   "authorizeAppOpenDuckpad": "Abrir o Duckpad",
+  "authorizeAppReturnToApp": "Voltar a {host}",
   "authorizedApps": "Aplicações autorizadas",
   "authorizedAppsHint": "Aplicações como claude.ai ou ChatGPT que podem usar as ferramentas de agente do Duckpad com esta conta. Revogar uma desliga-a de imediato.",
   "authorizedApp": "Aplicação",

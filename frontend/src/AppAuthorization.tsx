@@ -51,6 +51,9 @@ export default function AppAuthorization({
   const query = search.replace(/^\?/, "");
   const [request, setRequest] = useState<AuthorizationRequest | null>(null);
   const [invalid, setInvalid] = useState("");
+  // An app's error goes back to it only on a click: anyone can register a
+  // redirect address, so leaving without one would make Duckpad an open redirector.
+  const [refused, setRefused] = useState("");
   const [leaving, setLeaving] = useState("");
   const action = useAsyncAction();
   useEffect(() => {
@@ -58,9 +61,13 @@ export default function AppAuthorization({
     api<Checked>(`/oauth/authorization?${query}`).then(
       (checked) => {
         if (!current) return;
-        // Invalid requests from a trusted app go back to it with an error.
-        if ("redirect" in checked) returnTo(checked.redirect, setLeaving);
-        else setRequest(checked);
+        if ("redirect" in checked) {
+          const error = new URL(checked.redirect).searchParams;
+          setRefused(checked.redirect);
+          setInvalid(
+            error.get("error_description") || error.get("error") || "",
+          );
+        } else setRequest(checked);
       },
       (e: Error) => current && setInvalid(e.message),
     );
@@ -91,6 +98,21 @@ export default function AppAuthorization({
             {invalid}
           </div>
           <p>{t("authorizeAppInvalidHint")}</p>
+          {refused && (
+            <button
+              type="button"
+              className="button primary full large"
+              onClick={() => {
+                setInvalid("");
+                returnTo(refused, setLeaving);
+              }}
+            >
+              {t("authorizeAppReturnToApp").replace(
+                "{host}",
+                new URL(refused).host,
+              )}
+            </button>
+          )}
           <a className="button secondary full large" href="/projects">
             {t("authorizeAppOpenDuckpad")}
           </a>

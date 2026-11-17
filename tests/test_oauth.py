@@ -5,6 +5,8 @@ import base64
 import hashlib
 import secrets
 import socket
+import threading
+import time
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 import httpx
@@ -510,6 +512,74 @@ def test_registration_and_client_authentication(instance, monkeypatch):
     assert limited.status_code == 429
 
 
+def test_a_registration_flood_evicts_apps_nobody_authorized(instance, monkeypatch):
+    app, _, _, _, person = instance
+    store = app.state.oauth.store
+    authorized = register(person)["client_id"]
+    connect(person, authorized)
+    idle = register(person)["client_id"]
+    monkeypatch.setattr(oauth, "MAX_CLIENTS", 2)
+    newest = register(person)["client_id"]
+    assert store.get("oauth_client", idle) is None
+    assert store.get("oauth_client", authorized) and store.get("oauth_client", newest)
+    connect(person, newest)
+    refused = person.post("/api/oauth/register", json={"redirect_uris": [REDIRECT]})
+    assert refused.status_code == 429
+    # Registration limits count IPv6 clients by /64 network.
+    assert oauth.network("2001:db8::1") == oauth.network("2001:db8::ffff:2") == "2001:db8::/64"
+    assert oauth.network("::ffff:192.0.2.1") == oauth.network("192.0.2.1") == "192.0.2.1"
+
+
+def test_an_unknown_app_error_waits_for_a_click(instance):
+    _, _, _, _, person = instance
+    client = register(person)["client_id"]
+    query = urlencode({"client_id": client, "redirect_uri": REDIRECT, "state": "s"})
+    # The page shows the error first: anyone can register a redirect address.
+    refused = person.get("/api/oauth/authorization?" + query).json()
+    assert parse_qs(urlsplit(refused["redirect"]).query)["error"] == ["unsupported_response_type"]
+
+
+def test_a_slow_metadata_document_is_cut_off(monkeypatch):
+    listener = socket.create_server(("127.0.0.1", 0))
+    port = listener.getsockname()[1]
+    stop = threading.Event()
+
+    def drip():
+        connection, _ = listener.accept()
+        with connection:
+            connection.recv(4096)
+            for byte in b"HTTP/1.1 200 OK\r\nX-Slow: " + b"a" * 100:
+                if stop.wait(0.1):
+                    return
+                connection.sendall(bytes([byte]))
+
+    server = threading.Thread(target=drip, daemon=True)
+    server.start()
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("192.0.2.1", 443))],
+    )
+    monkeypatch.setattr(oauth, "public_address", lambda address: True)
+
+    def connect(self):
+        # Plain HTTP to the local server, resolved without the patched getaddrinfo.
+        self.sock = socket.socket()
+        self.sock.settimeout(self.timeout)
+        self.sock.connect(("127.0.0.1", port))
+
+    monkeypatch.setattr(oauth.PinnedHTTPSConnection, "connect", connect)
+    monkeypatch.setattr(oauth, "DOCUMENT_TIMEOUT", 0.5)
+    started = time.monotonic()
+    try:
+        with pytest.raises(Problem, match="too long"):
+            oauth.fetch_document("https://app.test/client.json")
+        assert time.monotonic() - started < 3
+    finally:
+        stop.set()
+        listener.close()
+
+
 def test_authorized_apps_are_listed_and_revoked(instance):
     app, admin, _, actor, person = instance
     anonymous = TestClient(app, base_url=BASE)
@@ -638,8 +708,11 @@ def test_client_metadata_documents(instance, monkeypatch):
         "https://app.test/a/%2E%2E/client.json",
         "https://192.0.2.1/client.json",
         "http://app.test/client.json",
+        "https://app.test/café.json",
     ):
         assert oauth.document_problem(invalid), invalid
+    crowded = "&".join(f"x{n}=1" for n in range(60))
+    assert person.get("/api/oauth/authorization?" + crowded).status_code == 400
     assert oauth.document_problem(url) is None
 
 

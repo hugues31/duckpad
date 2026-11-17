@@ -142,6 +142,24 @@ test("a declined or untrusted request never hands out a code", async ({
   expect(callback.searchParams.get("error")).toBe("access_denied");
   expect(callback.searchParams.has("code")).toBe(false);
 
+  // A registered app's error goes back to it only on a click: anyone can
+  // register a redirect address, so Duckpad never forwards there on its own.
+  const broken = new URL(authorizationUrl(client, baseURL!).url, baseURL);
+  broken.searchParams.delete("response_type");
+  await page.goto(broken.pathname + broken.search);
+  await expect(page.getByRole("alert")).toContainText(
+    "Only the authorization code flow is supported",
+  );
+  const refused = await answer(page, () =>
+    page
+      .getByRole("button", {
+        name: en.authorizeAppReturnToApp.replace("{host}", "app.example"),
+        exact: true,
+      })
+      .click(),
+  );
+  expect(refused.searchParams.get("error")).toBe("unsupported_response_type");
+
   // An unknown app or redirect address stays on Duckpad with an explanation.
   const unknown = authorizationUrl("oauth_client_unknown", baseURL!).url;
   await page.goto(unknown);

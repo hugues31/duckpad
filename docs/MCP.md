@@ -203,11 +203,15 @@ any port matches (RFC 8252). They are compared exactly otherwise. Codes are sing
 use and expire after five minutes; reusing one revokes the tokens it produced.
 Duckpad reads a client metadata document only when a signed-in person opens an
 authorization request, only from a public address on port 443, without
-redirects, within 5 seconds and 8 KiB. It keeps a copy for an hour, and up to a
+redirects, within 10 seconds and 8 KiB. It keeps a copy for an hour, and up to a
 week while the publisher is unreachable. Metadata documents must name their own
 address as `client_id` and allow the `none` authentication method. Dynamic
-registrations are limited to 30 per client address and hour; registrations idle
-for 30 days without an authorization are deleted.
+registrations are limited to 30 per hour per IPv4 address or IPv6 /64 network;
+registrations idle for 30 days without an authorization are deleted, and once
+10,000 apps are registered, each new one replaces the least recently used app
+nobody authorized. An invalid request from a registered app shows its error on
+Duckpad, with a button to return to the app: Duckpad never sends a browser to an
+app's address without a click.
 
 ## Tools and workflow
 

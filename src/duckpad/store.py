@@ -313,6 +313,20 @@ class Store:
         with self.session() as session:
             return session.exec(select(func.count()).select_from(m.OAuthClient)).one()
 
+    def evict_oauth_client(self):
+        """Delete the least recently used app without an authorization; False if every app has one."""
+        with self.session() as session:
+            oldest = session.exec(
+                select(m.OAuthClient.id)
+                .where(col(m.OAuthClient.id).not_in(select(m.OAuthGrant.client)))
+                .order_by(m.OAuthClient.last_used)
+                .limit(1)
+            ).first()
+            if oldest is None:
+                return False
+            session.exec(delete(m.OAuthClient).where(m.OAuthClient.id == oldest))
+            return True
+
     def purge_oauth(self, now, idle_since):
         """Delete expired codes, tokens and grants, then apps idle since `idle_since` without a grant."""
         with self.session() as session:

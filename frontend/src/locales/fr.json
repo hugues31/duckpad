@@ -1900,6 +1900,7 @@
   "authorizeAppInvalid": "Cette demande de connexion est inutilisable",
   "authorizeAppInvalidHint": "Relancez la connexion depuis l’application. Si l’erreur persiste, contactez l’éditeur de l’application ou votre administrateur Duckpad.",
   "authorizeAppOpenDuckpad": "Ouvrir Duckpad",
+  "authorizeAppReturnToApp": "Revenir sur {host}",
   "authorizedApps": "Applications autorisées",
   "authorizedAppsHint": "Applications comme claude.ai ou ChatGPT qui peuvent utiliser les outils d’agent de Duckpad avec ce compte. En révoquer une la déconnecte immédiatement.",
   "authorizedApp": "Application",
