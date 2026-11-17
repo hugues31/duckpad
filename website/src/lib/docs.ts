@@ -168,7 +168,7 @@ export const sections = [
         slug: "mcp",
         title: "External agents & MCP",
         description:
-          "Connect agents to project tools, validate edits and approve execution.",
+          "Connect agents, claude.ai and ChatGPT to project tools, validate edits and approve execution.",
       },
     ],
   },

@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import { matchRoutes, redirect, type RouteObject } from "react-router";
 import {
+  APP_AUTHORIZATION_PATH,
   projectSettingsSections,
   settingsSections,
   userSettingsSections,
@@ -85,6 +86,12 @@ export const pageRoutes: RouteObject[] = [
       ),
     ),
   },
+  // `App` renders this page outside the workspace, on the sign-in card.
+  page(
+    APP_AUTHORIZATION_PATH.slice(1),
+    { area: "appAuthorization" },
+    () => null,
+  ),
   page("*", { area: "notFound" }, NotFoundPage),
 ];
 
@@ -103,7 +110,7 @@ export function isWorktreePage(pathname: string, worktreeId: string) {
   return match?.area === "pipelines" && match.worktreeId === worktreeId;
 }
 
-/** Accept only application routes and the non-secret environment selection. */
+/** Accept only application routes, the non-secret environment selection and app authorization requests. */
 export function signInReturn(value: string | null): string | null {
   if (
     !value ||
@@ -114,6 +121,8 @@ export function signInReturn(value: string | null): string | null {
     return null;
   const url = new URL(value, window.location.origin);
   if (url.origin !== window.location.origin) return null;
+  // An app's authorization request lives in its query, which the server checks again.
+  if (url.pathname === APP_AUTHORIZATION_PATH) return url.pathname + url.search;
   const area = matchPage(url.pathname)?.area;
   if (!area || area === "notFound" || area === "home") return null;
   const query = new URLSearchParams();

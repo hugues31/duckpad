@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import __version__, automation
 from .agent_api import AgentAPI
-from .api import account, admin, git, http, jobs, projects, results, session, worktrees
+from .api import account, admin, git, http, jobs, oauth, projects, results, session, worktrees
 from .api.context import Context
 from .api.security import authorize_unknown_route
 from .assistant.api import router as assistant_router
@@ -20,6 +20,7 @@ from .assistant.service import Assistant
 from .auth import Auth
 from .jobs import Jobs
 from .monitoring import Monitoring
+from .oauth import OAuth
 from .oidc import OIDC
 from .services import Services
 from .util import Problem
@@ -34,6 +35,7 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
         services=services,
         auth=auth,
         oidc=OIDC(services.store, auth),
+        oauth=OAuth(services.store, auth),
         jobs=Jobs(services),
         monitoring=Monitoring(services.store.paths.home),
         assistant=Assistant(services, auth),
@@ -60,6 +62,7 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
     app.state.services = services
     app.state.auth = auth
     app.state.oidc = ctx.oidc
+    app.state.oauth = ctx.oauth
     app.state.access = ctx.access
     app.state.assistant = ctx.assistant
     app.state.jobs = ctx.jobs
@@ -68,7 +71,7 @@ def create_app(home: Path, watch: bool = True, *, trusted_local: bool = False) -
     app.include_router(app.state.agent_api.router())
     app.include_router(assistant_router(ctx.assistant))
     app.include_router(automation.router(ctx.jobs, ctx.access))
-    for module in (session, account, admin, projects, worktrees, git, jobs, results):
+    for module in (session, account, admin, oauth, projects, worktrees, git, jobs, results):
         # Keep the internal route inventory flat for access audits and application tooling.
         app.router.routes.extend(module.router(ctx).routes)
 

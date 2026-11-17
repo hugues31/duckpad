@@ -13,6 +13,7 @@ export const userSettingsSections = [
   ["password", "password"],
   ["ssh-key", "sshKey"],
   ["api-tokens", "apiTokens"],
+  ["authorized-apps", "authorizedApps"],
 ] as const;
 export const userSettingsUrl = (section: string) =>
   `/user-settings${section === "preferences" ? "" : `/${section}`}`;
@@ -43,6 +44,7 @@ export type Area =
   | "instanceSettings"
   | "userSettings"
   | "projectSettings"
+  | "appAuthorization"
   | "notFound";
 /** The `handle` of each page route, which `routes.tsx` defines. */
 export interface PageHandle {
@@ -96,3 +98,6 @@ export function projectPageUrl(
 }
 
 export const SSO_RETURN_KEY = "duckpad-sign-in-return";
+
+/** The OAuth authorization endpoint, where people allow apps to use the agent tools. */
+export const APP_AUTHORIZATION_PATH = "/oauth/authorize";

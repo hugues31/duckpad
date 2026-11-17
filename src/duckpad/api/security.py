@@ -6,13 +6,24 @@ from urllib.parse import urlparse
 
 from fastapi import Request
 
-from ..auth import Auth
+from .. import oauth
+from ..auth import BEARER_PREFIXES, OAUTH_TOKEN_PREFIX, Auth
 from ..oidc import CALLBACK_PATH
 from ..types import Record
 from ..util import Problem
 from .http import session_token
 
-PUBLIC_API_PATHS = {"/api/login", "/api/setup", "/api/oidc/provider", "/api/oidc/login", CALLBACK_PATH}
+PUBLIC_API_PATHS = {
+    "/api/login",
+    "/api/setup",
+    "/api/oidc/provider",
+    "/api/oidc/login",
+    CALLBACK_PATH,
+    # Apps authenticate to these OAuth endpoints with their own credentials, never with cookies.
+    oauth.REGISTER_PATH,
+    oauth.TOKEN_PATH,
+    oauth.REVOKE_PATH,
+}
 SAFE_METHODS = ("GET", "HEAD", "OPTIONS")
 WORKTREE_RESOURCE = re.compile(r"/api/worktrees/(?P<worktree>[^/]+)(?:/.*)?")
 
@@ -27,8 +38,17 @@ def admit(request: Request, auth: Auth) -> dict[str, str] | None:
     if protected(request):
         scheme, _, bearer = request.headers.get("authorization", "").partition(" ")
         request.state.token_name = None
-        if scheme.lower() == "bearer" and bearer.startswith("dpk_"):
-            user, request.state.token_name = auth.check_api_token(bearer)
+        if scheme.lower() == "bearer" and bearer.startswith(BEARER_PREFIXES):
+            audience = None
+            if bearer.startswith(OAUTH_TOKEN_PREFIX):
+                # Apps' tokens are limited to the agent API of the origin they were issued for.
+                if not request.url.path.startswith(oauth.AGENT_PREFIX):
+                    raise Problem("Tokens that apps receive through OAuth only work with the agent API", 403)
+                base = oauth.origin(request)
+                if base is None:
+                    raise Problem("Authentication required", 401)
+                audience = oauth.resource(base)
+            user, request.state.token_name = auth.check_api_token(bearer, audience)
         else:
             user = auth.check(session_token(request))
         request.state.user = user

@@ -3,7 +3,7 @@
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0001_v0_baseline"
+revision = "0001_v0_oauth"
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -409,6 +409,73 @@ def upgrade():
         unique=False,
     )
 
+    op.create_table(
+        "oauth_client",
+        sa.Column("id", sa.String(), nullable=False),
+        sa.Column("name", sa.String(), nullable=True),
+        sa.Column("redirect_uris", sa.JSON(), nullable=False),
+        sa.Column("auth_method", sa.String(), nullable=False),
+        sa.Column("secret_hash", sa.String(), nullable=True),
+        sa.Column("document", sa.Boolean(), nullable=False),
+        sa.Column("created", sa.Float(), nullable=False),
+        sa.Column("fetched", sa.Float(), nullable=True),
+        sa.Column("last_used", sa.Float(), nullable=False),
+        sa.CheckConstraint(
+            "auth_method IN ('none', 'client_secret_post', 'client_secret_basic')",
+            name="oauth_client_auth_method",
+        ),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index(op.f("ix_oauth_client_last_used"), "oauth_client", ["last_used"], unique=False)
+    op.create_table(
+        "oauth_grant",
+        sa.Column("id", sa.String(), nullable=False),
+        sa.Column("user", sa.String(), nullable=False),
+        sa.Column("client", sa.String(), nullable=False),
+        sa.Column("scope", sa.String(), nullable=False),
+        sa.Column("resource", sa.String(), nullable=False),
+        sa.Column("created", sa.Float(), nullable=False),
+        sa.Column("last_used", sa.Float(), nullable=True),
+        sa.Column("expires", sa.Float(), nullable=False),
+        sa.ForeignKeyConstraint(["client"], ["oauth_client.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["user"], ["user.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index(op.f("ix_oauth_grant_client"), "oauth_grant", ["client"], unique=False)
+    op.create_index(op.f("ix_oauth_grant_expires"), "oauth_grant", ["expires"], unique=False)
+    op.create_index(op.f("ix_oauth_grant_user"), "oauth_grant", ["user"], unique=False)
+    op.create_table(
+        "oauth_token",
+        sa.Column("id", sa.String(), nullable=False),
+        sa.Column("grant", sa.String(), nullable=False),
+        sa.Column("kind", sa.String(), nullable=False),
+        sa.Column("expires", sa.Float(), nullable=False),
+        sa.Column("used", sa.Float(), nullable=True),
+        sa.CheckConstraint("kind IN ('access', 'refresh')", name="oauth_token_kind"),
+        sa.ForeignKeyConstraint(["grant"], ["oauth_grant.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index(op.f("ix_oauth_token_expires"), "oauth_token", ["expires"], unique=False)
+    op.create_index(op.f("ix_oauth_token_grant"), "oauth_token", ["grant"], unique=False)
+    op.create_table(
+        "oauth_code",
+        sa.Column("id", sa.String(), nullable=False),
+        sa.Column("client", sa.String(), nullable=False),
+        sa.Column("user", sa.String(), nullable=False),
+        sa.Column("redirect_uri", sa.String(), nullable=False),
+        sa.Column("challenge", sa.String(), nullable=False),
+        sa.Column("scope", sa.String(), nullable=False),
+        sa.Column("resource", sa.String(), nullable=False),
+        sa.Column("expires", sa.Float(), nullable=False),
+        sa.Column("grant", sa.String(), nullable=True),
+        sa.ForeignKeyConstraint(["client"], ["oauth_client.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["user"], ["user.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index(op.f("ix_oauth_code_client"), "oauth_code", ["client"], unique=False)
+    op.create_index(op.f("ix_oauth_code_expires"), "oauth_code", ["expires"], unique=False)
+    op.create_index(op.f("ix_oauth_code_user"), "oauth_code", ["user"], unique=False)
+
     op.bulk_insert(
         sa.table(
             "environment",
@@ -425,6 +492,19 @@ def upgrade():
 
 
 def downgrade():
+    op.drop_index(op.f("ix_oauth_code_user"), table_name="oauth_code")
+    op.drop_index(op.f("ix_oauth_code_expires"), table_name="oauth_code")
+    op.drop_index(op.f("ix_oauth_code_client"), table_name="oauth_code")
+    op.drop_table("oauth_code")
+    op.drop_index(op.f("ix_oauth_token_grant"), table_name="oauth_token")
+    op.drop_index(op.f("ix_oauth_token_expires"), table_name="oauth_token")
+    op.drop_table("oauth_token")
+    op.drop_index(op.f("ix_oauth_grant_user"), table_name="oauth_grant")
+    op.drop_index(op.f("ix_oauth_grant_expires"), table_name="oauth_grant")
+    op.drop_index(op.f("ix_oauth_grant_client"), table_name="oauth_grant")
+    op.drop_table("oauth_grant")
+    op.drop_index(op.f("ix_oauth_client_last_used"), table_name="oauth_client")
+    op.drop_table("oauth_client")
     op.drop_index("partition_output_lookup", table_name="partition_output")
     op.drop_index(op.f("ix_partition_output_dataset"), table_name="partition_output")
     op.drop_table("partition_output")

@@ -7,6 +7,7 @@ from ..assistant.service import Assistant
 from ..auth import Auth
 from ..jobs import Jobs
 from ..monitoring import Monitoring
+from ..oauth import OAuth
 from ..oidc import OIDC
 from ..services import Services
 
@@ -16,6 +17,7 @@ class Context:
     services: Services
     auth: Auth
     oidc: OIDC
+    oauth: OAuth
     jobs: Jobs
     monitoring: Monitoring
     assistant: Assistant

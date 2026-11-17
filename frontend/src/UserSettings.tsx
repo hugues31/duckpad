@@ -1,6 +1,7 @@
 import {
   KeyRound,
   LockKeyhole,
+  Plug,
   SlidersHorizontal,
   Terminal,
 } from "lucide-react";
@@ -13,6 +14,7 @@ import { usePreferenceChoices, type Preferences } from "./preferences";
 import Select from "./Select";
 import SSHKeySettings from "./SSHKeySettings";
 import APITokenSettings from "./APITokenSettings";
+import AuthorizedApps from "./AuthorizedApps";
 import type { Workspace } from "./types";
 
 const sectionIcons = {
@@ -20,6 +22,7 @@ const sectionIcons = {
   password: LockKeyhole,
   "ssh-key": Terminal,
   "api-tokens": KeyRound,
+  "authorized-apps": Plug,
 };
 
 export default function UserSettings({
@@ -88,6 +91,7 @@ export default function UserSettings({
         ))}
       {section === "ssh-key" && <SSHKeySettings />}
       {section === "api-tokens" && <APITokenSettings />}
+      {section === "authorized-apps" && <AuthorizedApps />}
     </SettingsLayout>
   );
 }

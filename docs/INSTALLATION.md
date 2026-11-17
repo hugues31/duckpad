@@ -274,6 +274,12 @@ that can reach Duckpad directly from a trusted address can choose its reported a
 Duckpad prints a reminder at startup when it listens on a non-loopback address and
 `FORWARDED_ALLOW_IPS` is not set.
 
+Apps that connect through OAuth, such as the claude.ai and ChatGPT connectors
+([external agents](MCP.md#web-apps-and-oauth)), need Duckpad to know its public
+address: keep the original `Host` header in the proxy, and let Duckpad see that
+clients use HTTPS, either through `X-Forwarded-Proto` from a proxy listed in
+`FORWARDED_ALLOW_IPS` or with `DUCKPAD_SECURE_COOKIES=1`.
+
 File uploads are limited to 1 GiB per file. Allow request bodies of that size in the
 proxy, for example with `client_max_body_size` in nginx. For larger files, an
 instance admin can grant a local connection whose root contains them.

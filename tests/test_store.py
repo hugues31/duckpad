@@ -65,8 +65,8 @@ def test_initial_migration_matches_models_and_survives_restart(store):
 
 @pytest.mark.parametrize(
     "revision",
-    [None, "", "0002_artifact_storage", "unknown_revision"],
-    ids=["unversioned", "empty", "previous_baseline", "unknown"],
+    [None, "", "0002_artifact_storage", "0001_v0_baseline", "unknown_revision"],
+    ids=["unversioned", "empty", "previous_baseline", "replaced_baseline", "unknown"],
 )
 def test_unrecognized_database_is_rejected_without_changes(tmp_path, revision):
     path = tmp_path / "instance.sqlite"

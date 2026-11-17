@@ -21,7 +21,7 @@ from starlette.routing import Route
 from . import agent_tools, mcp_server
 from .api.http import problem_response
 from .assistant.runs import proposal, run_summary
-from .auth import session_key
+from .auth import BEARER_PREFIXES
 from .uploads import limited_body
 from .util import Problem, uid
 
@@ -37,8 +37,8 @@ MOVED = "The branch changed after this request. Request and review a new run."
 
 def bearer(request):
     scheme, _, token = request.headers.get("authorization", "").partition(" ")
-    if scheme.lower() != "bearer" or not token.startswith("dpk_"):
-        raise Problem("An API token is required for external agent tools", 401)
+    if scheme.lower() != "bearer" or not token.startswith(BEARER_PREFIXES):
+        raise Problem("An API token or an app authorization is required for external agent tools", 401)
     return token
 
 
@@ -83,7 +83,8 @@ class AgentAPI:
             identity = uid("approval_")
             record = {
                 "id": identity,
-                "owner": session_key(deps.token),
+                # The token, or for apps their authorization, whose access tokens are renewed hourly.
+                "owner": self.context.auth.credential(deps.token),
                 "requester": user["username"],
                 "requester_id": user["id"],
                 "worktree": deps.context["worktree"],
@@ -201,7 +202,7 @@ class AgentAPI:
     def owned(self, deps, identity):
         user, _ = deps.check()
         record = self.get(identity)
-        if record["owner"] != session_key(deps.token):
+        if record["owner"] != self.context.auth.credential(deps.token):
             raise Problem("Approval not found", 404)
         self.context.access.worktree(user, record["worktree"])
         return record
@@ -219,8 +220,11 @@ class AgentAPI:
         return self.context.services.projects.snapshot(record["worktree"])["commit"] != record["commit"]
 
     async def dispatch(self, token, name, arguments):
-        """Run a tool call on the agent threads, a few at a time per token."""
-        key = session_key(token)
+        """Run a tool call on the agent threads, a few at a time per token or app authorization."""
+        try:
+            key = self.context.auth.credential(token)
+        except Problem as error:
+            return failure(error)
         with self.lock:
             if self.calls[key] >= CALLS_PER_TOKEN:
                 return failure(Problem("Too many concurrent tool calls. Wait for one to finish.", 429))
@@ -241,7 +245,7 @@ class AgentAPI:
         return [tool.public() for tool in self.tools.values()]
 
     async def mcp(self, scope, receive, send):
-        """Streamable HTTP MCP for API tokens: the tools of /tools, without a bridge on the client."""
+        """Streamable HTTP MCP for API tokens and apps: the tools of /tools, without a client bridge."""
         request = Request(scope, receive)
         if request.method != "POST":
             # Stateless: no session to resume or delete, and no stream of server messages.

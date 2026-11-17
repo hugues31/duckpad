@@ -15,6 +15,7 @@ import {
 } from "react-router";
 import { Loader2 } from "lucide-react";
 import { api, onSessionExpired, send } from "./api";
+import AppAuthorization from "./AppAuthorization";
 import AssistantChat from "./AssistantChat";
 import DuckMark from "./DuckMark";
 import ErrorBoundary from "./ErrorBoundary";
@@ -24,6 +25,7 @@ import ModalHost, { type ModalState } from "./ModalHost";
 import { Modal } from "./modals";
 import { PageLoading } from "./pages/PageStates";
 import {
+  APP_AUTHORIZATION_PATH,
   SSO_RETURN_KEY,
   usePageRoute,
   worktreeUrl,
@@ -81,6 +83,7 @@ function Session({
   drafts: DraftRegistry;
 }) {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
+  const { pathname } = useLocation();
   const [signInDestination] = useState(() =>
     signInReturn(sessionStorage.getItem(SSO_RETURN_KEY)),
   );
@@ -105,6 +108,11 @@ function Session({
         preferences={preferences}
         onSuccess={() => setAuthenticated(true)}
       />
+    );
+  // Apps ask for access outside the workspace, on the sign-in card.
+  if (pathname === APP_AUTHORIZATION_PATH)
+    return (
+      <AppAuthorization preferences={preferences} onSignOut={endSession} />
     );
   return (
     <SignedIn
