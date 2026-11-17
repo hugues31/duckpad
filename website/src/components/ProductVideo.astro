@@ -14,7 +14,6 @@ import "../styles/product-video.css";
         width="1920"
         height="1080"
         aria-label="Duckpad in action: build visual pipelines with SQL or Python, test your data, trace results and document your work"
-        aria-describedby="product-video-caption"
       >
         <source src={url("demos/duckpad-overview.mp4")} type="video/mp4" />
         <track
@@ -137,12 +136,18 @@ import "../styles/product-video.css";
       <a href={url("demos/duckpad-overview.mp4")}>Open the video directly ↗</a>
     </p>
   </div>
-  <figcaption id="product-video-caption">
-    <span class="live-dot" aria-hidden="true"></span> Duckpad in action ·
-    English narration · Real app footage, edited for pace{" "}
+  <figcaption>
     <a href={url("docs/quickstart/")}>Build your first pipeline ↗</a>
   </figcaption>
 </figure>
+
+<style>
+  @media (max-width: 760px) {
+    figcaption {
+      display: none;
+    }
+  }
+</style>
 
 <script>
   import { enhanceProductVideo } from "../lib/product-video";
