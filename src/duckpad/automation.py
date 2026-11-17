@@ -2,7 +2,7 @@
 
 import asyncio
 import time
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Body, Depends, Header, Query, Request
 from fastapi.concurrency import run_in_threadpool
@@ -93,13 +93,44 @@ class Job(BaseModel):
     last_run: Run | None
 
 
+class WebhookRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    # Values of the scenario's launch values; other names are refused.
+    parameters: dict[str, Any] = Field(default_factory=dict, max_length=20)
+
+
+class ScenarioStepRun(BaseModel):
+    job: str
+    status: str
+    run: str | None = None
+
+
+class ScenarioRun(BaseModel):
+    id: str
+    scenario: str
+    status: Literal[
+        "running", "canceling", "success", "failed", "canceled", "interrupted", "rejected", "missed"
+    ]
+    duplicate: bool
+    trigger: dict[str, Any]
+    requester: Requester | None
+    parameters: dict[str, Any]
+    started: str
+    finished: str | None
+    steps: list[ScenarioStepRun]
+
+
 class ErrorDetail(BaseModel):
     code: Literal[
         "unauthenticated",
         "forbidden",
         "job_not_found",
         "run_not_found",
+        "scenario_not_found",
         "job_busy",
+        "scenario_busy",
+        "scenario_disabled",
+        "webhook_disabled",
         "target_unavailable",
         "invalid_project",
         "invalid_request",
@@ -184,7 +215,17 @@ def run_log(run):
     return "\n".join(lines) + "\n"
 
 
-def router(jobs, access):
+def public_scenario_run(run):
+    return {
+        **{key: run[key] for key in ("id", "scenario", "status", "trigger", "requester", "parameters")},
+        "duplicate": bool(run.get("duplicate")),
+        "started": run["started"],
+        "finished": run.get("finished"),
+        "steps": [{key: step.get(key) for key in ("job", "status", "run")} for step in run["steps"]],
+    }
+
+
+def router(jobs, scenarios, access):
     api = APIRouter(
         prefix="/api/v1",
         tags=["Automation"],
@@ -211,7 +252,10 @@ def router(jobs, access):
     def authorize(request: Request):
         params = request.path_params
         role = "reader" if request.method == "GET" else "operator"
-        if "slug" in params:
+        if "scenario" in params:
+            record = store.get("scenario", params["scenario"])
+            request.state.automation_record = require(record, request.state.user, "scenario", role)
+        elif "slug" in params:
             request.state.automation_record = get_job(params["slug"], request.state.user, role)
         elif "run_id" in params:
             request.state.automation_record = get_run(params["run_id"], request.state.user, role)
@@ -260,6 +304,28 @@ def router(jobs, access):
             detail = error.detail if isinstance(error.detail, dict) else {"errors": error.detail}
             raise Problem(str(error), 422, {"code": "invalid_project", **detail}) from error
         return public_run(run)
+
+    @api.post(
+        "/scenarios/{scenario}/webhook",
+        response_model=ScenarioRun,
+        status_code=202,
+        summary="Deliver a webhook to a scenario",
+    )
+    def scenario_webhook(
+        scenario: str,
+        request: Request,
+        webhook_id: Annotated[str, Header(min_length=1, max_length=256)],
+        data: Annotated[WebhookRequest, Body(default_factory=WebhookRequest)],
+    ):
+        """Start the scenario once per `Webhook-Id`; a repeated delivery returns its run."""
+        run = scenarios.launch(
+            scenario,
+            trigger={"source": "webhook", "delivery": webhook_id},
+            requester=requester(request),
+            values=data.parameters,
+            delivery=webhook_id,
+        )
+        return public_scenario_run(run)
 
     @api.get("/runs/{run_id}", response_model=Run, summary="Read a run, optionally waiting for completion")
     async def read_run(run_id: str, request: Request, wait: Annotated[float, Query(ge=0, le=60)] = 0):

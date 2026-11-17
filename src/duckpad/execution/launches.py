@@ -142,6 +142,7 @@ class LaunchPlanner:
         selection: Record | None,
         policy: Record | None,
         ancestors: bool,
+        launch_values: Record | None = None,
     ) -> Admission:
         """Refuse an invalid request before recording a run, without starting any setup.
 
@@ -150,7 +151,7 @@ class LaunchPlanner:
         self.catalog.environment(environment)
         snapshot = self.projects.snapshot(worktree, committed=True)
         admission = self.validate(
-            snapshot, worktree, environment, target, entry_point, selection, policy, ancestors
+            snapshot, worktree, environment, target, entry_point, selection, policy, ancestors, launch_values
         )
         self.check_conflicts(snapshot["conflicts"], admission.scope, environment)
         if target:
@@ -175,6 +176,7 @@ class LaunchPlanner:
         partition_selection: Record | None,
         partition_execution: Record | None,
         ancestors: bool,
+        launch_values: Record | None = None,
     ) -> Admission:
         """Refuse definitions, options or settings a launch cannot run; reads no worker state."""
         if snapshot["bundle"] is None:
@@ -182,6 +184,7 @@ class LaunchPlanner:
                 "Project files are invalid; correct them before execution", 422, snapshot["diagnostics"]
             )
         bundle = copy.deepcopy(snapshot["bundle"])
+        variables.apply_launch_values(bundle, launch_values)
         nodes, edges, boundaries = expand(bundle, tolerant=True)
         plan = partitions.plan(bundle, nodes, edges, boundaries)
         # Refuse invalid options before marking any result stale.
@@ -250,9 +253,19 @@ class LaunchPlanner:
                     partition_execution,
                     ancestors,
                     reuse,
+                    run.get("launch_values"),
                 )
                 self.check_canceled(token)
-            for key in ("started", "requester", "trigger", "job", "tag", "external_trigger", "preparation"):
+            for key in (
+                "started",
+                "requester",
+                "trigger",
+                "job",
+                "tag",
+                "external_trigger",
+                "launch_values",
+                "preparation",
+            ):
                 if key in run:
                     execution.run[key] = run[key]
             self.journal.persist(execution.run, execution.secrets)
@@ -309,6 +322,7 @@ class LaunchPlanner:
         partition_execution: Record | None = None,
         ancestors: bool = False,
         reuse: bool = False,
+        launch_values: Record | None = None,
     ) -> Execution:
         """Capture the committed definitions and connection settings the run will use.
 
@@ -327,6 +341,7 @@ class LaunchPlanner:
             partition_selection,
             partition_execution,
             ancestors,
+            launch_values,
         )
         bundle, partition_plan, needs_python = admission.bundle, admission.plan, admission.python
         sources = value_sources.sources(bundle, admission.nodes, admission.boundaries)

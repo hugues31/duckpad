@@ -28,6 +28,8 @@ FILE = DOCUMENT.file
 KEY = "$var"
 NAME = re.compile(r"[a-z][a-z0-9_]*")
 FIELDS = {"type", "description", "default", "environments", "from"}
+# A run's launch values, set on its copy of the bundle; never a project file.
+LAUNCH_VALUES = "launch_values"
 SCALAR_TYPES = ("text", "number", "boolean", "date", "identifier")
 LIST_TYPE = re.compile(r"list\s*<\s*(text|number)\s*>")
 CHOICE_TYPE = re.compile(r"choice\s*\((.*)\)")
@@ -188,7 +190,29 @@ def declarations(bundle):
             "environments": environments,
             "errors": errors,
         }
+    for name, value in (bundle.get(LAUNCH_VALUES) or {}).items():
+        if name in result and "from" not in result[name]:
+            result[name]["launch"] = value
     return result
+
+
+def apply_launch_values(bundle, values):
+    """Set values of ordinary variables for one run; variables.json never changes.
+
+    The values replace the environment values for every node of the run, so fingerprints,
+    history and lineage show them, with the source `launch`.
+    """
+    if not values:
+        return
+    variables, file_error = inspect_declarations(bundle)
+    for name, value in values.items():
+        variable = variables.get(name)
+        if variable is None or "from" in variable:
+            reason = file_error or f"{name} is not an ordinary variable of this version"
+            raise Problem(f"Launch value {name}: {reason}", 422)
+        if message := check_value(variable["type"], value):
+            raise Problem(f"Launch value {name}: {message}", 422)
+    bundle[LAUNCH_VALUES] = copy.deepcopy(values)
 
 
 def inspect_declarations(bundle):
@@ -211,6 +235,8 @@ def resolve(variable, environment, computed=None):
             "code": "value_not_calculated",
             "error": "value not calculated; run the value source",
         }
+    if "launch" in variable:
+        return {"value": copy.deepcopy(variable["launch"]), "source": "launch"}
     if environment in variable["environments"]:
         source, key, value = (
             "environment",

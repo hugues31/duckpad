@@ -9,6 +9,7 @@ from contextlib import suppress
 
 from sqlalchemy.exc import IntegrityError
 
+from . import variables
 from .bundle import files_to_bundle
 from .components import expand_for
 from .execution.launch import confirm_environment
@@ -60,11 +61,12 @@ class Jobs:
             target["commit"] = commit
         return target, commit
 
-    def validate(self, project, commit, environment, scope):
+    def validate(self, project, commit, environment, scope, launch_values=None):
         self.catalog.environment(environment)
         files = self.projects.revision_files(self.path(project), commit)
         require_valid(files, "The Job version contains invalid project files")
         bundle = files_to_bundle(files)
+        variables.apply_launch_values(bundle, launch_values)
         nodes, edges, _ = expand_for(bundle, environment)
         launch_scope(nodes, edges, scope)
 
@@ -100,7 +102,6 @@ class Jobs:
                 "environment": data.environment,
                 "scope": data.scope,
                 "target": target,
-                "runtime_variables": [],
                 "revision": uid(),
                 "versions": [self.event(None, target, None, commit, actor)],
             }
@@ -252,10 +253,32 @@ class Jobs:
         with self.projects.locked(self.get(slug)["worktree"]):
             job = self.get(slug)
             self.idle(job)
+            users = [s["name"] for s in self.store.scenarios(job["project"]) if self.uses(s, slug)]
+            if users:
+                raise Problem(
+                    f"Remove this Job from the scenarios that run it first: {', '.join(users)}",
+                    409,
+                    {"code": "job_in_use", "scenarios": users},
+                )
             # Retain the read-only worktree, runs and artifacts for History and results.
             self.store.delete("job", slug)
 
-    def launch(self, slug, data, requester, *, external_trigger=None, idempotency_key=None, body=None):
+    @staticmethod
+    def uses(scenario, slug):
+        return any(step["job"] == slug for step in scenario["steps"])
+
+    def launch(
+        self,
+        slug,
+        data,
+        requester,
+        *,
+        external_trigger=None,
+        idempotency_key=None,
+        body=None,
+        launch_values=None,
+        scenario=None,
+    ):
         # Serialize admission and replay per Job, including simultaneous retries before persistence.
         # The execution worker starts only after the run and its key commit together.
         with self.engine.lock:
@@ -278,9 +301,11 @@ class Jobs:
                         )
                     return self.store.get("run", previous["run"])
                 idempotency = {"job": slug, "key": key, "request_hash": request_hash}
-            return self._launch(slug, data, requester, external_trigger, idempotency)
+            return self._launch(slug, data, requester, external_trigger, idempotency, launch_values, scenario)
 
-    def _launch(self, slug, data, requester, external_trigger, idempotency):
+    def _launch(
+        self, slug, data, requester, external_trigger, idempotency, launch_values=None, scenario=None
+    ):
         job = self.get(slug)
         # Refuse an admitted run even while its launch capture holds the repository lock.
         self.idle(job, launch=True)
@@ -306,7 +331,7 @@ class Jobs:
             except Problem as error:
                 raise Problem("Job target is unavailable", 409, {"code": "target_unavailable"}) from error
             try:
-                self.validate(job["project"], commit, job["environment"], job["scope"])
+                self.validate(job["project"], commit, job["environment"], job["scope"], launch_values)
             except Problem as error:
                 raise Problem(str(error), 422, {"code": "invalid_project", "errors": error.detail}) from error
             self.retain_commit(job, commit)
@@ -326,11 +351,13 @@ class Jobs:
                 else None,
                 external_trigger=external_trigger,
                 idempotency=idempotency,
+                launch_values=launch_values,
                 job={
                     "slug": slug,
                     "name": job["name"],
                     "tag": target.get("tag"),
                     "branch": target.get("branch"),
                     "commit": commit,
+                    **({"scenario": scenario} if scenario else {}),
                 },
             )

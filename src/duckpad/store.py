@@ -31,6 +31,8 @@ MODELS = {
     "project": m.Project,
     "worktree": m.Worktree,
     "job": m.Job,
+    "scenario": m.Scenario,
+    "scenario_run": m.ScenarioRun,
     "connector": m.Connector,
     "connection": m.Connection,
     "environment": m.Environment,
@@ -45,11 +47,13 @@ MODELS = {
     "git_remote": m.GitRemote,
     "oidc_transaction": m.OIDCTransaction,
 }
-SNAPSHOTS = {"connector": "definition", "conflict": "snapshot", "run": "snapshot"}
+SNAPSHOTS = {"connector": "definition", "conflict": "snapshot", "run": "snapshot", "scenario_run": "snapshot"}
 # Kinds whose records can hold secrets.
 SEALED_KINDS = ("connection", "settings", "ssh_key")
 # Completed runs kept per worktree and environment, besides the ones still referenced.
 RUN_RETENTION = 1000
+# Scenario runs kept per scenario, rejected and missed triggers included.
+SCENARIO_RUN_RETENTION = 500
 
 
 def reject_unknown_fields(kind, data, fields):
@@ -403,6 +407,11 @@ class Store:
             )
             return [{**self._record("project", row, session), "role": role} for row, role in rows]
 
+    def run_status(self, run_id):
+        """A run's status without loading its snapshot, or None when it no longer exists."""
+        with self.session() as session:
+            return session.exec(select(m.Run.status).where(m.Run.id == run_id)).first()
+
     def runs_with_statuses(self, statuses):
         with self.session() as session:
             rows = session.exec(select(m.Run).where(m.Run.status.in_(statuses)))
@@ -462,6 +471,57 @@ class Store:
                     select(m.Job).where(m.Job.project == project).order_by(literal_column("rowid"))
                 )
             ]
+
+    def scenarios(self, project=None):
+        statement = select(m.Scenario).order_by(literal_column("rowid"))
+        if project is not None:
+            statement = statement.where(m.Scenario.project == project)
+        with self.session() as session:
+            return [self._record("scenario", row, session) for row in session.exec(statement)]
+
+    def scenario_runs(self, scenario, limit=50, cursor=None):
+        statement = select(m.ScenarioRun).where(m.ScenarioRun.scenario == scenario)
+        if cursor:
+            started, identity = self.decode_cursor(cursor)
+            statement = statement.where(
+                or_(
+                    m.ScenarioRun.started < started,
+                    and_(m.ScenarioRun.started == started, m.ScenarioRun.id < identity),
+                )
+            )
+        statement = statement.order_by(m.ScenarioRun.started.desc(), m.ScenarioRun.id.desc()).limit(limit)
+        with self.session() as session:
+            return [self._record("scenario_run", row, session) for row in session.exec(statement)]
+
+    def scenario_runs_with_statuses(self, statuses):
+        with self.session() as session:
+            rows = session.exec(select(m.ScenarioRun).where(m.ScenarioRun.status.in_(statuses)))
+            return [self._record("scenario_run", row, session) for row in rows]
+
+    def scenario_delivery(self, scenario, delivery):
+        """The accepted run of a webhook delivery, if any."""
+        with self.session() as session:
+            row = session.exec(
+                select(m.ScenarioRun).where(
+                    m.ScenarioRun.scenario == scenario, m.ScenarioRun.delivery == delivery
+                )
+            ).first()
+            return self._record("scenario_run", row, session) if row else None
+
+    def prune_scenario_runs(self, scenario, keep=SCENARIO_RUN_RETENTION):
+        with self.session() as session:
+            old = (
+                select(m.ScenarioRun.id)
+                .where(m.ScenarioRun.scenario == scenario)
+                .order_by(m.ScenarioRun.started.desc(), m.ScenarioRun.id.desc())
+                .offset(keep)
+            )
+            session.exec(
+                delete(m.ScenarioRun).where(
+                    col(m.ScenarioRun.id).in_(old),
+                    m.ScenarioRun.status.not_in(("running", "canceling")),
+                )
+            )
 
     def find_worktree(self, project, branch):
         with self.session() as session:
@@ -531,12 +591,7 @@ class Store:
                 else select(m.Run)
             )
             if cursor:
-                try:
-                    started, identity = json.loads(base64.urlsafe_b64decode(cursor))
-                    if not isinstance(started, str) or not isinstance(identity, str):
-                        raise ValueError
-                except (ValueError, TypeError, UnicodeError) as error:
-                    raise Problem("Invalid run cursor", 422) from error
+                started, identity = self.decode_cursor(cursor)
                 statement = statement.where(
                     or_(m.Run.started < started, and_(m.Run.started == started, m.Run.id < identity))
                 )
@@ -569,6 +624,16 @@ class Store:
                 ]
             rows = session.exec(statement)
             return [self._record("run", row, session) for row in rows]
+
+    @staticmethod
+    def decode_cursor(cursor):
+        try:
+            started, identity = json.loads(base64.urlsafe_b64decode(cursor))
+            if not isinstance(started, str) or not isinstance(identity, str):
+                raise ValueError
+        except (ValueError, TypeError, UnicodeError) as error:
+            raise Problem("Invalid run cursor", 422) from error
+        return started, identity
 
     @staticmethod
     def run_cursor(run):

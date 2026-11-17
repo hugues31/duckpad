@@ -145,7 +145,6 @@ def test_pinned_job_read_only_results_requester_and_deleted_history(instance):
     assert run["commit"] == commit and run["trigger"] == "job" and run["tag"] == "v1"
     assert run["job"]["slug"] == "daily"
     assert run["requester"]["username"] == "operator" and run["requester"]["token_name"] == "Tests"
-    assert job["runtime_variables"] == []
     internal = services.projects.get(job["worktree"])
     assert internal["read_only"]
     assert not services.projects.git(internal["path"], "symbolic-ref", "-q", "HEAD", check=False)

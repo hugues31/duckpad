@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import logging
 import threading
 import time
@@ -71,6 +72,7 @@ class Runner:
         ancestors: bool = False,
         reuse: bool = False,
         guard: Callable[[], None] | None = None,
+        launch_values: Record | None = None,
     ) -> Record:
         """Admit a run and start it in a thread; its preparation happens there.
 
@@ -84,7 +86,14 @@ class Runner:
         if record.get("read_only") and job is None:
             raise Problem("Launch this worktree from its Job", 403)
         admission = self.planner.check_launch(
-            worktree, environment, target, entry_point, partition_selection, partition_execution, ancestors
+            worktree,
+            environment,
+            target,
+            entry_point,
+            partition_selection,
+            partition_execution,
+            ancestors,
+            launch_values,
         )
         token: RunToken = {"id": uid("run_"), "cancel": threading.Event(), "cursor": None}
         run = self.planner.pending(
@@ -100,6 +109,8 @@ class Runner:
             external_trigger,
             ancestors,
         )
+        if launch_values:
+            run["launch_values"] = copy.deepcopy(launch_values)
         # Without a guard, the reservation, visible record and thread registration are atomic with
         # cancellation and close. A guard runs between them, outside the lock.
         with nullcontext() if guard else self.lock:

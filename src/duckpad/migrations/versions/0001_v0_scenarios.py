@@ -3,7 +3,7 @@
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0001_v0_baseline"
+revision = "0001_v0_scenarios"
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -237,7 +237,6 @@ def upgrade():
         sa.Column("environment", sa.String(), nullable=False),
         sa.Column("scope", sa.String(), nullable=True),
         sa.Column("target", sa.JSON(), nullable=False),
-        sa.Column("runtime_variables", sa.JSON(), nullable=False),
         sa.Column("versions", sa.JSON(), nullable=False),
         sa.Column("revision", sa.String(), nullable=False),
         sa.ForeignKeyConstraint(
@@ -250,6 +249,38 @@ def upgrade():
         sa.UniqueConstraint("worktree"),
     )
     op.create_index(op.f("ix_job_project"), "job", ["project"], unique=False)
+    op.create_table(
+        "scenario",
+        sa.Column("id", sa.String(), nullable=False),
+        sa.Column("project", sa.String(), nullable=False),
+        sa.Column("name", sa.String(), nullable=False),
+        sa.Column("description", sa.String(), nullable=False),
+        sa.Column("enabled", sa.Boolean(), nullable=False),
+        sa.Column("steps", sa.JSON(), nullable=False),
+        sa.Column("parameters", sa.JSON(), nullable=False),
+        sa.Column("schedules", sa.JSON(), nullable=False),
+        sa.Column("webhook", sa.Boolean(), nullable=False),
+        sa.Column("notifications", sa.JSON(), nullable=False),
+        sa.Column("revision", sa.String(), nullable=False),
+        sa.ForeignKeyConstraint(["project"], ["project.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index(op.f("ix_scenario_project"), "scenario", ["project"], unique=False)
+    op.create_table(
+        "scenario_run",
+        sa.Column("id", sa.String(), nullable=False),
+        sa.Column("scenario", sa.String(), nullable=False),
+        sa.Column("status", sa.String(), nullable=False),
+        sa.Column("started", sa.String(), nullable=False),
+        sa.Column("finished", sa.String(), nullable=True),
+        sa.Column("delivery", sa.String(), nullable=True),
+        sa.Column("snapshot", sa.JSON(), nullable=False),
+        sa.ForeignKeyConstraint(["scenario"], ["scenario.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index(op.f("ix_scenario_run_status"), "scenario_run", ["status"], unique=False)
+    op.create_index("scenario_run_delivery", "scenario_run", ["scenario", "delivery"], unique=False)
+    op.create_index("scenario_run_started", "scenario_run", ["scenario", "started"], unique=False)
     op.create_table(
         "partition_result",
         sa.Column("worktree", sa.String(), nullable=False),
@@ -450,6 +481,12 @@ def downgrade():
     op.drop_table("run")
     op.drop_table("revision")
     op.drop_table("partition_result")
+    op.drop_index("scenario_run_started", table_name="scenario_run")
+    op.drop_index("scenario_run_delivery", table_name="scenario_run")
+    op.drop_index(op.f("ix_scenario_run_status"), table_name="scenario_run")
+    op.drop_table("scenario_run")
+    op.drop_index(op.f("ix_scenario_project"), table_name="scenario")
+    op.drop_table("scenario")
     op.drop_index(op.f("ix_job_project"), table_name="job")
     op.drop_table("job")
     op.drop_index(op.f("ix_conflict_worktree"), table_name="conflict")

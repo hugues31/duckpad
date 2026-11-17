@@ -69,6 +69,25 @@ def job_role(role: str) -> Callable:
     return authorize
 
 
+def scenario_role(role: str) -> Callable:
+    def authorize(scenario: str, request: Request) -> None:
+        record = request.app.state.scenarios.get(scenario)
+        request.app.state.access.require(signed_in(request), record["project"], role)
+
+    return authorize
+
+
+def scenario_run_role(role: str) -> Callable:
+    def authorize(scenario_run: str, request: Request) -> None:
+        record = request.app.state.services.store.get("scenario_run", scenario_run)
+        scenario = record and request.app.state.services.store.get("scenario", record["scenario"])
+        if not scenario:
+            raise Problem("Resource not found", 404)
+        request.app.state.access.require(signed_in(request), scenario["project"], role)
+
+    return authorize
+
+
 def run_role(role: str) -> Callable:
     def authorize(run: str, request: Request) -> None:
         record = request.app.state.services.store.get("run", run)
