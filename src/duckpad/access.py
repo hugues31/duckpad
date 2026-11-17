@@ -141,6 +141,7 @@ class Access:
                 # The account's SSH key must never authenticate again, even after reactivation.
                 self.store.delete(KEY_KIND, identity)
                 self.store.delete_api_tokens(identity)
+                self.store.delete_oauth_grants(identity)
         return Auth.public(user)
 
     def member(self, project, identity, role):

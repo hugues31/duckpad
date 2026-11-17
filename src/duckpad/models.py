@@ -349,3 +349,69 @@ class OIDCTransaction(SQLModel, table=True):
     # SQLAlchemy reserves the attribute name metadata.
     provider: dict = Field(sa_type=JSON)
     expires: float = Field(index=True)
+
+
+class OAuthClient(SQLModel, table=True):
+    """An app that asks users for agent access: registered (RFC 7591) or a client metadata document."""
+
+    __tablename__ = "oauth_client"
+    __table_args__ = (
+        CheckConstraint(
+            "auth_method IN ('none', 'client_secret_post', 'client_secret_basic')",
+            name="oauth_client_auth_method",
+        ),
+    )
+    # A generated identifier, or the HTTPS address of the client's metadata document.
+    id: str = Field(primary_key=True)
+    name: str | None = None
+    redirect_uris: list[str] = Field(sa_type=JSON)
+    auth_method: str
+    secret_hash: str | None = None
+    document: bool = False
+    created: float
+    # When a metadata document was last read from its publisher.
+    fetched: float | None = None
+    # Registration, document fetch or latest authorization; idle apps without grants are deleted.
+    last_used: float = Field(index=True)
+
+
+class OAuthGrant(SQLModel, table=True):
+    """One account's authorization of one app, renewed by rotating refresh tokens."""
+
+    __tablename__ = "oauth_grant"
+    id: str = Field(primary_key=True)
+    user: str = Field(foreign_key="user.id", ondelete="CASCADE", index=True)
+    client: str = Field(foreign_key="oauth_client.id", ondelete="CASCADE", index=True)
+    scope: str
+    resource: str
+    created: float
+    last_used: float | None = None
+    expires: float = Field(index=True)
+
+
+class OAuthToken(SQLModel, table=True):
+    """Access and refresh tokens, stored by hash; a used refresh token stays to detect its replay."""
+
+    __tablename__ = "oauth_token"
+    __table_args__ = (CheckConstraint("kind IN ('access', 'refresh')", name="oauth_token_kind"),)
+    id: str = Field(primary_key=True)
+    grant: str = Field(foreign_key="oauth_grant.id", ondelete="CASCADE", index=True)
+    kind: str
+    expires: float = Field(index=True)
+    used: float | None = None
+
+
+class OAuthCode(SQLModel, table=True):
+    """Single-use authorization codes, stored by hash with their PKCE challenge."""
+
+    __tablename__ = "oauth_code"
+    id: str = Field(primary_key=True)
+    client: str = Field(foreign_key="oauth_client.id", ondelete="CASCADE", index=True)
+    user: str = Field(foreign_key="user.id", ondelete="CASCADE", index=True)
+    redirect_uri: str
+    challenge: str
+    scope: str
+    resource: str
+    expires: float = Field(index=True)
+    # Set when the code is exchanged: replaying it revokes that grant.
+    grant: str | None = None

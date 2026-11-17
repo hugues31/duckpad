@@ -148,7 +148,8 @@ export default function LoginPage({
   );
 }
 
-function LoginLayout({
+/** The centered card of the sign-in page, also used to authorize apps. */
+export function LoginLayout({
   preferences,
   children,
 }: {

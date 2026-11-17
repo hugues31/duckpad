@@ -6,11 +6,16 @@ import math
 import re
 import secrets
 import time
+from urllib.parse import urlsplit
 
 from .git.identity import account_identity
 from .util import Problem, uid
 
 SESSION_LIFETIME = 7 * 24 * 3600
+API_TOKEN_PREFIX = "dpk_"
+# Access tokens that apps receive through OAuth (see `oauth`); they only open the agent API.
+OAUTH_TOKEN_PREFIX = "dpo_"
+BEARER_PREFIXES = (API_TOKEN_PREFIX, OAUTH_TOKEN_PREFIX)
 LOGIN_ATTEMPTS = 12
 LOGIN_WINDOW = 60
 SETUP_LINK_INVALID = (
@@ -281,7 +286,7 @@ class Auth:
             user = self.token_account(actor, identity, create=True)
             if not user["active"]:
                 raise Problem("Activate the account before creating API tokens", 409)
-            secret = "dpk_" + secrets.token_urlsafe(32)
+            secret = API_TOKEN_PREFIX + secrets.token_urlsafe(32)
             token = {
                 "id": uid("token_"),
                 "user": identity,
@@ -302,9 +307,29 @@ class Auth:
                 raise Problem("API token not found", 404)
             self.store.delete("api_token", token_id)
 
-    def check_api_token(self, secret):
+    def usable(self, user):
+        """Whether a person's account may still use the apps it authorized; service accounts cannot."""
+        return bool(
+            user
+            and user["active"]
+            and not user.get("service")
+            and not (user.get("oidc") and not self.store.get("settings", "oidc", {}).get("enabled"))
+        )
+
+    def check_api_token(self, secret, audience=None):
+        """The account and token name behind an API token or an app's OAuth access token.
+
+        OAuth access tokens are also checked against `audience`, the resource of the request's
+        origin, when the caller knows it.
+        """
+        if secret.startswith(OAUTH_TOKEN_PREFIX):
+            return self.check_oauth_token(secret, audience)
         with self.store.transaction():
-            token = self.store.find_api_token(session_key(secret)) if secret.startswith("dpk_") else None
+            token = (
+                self.store.find_api_token(session_key(secret))
+                if secret.startswith(API_TOKEN_PREFIX)
+                else None
+            )
             user = self.store.get("user", token["user"]) if token else None
             now = time.time()
             if (
@@ -319,6 +344,46 @@ class Auth:
                 token["last_used"] = now
                 self.store.put("api_token", token["id"], token)
             return self.public(user), token["name"]
+
+    def check_oauth_token(self, secret, audience=None):
+        now = time.time()
+        with self.store.transaction():
+            token = self.store.get("oauth_token", session_key(secret))
+            grant = (
+                self.store.get("oauth_grant", token["grant"]) if token and token["kind"] == "access" else None
+            )
+            user = self.store.get("user", grant["user"]) if grant else None
+            client = self.store.get("oauth_client", grant["client"]) if grant else None
+            if (
+                not token
+                or token["expires"] <= now
+                or not grant
+                or grant["expires"] <= now
+                or not client
+                or not self.usable(user)
+                or (audience is not None and grant["resource"] != audience)
+            ):
+                raise Problem("Authentication required", 401)
+            if grant["last_used"] is None or grant["last_used"] <= now - 60:
+                self.store.put("oauth_grant", grant["id"], {**grant, "last_used": now})
+            name = (
+                client["name"]
+                or urlsplit(client["id"] if client["document"] else client["redirect_uris"][0]).netloc
+            )
+            return self.public(user), name
+
+    def credential(self, secret):
+        """A stable key for what a bearer token belongs to: its API token, or the app's authorization.
+
+        OAuth access tokens are renewed every hour; approvals and concurrency limits follow the
+        authorization instead of each token.
+        """
+        if secret.startswith(OAUTH_TOKEN_PREFIX):
+            token = self.store.get("oauth_token", session_key(secret))
+            if not token:
+                raise Problem("Authentication required", 401)
+            return "grant:" + token["grant"]
+        return "token:" + session_key(secret)
 
     def commit_identity(self, user):
         record = self.store.get("user", user["id"])

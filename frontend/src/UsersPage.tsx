@@ -2,6 +2,7 @@ import { Plus, Users } from "lucide-react";
 import { useState } from "react";
 import { api, send } from "./api";
 import APITokenSettings from "./APITokenSettings";
+import AuthorizedApps from "./AuthorizedApps";
 import { useT } from "./i18n";
 import { Modal, ModalForm } from "./modals";
 import RoleSelect from "./RoleSelect";
@@ -162,7 +163,11 @@ export default function UsersPage({
                       disabled={busy}
                       onClick={() => setTokenUser(user)}
                     >
-                      {t("apiTokens")}
+                      {t(
+                        user.auth_method === "service"
+                          ? "apiTokens"
+                          : "apiTokensAndApps",
+                      )}
                     </button>
                     <button
                       className="button secondary small"
@@ -197,7 +202,11 @@ export default function UsersPage({
       </div>
       {tokenUser && (
         <Modal
-          title={`${tokenUser.username} · ${t("apiTokens")}`}
+          title={`${tokenUser.username} · ${t(
+            tokenUser.auth_method === "service"
+              ? "apiTokens"
+              : "apiTokensAndApps",
+          )}`}
           onClose={() => setTokenUser(null)}
           wide
         >
@@ -210,6 +219,12 @@ export default function UsersPage({
                 tokenUser.auth_method === "service" && tokenUser.active
               }
             />
+            {tokenUser.auth_method !== "service" && (
+              <AuthorizedApps
+                key={`apps-${tokenUser.id}`}
+                user={tokenUser.id}
+              />
+            )}
           </div>
         </Modal>
       )}

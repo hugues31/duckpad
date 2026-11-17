@@ -296,6 +296,36 @@
   margin-bottom: 24px;
 }
 
+.authorized-apps {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.authorized-apps > .field {
+  max-width: 640px;
+  margin-bottom: 24px;
+}
+
+.authorized-apps-address {
+  display: flex;
+  gap: 8px;
+}
+
+.authorized-apps-address input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+}
+
+.authorized-apps .notice {
+  margin-top: 12px;
+}
+
+.authorized-app-name {
+  display: grid;
+  gap: 2px;
+}
+
 .settings-card .check-row {
   display: flex;
   align-items: start;

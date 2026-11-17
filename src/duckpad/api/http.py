@@ -16,7 +16,7 @@ from fastapi.routing import APIRoute
 from starlette.exceptions import HTTPException
 from starlette.middleware.base import RequestResponseEndpoint
 
-from .. import automation
+from .. import automation, oauth
 from ..auth import SESSION_LIFETIME, Auth
 from ..git.identity import commit_author
 from ..util import Problem, clean
@@ -69,6 +69,11 @@ def request_problem(
 ) -> JSONResponse:
     if request.url.path.startswith("/api/v1/"):
         error = automation.problem(error)
+    if error.status == 401 and request.url.path.startswith(oauth.AGENT_PREFIX):
+        # MCP clients discover how to sign in from this header (RFC 9728, section 5.1).
+        scheme, _, token = request.headers.get("authorization", "").partition(" ")
+        presented = scheme.lower() == "bearer" and bool(token)
+        headers = {**(headers or {}), "WWW-Authenticate": oauth.challenge(request, token=presented)}
     return problem_response(error, headers)
 
 

@@ -2,9 +2,10 @@
 
 Duckpad stores instance metadata in SQLite through SQLModel. Alembic applies the
 packaged revisions in `src/duckpad/migrations/versions/` before the application
-starts serving requests. The single `0001_v0_baseline` revision creates the
-business tables, including assistant conversations, API tokens, Jobs,
-idempotency keys, partitions and explicit artifact storage locations. It seeds
+starts serving requests. The single `0001_v0_oauth` revision creates the
+business tables, including assistant conversations, API tokens, the OAuth apps,
+authorizations, codes and tokens of agent connectors, Jobs, idempotency keys,
+partitions and explicit artifact storage locations. It seeds
 the `dev` and `prod` environments, but no connector or connection.
 
 Duckpad is in v0: earlier instance schemas are not upgraded. Startup rejects a
@@ -24,6 +25,19 @@ same transaction before starting the execution thread. Expired entries are
 ignored on lookup and removed when another accepted key is written. Deleting
 a Job removes its keys while retaining its run history.
 
+`oauth_client` holds the apps that registered dynamically, with their redirect
+URIs and the hash of their secret if they have one, and cached copies of client
+metadata documents, keyed by the document's address. `oauth_grant` is one
+account's authorization of one app; it cascades from both, and its sliding
+expiry follows refresh-token use. `oauth_token` stores access and refresh tokens
+by hash and cascades from the grant, so revoking an authorization or
+deactivating the account removes them; a rotated refresh token stays, marked
+used, to detect its replay. `oauth_code` stores single-use authorization codes by
+hash, with their PKCE challenge, until they expire. Expired rows are removed when
+codes are exchanged and apps register; apps idle for 30 days without an
+authorization are deleted, and a full table evicts the least recently used app
+without one.
+
 Built-in connector definitions come with the release and are not stored: the
 `connector` table holds custom connector types and administrators' overrides of
 built-in ones. A connection can name a built-in connector without a stored row,
@@ -37,6 +51,10 @@ erDiagram
     user ||--o| ssh_key : owns
     user ||--o{ project_member : joins
     user ||--o{ git_consent : authorizes
+    user ||--o{ oauth_grant : authorizes
+    oauth_client ||--o{ oauth_grant : receives
+    oauth_grant ||--o{ oauth_token : issues
+    oauth_client ||--o{ oauth_code : redeems
     project ||--o{ project_member : grants
     project ||--o{ project_connection : allows
     project ||--|{ worktree : contains
@@ -93,6 +111,30 @@ erDiagram
         string id PK
         json value
     }
+    oauth_client {
+        string id PK
+        string name
+        json redirect_uris
+        string auth_method
+        string secret_hash
+        boolean document
+        float last_used
+    }
+    oauth_grant {
+        string id PK
+        string user FK
+        string client FK
+        string scope
+        string resource
+        float expires
+    }
+    oauth_token {
+        string id PK
+        string grant FK
+        string kind
+        float expires
+        float used
+    }
     oidc_transaction {
         string id PK
         string browser
@@ -116,7 +158,8 @@ accounts have neither and must have the member role.
 Project/worktree deletion cascades to owned metadata, including revisions,
 conflicts, runs, artifacts, latest export results and access links. Project
 deletion also removes its remote and consents. Shared connections and accounts
-survive. Deleting a user cascades to sessions, keys, memberships and consents.
+survive. Deleting a user cascades to sessions, keys, memberships, consents and
+app authorizations.
 Updating a row uses ORM updates rather than SQLite `INSERT OR REPLACE`, which
 would inadvertently cascade deletions. The catalog refuses to delete a custom
 connector with connections until those connections have been removed; built-in

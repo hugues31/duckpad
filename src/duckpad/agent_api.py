@@ -18,10 +18,10 @@ from fastapi.responses import HTMLResponse
 from pydantic import ValidationError
 from starlette.routing import Route
 
-from . import agent_tools, mcp_server
+from . import agent_tools, mcp_server, oauth
 from .api.http import problem_response
 from .assistant.runs import proposal, run_summary
-from .auth import session_key
+from .auth import BEARER_PREFIXES, OAUTH_TOKEN_PREFIX
 from .uploads import limited_body
 from .util import Problem, uid
 
@@ -37,9 +37,18 @@ MOVED = "The branch changed after this request. Request and review a new run."
 
 def bearer(request):
     scheme, _, token = request.headers.get("authorization", "").partition(" ")
-    if scheme.lower() != "bearer" or not token.startswith("dpk_"):
-        raise Problem("An API token is required for external agent tools", 401)
+    if scheme.lower() != "bearer" or not token.startswith(BEARER_PREFIXES):
+        raise Problem("An API token or an app authorization is required for external agent tools", 401)
     return token
+
+
+def review_base(request, token):
+    """The origin for full review links: only apps' tokens, which are bound to the origin they use.
+
+    An API token works on any address that reaches the instance, so its Host header could name
+    another site; review links then stay relative.
+    """
+    return oauth.origin(request) if token.startswith(OAUTH_TOKEN_PREFIX) else None
 
 
 def failure(error):
@@ -83,7 +92,8 @@ class AgentAPI:
             identity = uid("approval_")
             record = {
                 "id": identity,
-                "owner": session_key(deps.token),
+                # The token, or for apps their authorization, whose access tokens are renewed hourly.
+                "owner": self.context.auth.credential(deps.token),
                 "requester": user["username"],
                 "requester_id": user["id"],
                 "worktree": deps.context["worktree"],
@@ -201,7 +211,7 @@ class AgentAPI:
     def owned(self, deps, identity):
         user, _ = deps.check()
         record = self.get(identity)
-        if record["owner"] != session_key(deps.token):
+        if record["owner"] != self.context.auth.credential(deps.token):
             raise Problem("Approval not found", 404)
         self.context.access.worktree(user, record["worktree"])
         return record
@@ -218,18 +228,28 @@ class AgentAPI:
     def moved(self, record):
         return self.context.services.projects.snapshot(record["worktree"])["commit"] != record["commit"]
 
-    async def dispatch(self, token, name, arguments):
-        """Run a tool call on the agent threads, a few at a time per token."""
-        key = session_key(token)
+    async def dispatch(self, token, name, arguments, base=None):
+        """Run a tool call on the agent threads, a few at a time per token or app authorization.
+
+        With `base`, run requests also return the full `review_url` to give to a person.
+        """
+        try:
+            key = self.context.auth.credential(token)
+        except Problem as error:
+            return failure(error)
         with self.lock:
             if self.calls[key] >= CALLS_PER_TOKEN:
                 return failure(Problem("Too many concurrent tool calls. Wait for one to finish.", 429))
             self.calls[key] += 1
         try:
             context = contextvars.copy_context()
-            return await asyncio.get_running_loop().run_in_executor(
+            result = await asyncio.get_running_loop().run_in_executor(
                 self.executor, context.run, self.call, token, name, arguments
             )
+            receipt = result.get("result")
+            if base and isinstance(receipt, dict) and isinstance(receipt.get("review_path"), str):
+                receipt["review_url"] = base + receipt["review_path"]
+            return result
         finally:
             with self.lock:
                 self.calls[key] -= 1
@@ -241,7 +261,7 @@ class AgentAPI:
         return [tool.public() for tool in self.tools.values()]
 
     async def mcp(self, scope, receive, send):
-        """Streamable HTTP MCP for API tokens: the tools of /tools, without a bridge on the client."""
+        """Streamable HTTP MCP for API tokens and apps: the tools of /tools, without a client bridge."""
         request = Request(scope, receive)
         if request.method != "POST":
             # Stateless: no session to resume or delete, and no stream of server messages.
@@ -252,12 +272,13 @@ class AgentAPI:
             return
         await limited_body(MAX_REQUEST, "request")(request)
         token = bearer(request)
+        base = review_base(request, token)
 
         async def listing():
             return await run_in_threadpool(self.listing, token)
 
         async def call(name, arguments):
-            return await self.dispatch(token, name, arguments)
+            return await self.dispatch(token, name, arguments, base)
 
         await mcp_server.serve_http(mcp_server.server(listing, call), scope, receive, send)
 
@@ -296,7 +317,7 @@ class AgentAPI:
                 data = await request.json()
             except ValueError:
                 raise Problem("Send a JSON object of tool arguments", 422) from None
-            return await self.dispatch(token, name, data)
+            return await self.dispatch(token, name, data, review_base(request, token))
 
         @api.get("/approvals/{identity}/review", response_class=HTMLResponse)
         def review(identity: str, request: Request):

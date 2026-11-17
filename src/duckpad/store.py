@@ -44,6 +44,10 @@ MODELS = {
     "git_consent": m.GitConsent,
     "git_remote": m.GitRemote,
     "oidc_transaction": m.OIDCTransaction,
+    "oauth_client": m.OAuthClient,
+    "oauth_grant": m.OAuthGrant,
+    "oauth_token": m.OAuthToken,
+    "oauth_code": m.OAuthCode,
 }
 SNAPSHOTS = {"connector": "definition", "conflict": "snapshot", "run": "snapshot"}
 # Kinds whose records can hold secrets.
@@ -289,6 +293,52 @@ class Store:
     def delete_api_tokens(self, user):
         with self.session() as session:
             session.exec(delete(m.APIToken).where(m.APIToken.user == user))
+
+    def oauth_grants(self, user):
+        with self.session() as session:
+            rows = session.exec(
+                select(m.OAuthGrant).where(m.OAuthGrant.user == user).order_by(m.OAuthGrant.created)
+            )
+            return [row.model_dump() for row in rows]
+
+    def delete_oauth_grants(self, user, client=None):
+        """Revoke an account's app authorizations, or only those of one app; their tokens cascade."""
+        with self.session() as session:
+            query = delete(m.OAuthGrant).where(m.OAuthGrant.user == user)
+            if client is not None:
+                query = query.where(m.OAuthGrant.client == client)
+            session.exec(query)
+
+    def count_oauth_clients(self):
+        with self.session() as session:
+            return session.exec(select(func.count()).select_from(m.OAuthClient)).one()
+
+    def evict_oauth_client(self):
+        """Delete the least recently used app without an authorization; False if every app has one."""
+        with self.session() as session:
+            oldest = session.exec(
+                select(m.OAuthClient.id)
+                .where(col(m.OAuthClient.id).not_in(select(m.OAuthGrant.client)))
+                .order_by(m.OAuthClient.last_used)
+                .limit(1)
+            ).first()
+            if oldest is None:
+                return False
+            session.exec(delete(m.OAuthClient).where(m.OAuthClient.id == oldest))
+            return True
+
+    def purge_oauth(self, now, idle_since):
+        """Delete expired codes, tokens and grants, then apps idle since `idle_since` without a grant."""
+        with self.session() as session:
+            session.exec(delete(m.OAuthCode).where(m.OAuthCode.expires < now))
+            session.exec(delete(m.OAuthToken).where(m.OAuthToken.expires < now))
+            session.exec(delete(m.OAuthGrant).where(m.OAuthGrant.expires < now))
+            granted = select(m.OAuthGrant.client)
+            session.exec(
+                delete(m.OAuthClient).where(
+                    m.OAuthClient.last_used < idle_since, col(m.OAuthClient.id).not_in(granted)
+                )
+            )
 
     def all(self, kind):
         return [value for _, value in self.items(kind)]

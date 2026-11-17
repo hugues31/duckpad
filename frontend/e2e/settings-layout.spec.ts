@@ -139,7 +139,7 @@ test("settings remain usable on narrow screens in both languages", async ({
     name: fr.settingsSections,
     exact: true,
   });
-  await expect(userNavigation.getByRole("link")).toHaveCount(4);
+  await expect(userNavigation.getByRole("link")).toHaveCount(5);
   await userNavigation
     .getByRole("link", { name: fr.password, exact: true })
     .focus();
@@ -155,7 +155,7 @@ test("settings remain usable on narrow screens in both languages", async ({
   ).toHaveAttribute("aria-current", "page");
   await page.goBack();
   await expect(page.getByLabel(fr.language, { exact: true })).toBeVisible();
-  for (const label of [fr.sshKey, fr.apiTokens]) {
+  for (const label of [fr.sshKey, fr.apiTokens, fr.authorizedApps]) {
     await userNavigation
       .getByRole("link", { name: label, exact: true })
       .click();

@@ -59,7 +59,7 @@ Running an old project commit still uses the current connection catalog.
 SQLite stores accounts, access grants, configuration, Jobs, conversations, save
 conflicts and execution history. `Store` encrypts connection secrets, provider
 keys, the SSO client secret and SSH private keys on write; services decrypt them
-on read. Passwords, sessions and API tokens are hashed. See
+on read. Passwords, sessions, API tokens and the OAuth codes and tokens of authorized apps are hashed. See
 [persistence](../docs/PERSISTENCE.md) for transactions and migrations, and
 [installation](INSTALLATION.md#secrets-and-the-master-key) for key management.
 
@@ -76,7 +76,7 @@ bytes. See [results](RESULTS.md) and [partitions](PARTITIONS.md).
 | Instance | Instance settings | Accounts, SSO, assistant, Git hosts, environments, connections, extension imports and SQL resources; instance admins configure them |
 | Project | Project settings | Membership, connection grants and deletion; project admins manage membership, instance admins grant connections |
 | Project definition | Workspace tabs | Flow, SQL, documentation, variables, views and extension requirements; versioned with the branch |
-| User | Account menu → User settings | Password, API tokens, SSH key, language, theme and link style |
+| User | Account menu → User settings | Password, API tokens, authorized apps, SSH key, language, theme and link style |
 
 Language, theme and link style are browser-local, shared by accounts using that browser.
 Project roles and permissions are listed in the
@@ -242,7 +242,10 @@ under the same lock.
 Protected routes accept session authentication or a bearer API token. API tokens
 use their owner's current permissions and cannot manage SSH keys or perform
 network Git. Browser mutations reject a mismatched Origin. Login and OIDC
-handshake routes are public.
+handshake routes are public, as are the OAuth registration, token and revocation
+endpoints, where apps present their own credentials. Access tokens that apps
+receive through OAuth (`dpo_`) are refused outside `/api/agent` and on any other
+origin than the one they were issued for; see [external agents](MCP.md#web-apps-and-oauth).
 
 Worktree execution and result operations require an explicit environment:
 

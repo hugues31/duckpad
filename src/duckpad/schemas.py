@@ -62,6 +62,15 @@ class NewAPIToken(BaseModel):
     expires: AwareDatetime | None = None
 
 
+class OAuthDecision(BaseModel):
+    """A person's answer to an app's authorization request, which travels in `query`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    query: str = Field(max_length=8192)
+    approve: bool
+
+
 class UserChanges(BaseModel):
     """Only the fields that are present change; null leaves a field unchanged."""
 
