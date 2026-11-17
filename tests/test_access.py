@@ -109,6 +109,7 @@ ROUTE_ACCESS = {
         "POST /api/worktrees/{worktree}/uploads",
         "POST /api/worktrees/{worktree}/source-preview",
         "GET /api/worktrees/{worktree}/connections/{connection}/preview",
+        "GET /api/worktrees/{worktree}/connections/{connection}/files",
         "POST /api/worktrees/{worktree}/git/open",
         "POST /api/worktrees/{worktree}/git/tags",
         "POST /api/worktrees/{worktree}/git/cleanup",

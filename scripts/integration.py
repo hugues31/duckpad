@@ -288,6 +288,13 @@ def s3(home):
             "documentation": {},
         }
         worktree = projects.create("S3 acceptance", bundle)["id"]
+        # The file browser lists a level through the S3 API, for the built-in and a custom storage type.
+        for reference in ("s3_acceptance", "landing"):
+            listed = engine.connection_files(worktree, reference, "dev")
+            assert [(e["kind"], e["name"]) for e in listed["entries"]] == [
+                ("file", "labels.parquet"),
+                ("file", "orders.csv"),
+            ], listed
         first = wait(store, engine, worktree)
         assert "'s3://duckpad-acceptance/landing/orders.csv'" in first["nodes"]["csv"]["statements"][0]["sql"]
         exported = client.get_object(Bucket="duckpad-acceptance", Key="landing/export.csv")["Body"].read()
@@ -320,6 +327,7 @@ def s3(home):
                 "CSV export",
                 "relative paths under a URI root",
                 "custom storage type",
+                "file browser listing",
                 "repeat native replacement",
                 "shared connection reuse",
                 "cell lineage",

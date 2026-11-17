@@ -96,6 +96,16 @@ def router(ctx: Context) -> APIRouter:
         return engine.connection_objects(worktree, connection, environment)
 
     @api.get(
+        "/api/worktrees/{worktree}/connections/{connection}/files",
+        response_model=None,
+        dependencies=[Depends(worktree_role("editor"))],
+    )
+    def connection_files(
+        worktree: str, connection: str, environment: str, path: str = "", prefix: str = ""
+    ) -> Record:
+        return engine.connection_files(worktree, connection, environment, path, prefix)
+
+    @api.get(
         "/api/worktrees/{worktree}/extensions",
         response_model=None,
         dependencies=[Depends(worktree_role("reader"))],

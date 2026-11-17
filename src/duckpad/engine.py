@@ -6,13 +6,14 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable, Generator
 from contextlib import AbstractContextManager, contextmanager, nullcontext
+from pathlib import Path
 from typing import BinaryIO
 
 import duckdb
 
-from . import connection_probe, project_extensions
+from . import connection_probe, project_extensions, storage_listing
 from .access import Access
-from .catalog import Catalog
+from .catalog import Catalog, redact
 from .column_lineage import ColumnLineage
 from .datasets import Context
 from .execution.contexts import ContextPool, automatic_resources
@@ -26,6 +27,7 @@ from .extensions import MAX_UPLOAD_BYTES, core_catalog, database_config, install
 from .partition_results import PartitionResults
 from .projects import Projects
 from .store import Store
+from .templates import URI
 from .types import Record, RunToken
 from .util import Problem
 
@@ -347,6 +349,26 @@ class Engine:
             if listed is None:
                 raise
             return listed
+
+    def connection_files(
+        self, worktree: str, reference: str, environment: str, path: str = "", prefix: str = ""
+    ) -> Record:
+        """One level of folders and files below the root of a storage connection granted to the project."""
+        captured, secrets = self.pool.connections.capture(worktree, [reference], environment)
+        connection = captured[reference]
+        if connection["definition"].get("family") != "storage":
+            raise Problem(f"Connection {reference} is not a file storage location", 422)
+        root = connection["values"].get("root")
+        if self.isolated and isinstance(root, str) and root and not URI.match(root):
+            # The folders an isolated run may open: never instance metadata or another project.
+            project = self.projects.get(worktree)["project"]
+            self.access.validate_local_root(
+                Path(root).expanduser().resolve(), self.store.paths.resources(project)
+            )
+        try:
+            return storage_listing.level(connection, path, prefix)
+        except Problem as error:
+            raise Problem(redact(str(error), secrets), error.status) from None
 
     def _session_objects(
         self, worktree: str, environment: str, alias: str, table: tuple[str, str] | None = None
