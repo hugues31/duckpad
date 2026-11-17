@@ -137,6 +137,10 @@ relative paths against its root instead. File readers use
 one declared file parameter (or a list) as their only positional argument, with
 named options such as `header = true` or `delim = ';'` afterward.
 
+With a storage connection as the Location, the inspector shows **Browse** next to
+every `file(connection)` parameter, custom nodes included: it lists the folders and
+files below the connection's root and writes the chosen path relative to it.
+
 For Parquet use `read_parquet({{ path }})`. A format provided by an extension,
 such as XLSX, may need that extension enabled in the **Project settings → Extensions** section;
 S3 and databases need a connection. Follow [Connections](CONNECTORS.md#file-formats-and-extensions).
@@ -156,7 +160,8 @@ SELECT * FROM {{ connection }}.{{ schema }}.{{ table }};
 ```
 
 The `schema_name` and `table_name` types let the inspector suggest the schemas
-and tables of the selected environment. Sources read tables only through a
+and tables of the selected environment. A `table_name` parameter also gets
+**Browse**, which searches the tables of every schema and sets both parameters. Sources read tables only through a
 declared connection. **Export table** writes with an explicit
 `INSERT INTO {{ connection }}.{{ schema }}.{{ table }} BY NAME`; see
 [Database tables](CONNECTORS.md#database-tables).
