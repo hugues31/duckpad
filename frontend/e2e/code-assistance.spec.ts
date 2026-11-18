@@ -239,7 +239,18 @@ test("the code editor completes Duckpad SQL, explains references and fixes probl
   // Tab inserts a suggestion; in SQL, Enter always starts a new line.
   await page.keyboard.press("Tab");
   await page.keyboard.press("Enter");
-  await page.keyboard.type("SELECT * FROM {{");
+  // Monaco closes a brace only when it reads that key on its own: keys typed
+  // while it is busy reach it together, and their braces stay open.
+  const typedLine = async () =>
+    (await editor.locator(".view-line").allTextContents())
+      .at(-1)
+      ?.replace(/\u00a0/g, " ");
+  await page.keyboard.type("SELECT * FROM ");
+  for (const line of ["SELECT * FROM ", "SELECT * FROM {}"]) {
+    await expect.poll(typedLine).toBe(line);
+    await page.keyboard.type("{");
+  }
+  await expect.poll(typedLine).toBe("SELECT * FROM {{}}");
   await expect(suggestions(page)).toHaveText([/^kind/, /^result/, /^source/]);
   await page.keyboard.type("sou");
   await page.keyboard.press("Tab");
