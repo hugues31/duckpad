@@ -319,17 +319,25 @@ test("partition controls preserve selection and explain failed keys", async ({
   ).toHaveValue("batch");
   await expect(settings.getByLabel("Preview budget (MiB)")).toHaveValue("1024");
   await page.goBack();
+  // Follow the new run itself: until it is listed, the latest run is the first one.
+  const rerunning = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/runs") &&
+      response.request().method() === "POST",
+  );
   await run.click();
+  const rerun = await (await rerunning).json();
   await expect
     .poll(
       async () =>
-        (
-          await (
-            await page.request.get(`/api/runs?worktree=${created.id}`)
-          ).json()
-        )[0]?.status,
+        (await (await page.request.get(`/api/runs/${rerun.id}`)).json()).status,
     )
-    .toBe("partial_failure");
+    .toBe("failed");
+  // It keeps batch-011's valid result and computes only the failed key again.
+  expect(
+    (await (await page.request.get(`/api/runs/${rerun.id}`)).json()).partitions
+      .selected,
+  ).toBe(1);
   await expect(
     page.getByRole("button", { name: "Partition: batch-011", exact: true }),
   ).toBeVisible();
