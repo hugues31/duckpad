@@ -32,16 +32,20 @@ function authorizationUrl(client: string, baseURL: string) {
   return { url: `/oauth/authorize?${query}`, verifier };
 }
 
-/** The app's callback, which receives the decision in its address. */
+/**
+ * The app's callback, which receives the decision in its address. Returns once
+ * the page has arrived there: a navigation started while the callback is still
+ * committing would be interrupted by it.
+ */
 async function answer(page: Page, decide: () => Promise<unknown>) {
-  const received = new Promise<URL>((resolve) =>
-    page.route(`${CALLBACK}**`, async (route) => {
-      resolve(new URL(route.request().url()));
-      await route.fulfill({ body: "Back in the app" });
-    }),
+  await page.route(`${CALLBACK}**`, (route) =>
+    route.fulfill({ body: "Back in the app" }),
   );
+  const arrived = page.waitForURL(`${CALLBACK}**`);
   await decide();
-  return received;
+  await arrived;
+  await page.unroute(`${CALLBACK}**`);
+  return new URL(page.url());
 }
 
 test("an app asks for access, the person signs in, allows it and revokes it later", async ({
